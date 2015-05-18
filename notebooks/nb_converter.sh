@@ -31,6 +31,14 @@ result_html_file_name="${1/.ipynb/.html}"
 filename="${result_html_file_name##*/}"
 
 # Add the front matter before the html
-echo "---\nlayout: default\ntitle: $2\n---\n\n$(cat $filename)" > $filename
+#echo "---\nlayout: default\ntitle: $2\n---\n\n$(cat $filename)" > $filename
+#sed '1 i\ test' "$filename"
+sed "1s/^/--- \\
+layout: post\\
+title: $2\\
+---\\
+/" "$filename" > temp
+mv temp $filename
 
+# Move file to the _post directory
 mv $filename "../_posts/$3-$filename"

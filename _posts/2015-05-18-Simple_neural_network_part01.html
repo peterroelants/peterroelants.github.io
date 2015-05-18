@@ -1,8 +1,7 @@
----
-layout: default
+--- 
+layout: post
 title: Simple Neural Network Part 1
 ---
-
 
 <div class="cell border-box-sizing text_cell rendered">
 <div class="prompt input_prompt">
@@ -11,7 +10,7 @@ title: Simple Neural Network Part 1
 <div class="text_cell_render border-box-sizing rendered_html">
 <h1 id="A-Simple-Neural-network">A Simple Neural network<a class="anchor-link" href="#A-Simple-Neural-network">&#182;</a></h1><h2 id="Part-1:-Linear-regression">Part 1: Linear regression<a class="anchor-link" href="#Part-1:-Linear-regression">&#182;</a></h2><p>This tutorial describes the simplest neural network possible, a 1 input 1 output linear regression model that has the goal to predict the target value $t$ from the input value $x$. The network is defined as having an input $x$ which gets transformed by the weight $w$ to generate the output $y$ by the formula $y = x * w$, and where $y$ needs to approximate the target $t$ as good as possible as defined by a cost function.</p>
 <p><img src="https://dl.dropboxusercontent.com/u/8938051/Blog_images/SimpleANN01.png" alt="Image of the simple neural network"></p>
-<p>In regular neural networks, we typically have multiple layers, non-linear activation functions, and a bias for each node. In this tutorial we only have one layer with one weight parameter $w$, no activation function on the output, and no bias. In <a href="http://en.wikipedia.org/wiki/Simple_linear_regression">simple linear regression</a> the parameter $w$ and bias are typically combined into the parameter vector $eta$ where bias is the y-intercept and $w$ is the slope of the regression line. In linear regression, these parameters are typically fitted via the <a href="http://s-mat-pcs.oulu.fi/~mpa/matreng/ematr5_5.htm">least squares method</a>.</p>
+<p>In regular neural networks, we typically have multiple layers, non-linear activation functions, and a bias for each node. In this tutorial we only have one layer with one weight parameter $w$, no activation function on the output, and no bias. In <a href="http://en.wikipedia.org/wiki/Simple_linear_regression">simple linear regression</a> the parameter $w$ and bias are typically combined into the parameter vector $\beta$ where bias is the y-intercept and $w$ is the slope of the regression line. In linear regression, these parameters are typically fitted via the <a href="http://s-mat-pcs.oulu.fi/~mpa/matreng/ematr5_5.htm">least squares method</a>.</p>
 <p>In this tutorial, we will approximate the targets $t$ with the outputs of the model $y$ by minimizing the squared error cost function (= squared Euclidian distance). The squared error cost function is defined as $\Vert t - y \Vert ^2$. The minimization of the cost will be done with the <a href="http://en.wikipedia.org/wiki/Gradient_descent">gradient descent</a> optimization algorithm which is typically used in training of neural networks.</p>
 
 </div>
@@ -266,7 +265,7 @@ yGxm/uVkI8MtBTMzm+SWgpmZTXKlYGZmk1wpmJnZJFcKZmY2yZWCmZlNcqVgZmaT/j/QEhX5TmzS
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h2 id="Define-the-cost-function">Define the cost function<a class="anchor-link" href="#Define-the-cost-function">&#182;</a></h2><p>We will optimize the model $y = x * w$ by tuning $w$ so that the <a href="http://en.wikipedia.org/wiki/Euclidean_distance#Squared_Euclidean_distance">squared error cost</a> along all samples is minimized. The squared error cost is defined as $\xi = \sum_{i=1}^{n} \Vert t_i - y_i \Vert ^2$, with $n$ the number of samples in the training set. The optimization goal is thus:  $\DeclareMathOperator*{rgmin}{rg\!\min} rgmin_w \sum_{i=1}^{n} \Vert t_i - y_i \Vert^2$.<br>
+<h2 id="Define-the-cost-function">Define the cost function<a class="anchor-link" href="#Define-the-cost-function">&#182;</a></h2><p>We will optimize the model $y = x * w$ by tuning $w$ so that the <a href="http://en.wikipedia.org/wiki/Euclidean_distance#Squared_Euclidean_distance">squared error cost</a> along all samples is minimized. The squared error cost is defined as $\xi = \sum_{i=1}^{n} \Vert t_i - y_i \Vert ^2$, with $n$ the number of samples in the training set. The optimization goal is thus:  $\underset{w}{\text{argmin}} \sum_{i=1}^{n} \Vert t_i - y_i \Vert^2$.<br>
 Notice that we take the sum of errors over all samples, which is known as batch training. We could also update the parameters based upon one sample at a time, which is known as online training.</p>
 <p>This cost function for variable $w$ is plotted in the figure below. The value $w=2$ is at the minimum of the cost function (bottom of the parabola), this value is the same value as the slope we choose for $f(x)$. Notice that this function is <a href="http://en.wikipedia.org/wiki/Convex_function">convex</a> and that there is only one minimum: the global minimum. While every squared error cost function for linear regression is convex, this is not the case for other models and other cost functions.</p>
 
@@ -551,11 +550,11 @@ CCGEPhcVQQgh9LmoCEIIoc9FRRBCCH3u/wFzOoqd2Lql1AAAAABJRU5ErkJggg==
 $$w(k+1) = w(k) + \Delta w(k+1)$$</p>
 <p>With $w(k)$ the value of $w$ at iteration $k$ during the gradient descent.<br>
 $\Delta w$ is defined as:</p>
-$$\Delta w = \mu rac{\partial \xi}{\partial w}$$<p>With $\mu$ the learning rate, which is how big of a step you take along the gradient, and ${\partial \xi}/{\partial w}$ the gradient of the cost function $\xi$ with respect to the weight $w$. This gradient can be splitted according to the <a href="http://en.wikipedia.org/wiki/Chain_rule">chain rule</a> into:</p>
-$$rac{\partial \xi}{\partial w} = rac{\partial y}{\partial w} rac{\partial \xi}{\partial y}$$<p>Where $\xi$ is the squared error cost, so the ${\partial \xi}/{\partial y}$ term can be written as:</p>
-$$rac{\partial \xi}{\partial y} = rac{\partial (t - y)^2}{\partial y} = 2 (t-y)$$<p>And since $y = x * w$ we can write ${\partial y}/{\partial w}$ as:</p>
-$$rac{\partial y}{\partial w} = rac{\partial (x * w)}{\partial w} = x $$<p>So the full update function $\Delta w$ will become</p>
-$$\Delta w = \mu * rac{\partial \xi}{\partial w} = \mu * 2 x (t - y)$$<p>In the batch processing, we just add up all the gradients for each sample:</p>
+$$\Delta w = \mu \frac{\partial \xi}{\partial w}$$<p>With $\mu$ the learning rate, which is how big of a step you take along the gradient, and ${\partial \xi}/{\partial w}$ the gradient of the cost function $\xi$ with respect to the weight $w$. This gradient can be splitted according to the <a href="http://en.wikipedia.org/wiki/Chain_rule">chain rule</a> into:</p>
+$$\frac{\partial \xi}{\partial w} = \frac{\partial y}{\partial w} \frac{\partial \xi}{\partial y}$$<p>Where $\xi$ is the squared error cost, so the ${\partial \xi}/{\partial y}$ term can be written as:</p>
+$$\frac{\partial \xi}{\partial y} = \frac{\partial (t - y)^2}{\partial y} = 2 (t-y)$$<p>And since $y = x * w$ we can write ${\partial y}/{\partial w}$ as:</p>
+$$\frac{\partial y}{\partial w} = \frac{\partial (x * w)}{\partial w} = x $$<p>So the full update function $\Delta w$ will become</p>
+$$\Delta w = \mu * \frac{\partial \xi}{\partial w} = \mu * 2 x (t - y)$$<p>In the batch processing, we just add up all the gradients for each sample:</p>
 $$\Delta w = \mu * 2 * \sum_{i=1}^{n} x_i (t_i - y_i)$$<p>Notice that the factor 2 is not necessary, and can be incorporated in the learning rate. Which need to be tuned separately as a hyperparameter for each neural network.</p>
 <p>To start out the gradient descent algorithm, you typically start with picking the initial parameters at random and start updating these parameters according to the delta rule with $\Delta w$ until convergence.</p>
 
@@ -583,12 +582,12 @@ $$\Delta w = \mu * 2 * \sum_{i=1}^{n} x_i (t_i - y_i)$$<p>Notice that the factor
 <span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c"># number of gradient descent updates</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">):</span>
     <span class="c"># Print the current w, and cost</span>
-    <span class="k">print</span> <span class="s">&#39;w({}): {:.4f} </span><span class="se">	</span><span class="s"> cost: {:.4f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span> <span class="n">t</span><span class="p">))</span>
+    <span class="k">print</span> <span class="s">&#39;w({}): {:.4f} </span><span class="se">\t</span><span class="s"> cost: {:.4f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span> <span class="n">t</span><span class="p">))</span>
     <span class="n">dw</span> <span class="o">=</span> <span class="n">delta_w</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c"># get the delta w update</span>
     <span class="n">w</span> <span class="o">=</span> <span class="n">w</span> <span class="o">+</span> <span class="n">dw</span>  <span class="c"># update the current weight parameter</span>
 
 <span class="c"># Print the final w, and cost</span>
-<span class="k">print</span> <span class="s">&#39;w({}): {:.4f} </span><span class="se">	</span><span class="s"> cost: {:.4f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span> <span class="n">t</span><span class="p">))</span>
+<span class="k">print</span> <span class="s">&#39;w({}): {:.4f} </span><span class="se">\t</span><span class="s"> cost: {:.4f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span> <span class="n">t</span><span class="p">))</span>
 </pre></div>
 
 </div>
@@ -649,7 +648,6 @@ w(4): 1.9399 	 cost: 0.4510
 <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">&#39;squared error cost&#39;</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">&#39;Gradient descent updates&#39;</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
-
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 
@@ -960,7 +958,7 @@ AAAAAElFTkSuQmCC
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h4 id="Gradient-descent-updates">Gradient descent updates<a class="anchor-link" href="#Gradient-descent-updates">&#182;</a></h4><p>The last figure shows the gradient descent updates of the weight parameters for 2 iterations. The blue dots represent the weight parameter values $w(k)$ at iteration $k$. Notice how the update differs from the position of the weight and the gradient at that point. The first update takes a much larger step than the second update because the gradient at $w(0)$ is much larger than the gradient at $w(1)$.</p>
-<p>The regression line fitted by gradient descent with 10 iterations is shown in the figure below. The fitted line (red) lies close to the original line (blue), which is what indirectly tried to optimize via the noisy samples. Notices that both lines go through point $(0,0)$, this is because we didn't have a bias term, which represents the intercept, the intercept at $x=0$ is thus $t=0$.</p>
+<p>The regression line fitted by gradient descent with 10 iterations is shown in the figure below. The fitted line (red) lies close to the original line (blue), which is what indirectly tried to optimize via the noisy samples. Notice that both lines go through point $(0,0)$, this is because we didn't have a bias term, which represents the intercept, the intercept at $x=0$ is thus $t=0$.</p>
 
 </div>
 </div>
@@ -1242,4 +1240,14 @@ dbZzHYhW7dq+Vufjdy6TNx851zH/5uTqhtcUnHPOtfKagnPOuVZeKDjnnGvlhYJzzrlWXig455xr
 </div>
 </div>
 
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This post is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/neuralnets/Simple_neural_network_part01.ipynb">Link to the full IPython notebook file</a></p>
+
+</div>
+</div>
 </div>

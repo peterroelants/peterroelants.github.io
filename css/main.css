@@ -3,7 +3,7 @@ body {
   overflow: visible;
   padding: 8px;
 }
-.starter-template {
+.main-template {
   padding: 40px 15px;
   text-align: left;
 }
@@ -47,4 +47,19 @@ div.output_text > pre {
 }
 *:hover > .anchor-link {
     display: inline;
+}
+
+/* Social media buttons */
+ul.share-buttons{
+  list-style: none;
+  padding: 0;
+}
+
+ul.share-buttons li{
+  display: inline;
+}
+span.share-buttons {
+  position: absolute;
+  right: 0;
+  margin-right: 10%;
 }
