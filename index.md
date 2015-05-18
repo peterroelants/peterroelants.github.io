@@ -1,8 +1,10 @@
 ---
 layout: default
-title: Hello, World!
+title: Posts overview
 ---
 
-# Hello World
+# {{ page.title }}
 
-This is a test
+{% for post in site.posts %}
+* [{{ post.title }}]({{ post.url }})
+{% endfor %}
