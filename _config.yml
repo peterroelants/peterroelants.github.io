@@ -29,7 +29,7 @@ collections: null
 # Safe: Disable custom plugins, and ignore symbolic links.
 safe: true # Set by Githyb
 include: [".htaccess"]
-exclude: []
+exclude: [notebooks]
 keep_files: [".git", ".svn"]
 encoding: "utf-8"
 markdown_ext: "markdown,mkdown,mkdn,mkd,md"
@@ -50,7 +50,6 @@ gems: [github-pages]
 ############################################################
 markdown: kramdown
 highlighter: pygments # Set by Github
-pygments: true
 # LSI: produce an index for related posts.
 lsi: false # Set by Github
 excerpt_separator: "\n\n"

@@ -1,7 +1,50 @@
 body {
   padding-top: 50px;
+  overflow: visible;
+  padding: 8px;
 }
 .starter-template {
   padding: 40px 15px;
   text-align: left;
+}
+
+/* IPython notebook stuff */
+div#notebook {
+  overflow: visible;
+  border-top: none;
+}
+
+@media print {
+  div.cell {
+    display: block;
+    page-break-inside: avoid;
+  } 
+  div.output_wrapper { 
+    display: block;
+    page-break-inside: avoid; 
+  }
+  div.output { 
+    display: block;
+    page-break-inside: avoid; 
+  }
+}
+
+/* Make code blocks scrollable */
+div.highlight > pre {
+  overflow: auto;
+  word-wrap: normal;
+  white-space: pre;
+}
+div.output_text > pre {
+  overflow: auto;
+  word-wrap: normal;
+  white-space: pre;
+}
+
+/* Hide anchor links unless you hover over the title */
+.anchor-link {
+    display: none;
+}
+*:hover > .anchor-link {
+    display: inline;
 }
