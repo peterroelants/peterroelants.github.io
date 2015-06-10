@@ -1,11 +1,26 @@
 body {
   padding-top: 50px;
   overflow: visible;
-  padding: 8px;
+  padding-right: 8px;
+  padding-bottom: 8px;
+  padding-left: 8px;
 }
 .main-template {
   padding: 40px 15px;
   text-align: left;
+}
+
+/*Fix Bootstrap and jumping to Anchors*/
+h1, h2, h3, h4, h5, h6  {
+  padding-top:50px;
+  margin-top:-50px;
+}
+
+/* center images */
+img {
+  display:block;
+  margin-left:auto;
+  margin-right:auto;
 }
 
 /* IPython notebook stuff */
@@ -62,4 +77,9 @@ span.share-buttons {
   position: absolute;
   right: 0;
   margin-right: 10%;
+}
+
+/* MathJax stuff */
+.MathJax_Display {
+  padding: 8px 0px;
 }

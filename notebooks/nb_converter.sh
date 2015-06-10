@@ -34,7 +34,7 @@ filename="${result_html_file_name##*/}"
 #echo "---\nlayout: default\ntitle: $2\n---\n\n$(cat $filename)" > $filename
 #sed '1 i\ test' "$filename"
 sed "1s/^/--- \\
-layout: post\\
+layout: notebook_post\\
 title: $2\\
 ---\\
 /" "$filename" > temp

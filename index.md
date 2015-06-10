@@ -5,6 +5,4 @@ title: Posts overview
 
 # {{ page.title }}
 
-{% for post in site.posts %}
-* [{{ post.title }}]({{ post.url }})
-{% endfor %}
+[How to implement a neural network]({% post_url 2015-06-10-neural_network_implementation_part01 %})

@@ -1,4 +1,11 @@
+---
+layout: post
+title: Interesting reads
+---
+
 # Interesting reads
+
+This is a compilation of interesting papers and articles.
 
 ## Neural networks
 
