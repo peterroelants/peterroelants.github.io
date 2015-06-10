@@ -70,7 +70,7 @@ baseurl: "" # does not include hostname
 
 # Outputting
 ############################################################
-permalink: /posts/:year/:month/:day/:title/
+permalink: /posts/:title/
 paginate_path: /page:num
 # Set the time zone for site generation.
 timezone: Europe/Brussels
