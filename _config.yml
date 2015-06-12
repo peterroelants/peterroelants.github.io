@@ -1,3 +1,7 @@
+# Use Github pages Jekyll configuration
+# Launch Github pages Jekyll with:
+# bundle exec jekyll serve
+
 # General blog information
 ############################################################
 # Name of your blog (this will show up at the top of your page and in the RSS feed)

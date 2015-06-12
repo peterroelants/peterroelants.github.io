@@ -551,8 +551,7 @@ $$\frac{\partial \xi_i}{\partial w} = \frac{\partial y_i}{\partial w} \frac{\par
 $$\frac{\partial \xi_i}{\partial y_i} = \frac{\partial (t_i - y_i)^2}{\partial y_i} = - 2 (t_i - y_i) = 2 (y_i - t_i)$$<p>And since $y_i = x_i * w$ we can write ${\partial y_i}/{\partial w}$ as:</p>
 $$\frac{\partial y_i}{\partial w} = \frac{\partial (x_i * w)}{\partial w} = x_i $$<p>So the full update function $\Delta w$ for sample $i$ will become:</p>
 $$\Delta w = \mu * \frac{\partial \xi_i}{\partial w} = \mu * 2 x_i (y_i - t_i)$$<p>In the batch processing, we just add up all the gradients for each sample:</p>
-$$\Delta w = \mu * 2 * \sum_{i=1}^{N} x_i (y_i - t_i)$$<p>Notice that the factor 2 is not necessary, and can be incorporated in the learning rate. Which need to be tuned separately as a hyperparameter for each neural network.</p>
-<p>To start out the gradient descent algorithm, you typically start with picking the initial parameters at random and start updating these parameters with $\Delta w$ until convergence.</p>
+$$\Delta w = \mu * 2 * \sum_{i=1}^{N} x_i (y_i - t_i)$$<p>To start out the gradient descent algorithm, you typically start with picking the initial parameters at random and start updating these parameters with $\Delta w$ until convergence. The learning rate rate needs to be tuned separately as a hyperparameter for each neural network.</p>
 <p>The gradient ${\partial \xi}/{\partial w}$ is implemented by the <code>gradient(w, x, t)</code> function. $\Delta w$ is computed by the <code>delta_w(w_k, x, t, learning_rate)</code>. The loop below performs 4 iterations of gradient descent while printing out the parameter value and current cost.</p>
 
 </div>
@@ -564,7 +563,7 @@ $$\Delta w = \mu * 2 * \sum_{i=1}^{N} x_i (y_i - t_i)$$<p>Notice that the factor
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span class="c"># define the gradient function. Remember that y = nn(x, w) = x * w</span>
-<span class="k">def</span> <span class="nf">gradient</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span> <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">gradient</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span> <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span>
 
 <span class="c"># define the update function delta w</span>
 <span class="k">def</span> <span class="nf">delta_w</span><span class="p">(</span><span class="n">w_k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">):</span>
@@ -573,7 +572,7 @@ $$\Delta w = \mu * 2 * \sum_{i=1}^{N} x_i (y_i - t_i)$$<p>Notice that the factor
 <span class="c"># Set the initial weight parameter</span>
 <span class="n">w</span> <span class="o">=</span> <span class="mf">0.1</span>
 <span class="c"># Set the learning rate</span>
-<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.2</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.1</span>
 
 <span class="c"># Start performing the gradient descent updates, and print the weights and cost:</span>
 <span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c"># number of gradient descent updates</span>
