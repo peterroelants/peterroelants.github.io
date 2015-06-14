@@ -86,7 +86,6 @@ title: How to implement a neural network Part 3
 <span class="c"># Merge samples in set of input variables x, and corresponding set of</span>
 <span class="c"># output variables t</span>
 <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">x_blue</span><span class="p">,</span> <span class="n">x_red_left</span><span class="p">,</span> <span class="n">x_red_right</span><span class="p">))</span>
-<span class="c"># print x</span>
 <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">x_blue</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="mi">1</span><span class="p">)),</span> 
                <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">x_red_left</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="mi">1</span><span class="p">)),</span> 
                <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">x_red_right</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">))))</span>
@@ -529,8 +528,8 @@ Also, notice that this cost function has a very sharp gradient around $w_h = 0$ 
 <span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">wsh</span><span class="p">,</span> <span class="n">wso</span><span class="p">)</span> <span class="c"># generate grid</span>
 <span class="n">cost_ws</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_ws</span><span class="p">,</span> <span class="n">nb_of_ws</span><span class="p">))</span> <span class="c"># initialize cost matrix</span>
 <span class="c"># Fill the cost matrix for each combination of weights</span>
-<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
-    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
         <span class="n">cost_ws</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">ws_x</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">ws_y</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">])</span> <span class="p">,</span> <span class="n">t</span><span class="p">)</span>
 <span class="c"># Plot the cost function surface</span>
 <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
@@ -1944,7 +1943,7 @@ $$\frac{\partial \xi_i}{\partial w_{h}} = x_i \delta_{hi}  $$<p>The gradients fo
 <span class="c"># Start the gradient descent updates and plot the iterations</span>
 <span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">50</span>  <span class="c"># number of gradient descent updates</span>
 <span class="n">lr_update</span> <span class="o">=</span> <span class="n">learning_rate</span> <span class="o">/</span> <span class="n">nb_of_iterations</span> <span class="c"># learning rate update rule</span>
-<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">):</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">):</span>
     <span class="n">learning_rate</span> <span class="o">-=</span> <span class="n">lr_update</span> <span class="c"># decrease the learning rate</span>
     <span class="n">current_cost</span> <span class="o">=</span> <span class="n">cost_for_param</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span> <span class="c"># Get the current cost</span>
     <span class="c"># Plot the weight-cost value and the line that represents the update </span>
@@ -1965,7 +1964,7 @@ $$\frac{\partial \xi_i}{\partial w_{h}} = x_i \delta_{hi}  $$<p>The gradients fo
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 
 <span class="c"># Print the final cost</span>
-<span class="k">print</span> <span class="s">&#39;final cost is {:.2f} for weights wh: {:.2f} and wo: {:.2f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">new_cost</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="s">&#39;final cost is {:.2f} for weights wh: {:.2f} and wo: {:.2f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">new_cost</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">))</span>
 </pre></div>
 
 </div>
@@ -3342,8 +3341,8 @@ jJGzAAAAAElFTkSuQmCC
 <span class="n">xx</span><span class="p">,</span> <span class="n">yy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">)</span> <span class="c"># create the grid</span>
 <span class="c"># Initialize and fill the classification plane</span>
 <span class="n">classification_plane</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_xs</span><span class="p">,</span> <span class="n">nb_of_xs</span><span class="p">))</span>
-<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
-    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
         <span class="n">classification_plane</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">nn_predict</span><span class="p">(</span><span class="n">xx</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">)</span>
 <span class="c"># Create a color map to show the classification colors of each grid point</span>
 <span class="n">cmap</span> <span class="o">=</span> <span class="n">ListedColormap</span><span class="p">([</span>
