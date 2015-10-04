@@ -1,0 +1,30 @@
+---
+layout: index_layout
+title: Overview blogposts
+---
+
+<div class="main-template">
+	<div class="container post_preview">
+	<h1>{{ page.title }}</h1>
+
+	<div class="row">
+    <div class="col-lg-4">
+      <a href="{% post_url 2015-06-10-neural_network_implementation_part01 %}">
+      <img class="img-circle" src="/images/ANN_preview.png" alt="ANN image" width="140" height="140">
+      </a>
+      <h2>How to implement a neural network</h2>
+      <p>5 (+2) parts tutorial on how to implement a simple neural network model. The tutorial starts with a simple model and builds up to a handwritten digit classifier. The math is explained along the way together with Python code examples. You can download the different parts and run them yourself with IPython notebook.</p>
+      <p><a class="btn btn-default" href="{% post_url 2015-06-10-neural_network_implementation_part01 %}" role="button">Learn to implement a neural net »</a></p>
+    </div><!-- /.col-lg-4 -->
+
+    <div class="col-lg-4">
+      <a href="{% post_url 2015-09-27-rnn_implementation_part01 %}">
+      <img class="img-circle" src="/images/RNN_preview.png" alt="RNN image" width="140" height="140">
+      </a>
+      <h2>How to implement a recurrent neural network</h2>
+      <p>2 part tutorial on how to implement a recurrent neural network. The tutorial explains the basics of backpropagation through time and discusses some of the difficulties of training recurrent networks. You can download the different parts and run them yourself with IPython notebook.</p>
+      <p><a class="btn btn-default" href="{% post_url 2015-09-27-rnn_implementation_part01 %}" role="button">Learn to implement a RNN »</a></p>
+    </div><!-- /.col-lg-4 -->
+  </div>
+  </div>
+</div>
