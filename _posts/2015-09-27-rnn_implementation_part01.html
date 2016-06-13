@@ -1,6 +1,6 @@
---- 
+---
 layout: notebook_simple_rnn_post 
-title: How to implement a recurrent neural network Part 1 
+title: How to implement a recurrent neural network Part 1
 ---
 
 
@@ -308,7 +308,7 @@ Since the network begins without seeing anything of the sequence, an initial sta
         <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">update_state</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span><span class="n">k</span><span class="p">],</span> <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="p">],</span> <span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">S</span>
 
-<span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span> 
+<span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
     <span class="sd">"""</span>
 <span class="sd">    Return the MSE between the targets t and the outputs y.</span>
 <span class="sd">    """</span>
@@ -341,7 +341,7 @@ Since the network begins without seeing anything of the sequence, an initial sta
       </code>
       method. The recurrence relation to propagate this gradient through the network can be written as:
      </p>
-     $$\frac{\partial \xi}{\partial S_{k-1}} 
+     $$\frac{\partial \xi}{\partial S_{k-1}}
 = \frac{\partial \xi}{\partial S_{k}} \frac{\partial S_{k}}{\partial S_{k-1}}
 = \frac{\partial \xi}{\partial S_{k}} w_{rec}$$
      <p>
@@ -354,10 +354,10 @@ Since the network begins without seeing anything of the sequence, an initial sta
      <p>
       The gradients of the cost function with respect to the parameters can then be found by summing the parameter gradients in each layer (or accumulating them while propagating the error). The update rules for the weights are:
      </p>
-     $$\frac{\partial \xi}{\partial w_x} 
+     $$\frac{\partial \xi}{\partial w_x}
 = \sum_{k=0}^{n} \frac{\partial \xi}{\partial S_{k}} x_k
 \\
-\frac{\partial \xi}{\partial w_{rec}} 
+\frac{\partial \xi}{\partial w_{rec}}
 = \sum_{k=1}^{n} \frac{\partial \xi}{\partial S_{k}} S_{k-1}$$
     </div>
    </div>
@@ -521,13 +521,13 @@ Since the network begins without seeing anything of the sequence, an initial sta
       </a>
       (as was noted above):
      </p>
-     $$\frac{\partial \xi}{\partial S_{k-1}} 
+     $$\frac{\partial \xi}{\partial S_{k-1}}
 = \frac{\partial \xi}{\partial S_{k}} \frac{\partial S_{k}}{\partial S_{k-1}}
 = \frac{\partial \xi}{\partial S_{k}} w_{rec}$$
      <p>
       The gradient of a state $S_k$ between a state $m$ timesteps back ($S_{k-m}$) can then be written as:
      </p>
-     $$\frac{\partial S_{k}}{\partial S_{k-m}} 
+     $$\frac{\partial S_{k}}{\partial S_{k-m}}
 = \frac{\partial S_{k}}{\partial S_{k-1}} * \cdots * \frac{\partial S_{k-m+1}}{\partial S_{k-1}} = w_{rec}^m$$
      <p>
       Note that in our simple linear model the gradient grows exponentially if $|w_{rec}|&gt;1$ (known as exploding gradient). And that the gradient shrinks exponentially if $|w_{rec}|
@@ -589,7 +589,7 @@ Since the network begins without seeing anything of the sequence, an initial sta
 <span class="k">def</span> <span class="nf">get_cost_surface_figure</span><span class="p">(</span><span class="n">cost_func</span><span class="p">,</span> <span class="n">points</span><span class="p">):</span>
     <span class="sd">"""Plot the cost surfaces together with the annotated points."""</span>
     <span class="c"># Plot figures</span>
-    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>   
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
     <span class="c"># Plot overview of cost function</span>
     <span class="n">ax_1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
     <span class="n">ws1_1</span><span class="p">,</span> <span class="n">ws2_1</span><span class="p">,</span> <span class="n">cost_ws_1</span> <span class="o">=</span> <span class="n">get_cost_surface</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="n">cost_func</span><span class="p">)</span>
@@ -615,7 +615,7 @@ Since the network begins without seeing anything of the sequence, an initial sta
 
 <span class="k">def</span> <span class="nf">plot_gradient_over_time</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">get_grad_over_time</span><span class="p">):</span>
     <span class="sd">"""Plot the gradients of the annotated point and how the evolve over time."""</span>
-    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">6.5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>  
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">6.5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
     <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">111</span><span class="p">)</span>
     <span class="c"># Plot points</span>
     <span class="k">for</span> <span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">points</span><span class="p">:</span>
@@ -634,7 +634,7 @@ Since the network begins without seeing anything of the sequence, an initial sta
     <span class="c"># Set legend</span>
     <span class="n">leg</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s">'center left'</span><span class="p">,</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span> <span class="n">frameon</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">numpoints</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
     <span class="n">leg</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s">'$(w_x, w_{rec})$'</span><span class="p">,</span> <span class="n">prop</span><span class="o">=</span><span class="p">{</span><span class="s">'size'</span><span class="p">:</span><span class="mi">15</span><span class="p">})</span>
-    
+
 <span class="k">def</span> <span class="nf">get_grad_over_time</span><span class="p">(</span><span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">):</span>
     <span class="sd">"""Helper func to only get the gradient over time from wx and wRec."""</span>
     <span class="n">S</span> <span class="o">=</span> <span class="n">forward_states</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">)</span>
@@ -1921,7 +1921,7 @@ AAAAAElFTkSuQmCC
          $sign(\partial \xi /\partial w(i)) \neq sign(\partial \xi /\partial w(i-1))$
          <ul>
           <li>
-           Multiply the weight update value $\Delta$ by $\eta^-$, with $\eta^- 
+           Multiply the weight update value $\Delta$ by $\eta^-$, with $\eta^-
 $\Delta(i) = \Delta(i) * \eta^-$
           </li>
          </ul>
@@ -2088,7 +2088,7 @@ $w(i+1) = w(i) - sign(\partial \xi /\partial w(i))* \Delta(i)$
     <span class="n">cbar</span><span class="o">.</span><span class="n">set_ticklabels</span><span class="p">([</span><span class="s">'{:.0e}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">)])</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s">'Cost surface'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
-    
+
 <span class="c"># Plot the optimisation</span>
 <span class="n">plot_optimisation</span><span class="p">(</span><span class="n">ls_of_ws</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">:</span> <span class="n">cost</span><span class="p">(</span><span class="n">forward_states</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">)[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="p">,</span> <span class="n">t</span><span class="p">))</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>

@@ -1,4 +1,9 @@
---- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Part 4 \n---\n\n
+---
+layout: notebook_simple_ann_post
+title: How to implement a neural network Part 4
+---
+
+
 <div class="cell border-box-sizing text_cell rendered">
  <div class="prompt input_prompt">
  </div>
@@ -108,7 +113,7 @@
     The $N$ input samples with $2$ variables each are given as a $N \times 2$ matrix $X$:
    </p>
    $$X =
-\begin{bmatrix} 
+\begin{bmatrix}
 x_{11} &amp; x_{12} \\
 \vdots &amp; \vdots \\
 x_{N1} &amp; x_{N2}
@@ -119,10 +124,10 @@ x_{N1} &amp; x_{N2}
    <p>
     Since the softmax output function is used the targets for each input sample are given as a $N \times 2$ matrix $T$:
    </p>
-   $$T = \begin{bmatrix} 
+   $$T = \begin{bmatrix}
 t_{11} &amp; t_{12}\\
 \vdots &amp; \vdots \\
-t_{N1} &amp; t_{N2} 
+t_{N1} &amp; t_{N2}
 \end{bmatrix}$$
    <p>
     Where $t_{ij} = 1$ if and only if the $i$-th input sample belongs to class $j$. So blue points are labelled T = [0 1] and red points are labelled T = [1 0].
@@ -499,19 +504,19 @@ GfH/AWnSyHjf9fyiAAAAAElFTkSuQmCC
    </p>
    $$\begin{align}
 W_h =
-\begin{bmatrix} 
+\begin{bmatrix}
 w_{h11} &amp; w_{h12} &amp; w_{h13} \\
 w_{h21} &amp; w_{h22} &amp; w_{h23}
 \end{bmatrix}
-&amp;&amp; \mathbf{b}_h = 
-\begin{bmatrix} 
+&amp;&amp; \mathbf{b}_h =
+\begin{bmatrix}
 b_{h1} &amp; b_{h2} &amp; b_{h3}
 \end{bmatrix}
 \end{align}$$
    <p>
     following computation:
    </p>
-   $$H = \sigma(X \cdot W_h + \mathbf{b}_h) = \frac{1}{1+e^{-(X \cdot W_h + \mathbf{b}_h)}} = \begin{bmatrix} 
+   $$H = \sigma(X \cdot W_h + \mathbf{b}_h) = \frac{1}{1+e^{-(X \cdot W_h + \mathbf{b}_h)}} = \begin{bmatrix}
 h_{11} &amp; h_{12} &amp; h_{13} \\
 \vdots &amp; \vdots &amp; \vdots \\
 h_{N1} &amp; h_{N2} &amp; h_{N3}
@@ -559,13 +564,13 @@ h_{N1} &amp; h_{N2} &amp; h_{N3}
    </p>
    $$\begin{align}
 W_o =
-\begin{bmatrix} 
+\begin{bmatrix}
 w_{o11} &amp; w_{o12} \\
 w_{o21} &amp; w_{o22} \\
 w_{o31} &amp; w_{o32}
 \end{bmatrix}
-&amp;&amp; \mathbf{b}_o = 
-\begin{bmatrix} 
+&amp;&amp; \mathbf{b}_o =
+\begin{bmatrix}
 b_{o1} &amp; b_{o2}
 \end{bmatrix}
 \end{align}$$
@@ -575,10 +580,10 @@ b_{o1} &amp; b_{o2}
    $$Y = \varsigma(H \cdot W_o + \mathbf{b}_o)
 = \frac{e^{Z_o}}{\sum_{d=1}^C e^{\mathbf{z}_{od}}}
 = \frac{e^{H \cdot W_o + \mathbf{b}_o}}{\sum_{d=1}^C e^{H \cdot \mathbf{w}_{od} + b_{od}}}
-= \begin{bmatrix} 
+= \begin{bmatrix}
 y_{11} &amp; y_{12}\\
 \vdots &amp; \vdots \\
-y_{n1} &amp; y_{n2} 
+y_{n1} &amp; y_{n2}
 \end{bmatrix}$$
    <p>
     With $\varsigma$ the softmax function, $Y$ resulting in a $n \times 2$ matrix, $\mathbf{z}_{od}$ the $d$-th column of the $Z_o$ matrix, $\mathbf{w}_{od}$ the $d$-th column of the $W_o$ matrix, and $b_{od}$ the $d$-th element of the $b_o$ vector.
@@ -612,11 +617,11 @@ y_{n1} &amp; y_{n2}
     </div>
     <div class=" highlight hl-ipython2">
      <pre><span class="c"># Define the logistic function</span>
-<span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> 
+<span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
     <span class="k">return</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
 
 <span class="c"># Define the softmax function</span>
-<span class="k">def</span> <span class="nf">softmax</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> 
+<span class="k">def</span> <span class="nf">softmax</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
 
 <span class="c"># Function to compute the hidden activations</span>
@@ -628,12 +633,12 @@ y_{n1} &amp; y_{n2}
     <span class="k">return</span> <span class="n">softmax</span><span class="p">(</span><span class="n">H</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Wo</span><span class="p">)</span> <span class="o">+</span> <span class="n">bo</span><span class="p">)</span>
 
 <span class="c"># Define the neural network function</span>
-<span class="k">def</span> <span class="nf">nn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">):</span> 
+<span class="k">def</span> <span class="nf">nn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">output_activations</span><span class="p">(</span><span class="n">hidden_activations</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">),</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">)</span>
 
 <span class="c"># Define the neural network prediction function that only returns</span>
 <span class="c">#  1 or 0 depending on the predicted class</span>
-<span class="k">def</span> <span class="nf">nn_predict</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">):</span> 
+<span class="k">def</span> <span class="nf">nn_predict</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">around</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">))</span>
 </pre>
     </div>
@@ -707,10 +712,10 @@ y_{n1} &amp; y_{n2}
    <p>
     At the output the gradient $\delta_{\mathbf{w}_{oj}}$ over all $N$ samples is computed by ${\partial \xi}/{\partial \mathbf{w}_{oj}}$:
    </p>
-   $$\frac{\partial \xi}{\partial \mathbf{w}_{oj}} = 
-\frac{\partial Z_{o}}{\partial \mathbf{w}_{oj}} \frac{\partial Y}{\partial Z_{o}} \frac{\partial \xi}{\partial Y} = 
+   $$\frac{\partial \xi}{\partial \mathbf{w}_{oj}} =
+\frac{\partial Z_{o}}{\partial \mathbf{w}_{oj}} \frac{\partial Y}{\partial Z_{o}} \frac{\partial \xi}{\partial Y} =
 \frac{\partial Z_{o}}{\partial w_{oji}} \frac{\partial \xi}{\partial Z_o} =
-\sum_{i=1}^N h_{ij} (\mathbf{y}_i - \mathbf{t}_i) = 
+\sum_{i=1}^N h_{ij} (\mathbf{y}_i - \mathbf{t}_i) =
 \sum_{i=1}^N h_{ij} \delta_{oi}$$
    <p>
     With $\mathbf{w}_{oj}$ the $j$-th row of $W_o$ and thus a $1 \times 2$ vector. This formula can be written out as matrix operations with the parameters of the output layer:
@@ -724,7 +729,7 @@ y_{n1} &amp; y_{n2}
     :
    </p>
    $$J_{W_o} = \frac{\partial \xi}{\partial W_o} =
-\begin{bmatrix} 
+\begin{bmatrix}
 \frac{\partial \xi}{\partial w_{o11}} &amp; \frac{\partial \xi}{\partial w_{o12}} \\
 \frac{\partial \xi}{\partial w_{o21}} &amp; \frac{\partial \xi}{\partial w_{o22}} \\
 \frac{\partial \xi}{\partial w_{o31}} &amp; \frac{\partial \xi}{\partial w_{o32}}
@@ -754,7 +759,7 @@ y_{n1} &amp; y_{n2}
     The resulting gradient is a $2 \times 1$ Jacobian matrix:
    </p>
    $$J_{b_o} = \frac{\partial \xi}{\partial \mathbf{b}_o} =
-\begin{bmatrix} 
+\begin{bmatrix}
 \frac{\partial \xi}{\partial b_{o1}} &amp; \frac{\partial \xi}{\partial b_{o2}}
 \end{bmatrix}$$
    <p>
@@ -790,11 +795,11 @@ y_{n1} &amp; y_{n2}
     <span class="k">return</span> <span class="n">Y</span> <span class="o">-</span> <span class="n">T</span>
 
 <span class="c"># Define the gradient function for the weight parameters at the output layer</span>
-<span class="k">def</span> <span class="nf">gradient_weight_out</span><span class="p">(</span><span class="n">H</span><span class="p">,</span> <span class="n">Eo</span><span class="p">):</span> 
+<span class="k">def</span> <span class="nf">gradient_weight_out</span><span class="p">(</span><span class="n">H</span><span class="p">,</span> <span class="n">Eo</span><span class="p">):</span>
     <span class="k">return</span>  <span class="n">H</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Eo</span><span class="p">)</span>
 
 <span class="c"># Define the gradient function for the bias parameters at the output layer</span>
-<span class="k">def</span> <span class="nf">gradient_bias_out</span><span class="p">(</span><span class="n">Eo</span><span class="p">):</span> 
+<span class="k">def</span> <span class="nf">gradient_bias_out</span><span class="p">(</span><span class="n">Eo</span><span class="p">):</span>
     <span class="k">return</span>  <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">Eo</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
 </pre>
     </div>
@@ -829,8 +834,8 @@ y_{n1} &amp; y_{n2}
    <p>
     Lets first derive the error gradient $\delta_{hij}$ for one sample $i$ at hidden neuron $j$. The gradients that backpropagate from the previous layer via the weighted connections are summed for each origin $h_{ij}$.
    </p>
-   $$\delta_{hij} = \frac{\partial \xi}{\partial z_{hij}} 
-= \frac{\partial h_{ij}}{\partial z_{hij}} \frac{\partial \mathbf{z}_{oi}}{\partial h_{ij}} \frac{\partial \xi}{\partial \mathbf{z}_{oi}} 
+   $$\delta_{hij} = \frac{\partial \xi}{\partial z_{hij}}
+= \frac{\partial h_{ij}}{\partial z_{hij}} \frac{\partial \mathbf{z}_{oi}}{\partial h_{ij}} \frac{\partial \xi}{\partial \mathbf{z}_{oi}}
 = h_{ij} (1-h_{ij}) \sum_{k=1}^2 w_{ojk} (y_{ik}-t_{ik})
 = h_{ij} (1-h_{ij}) [\delta_{oi} \cdot \mathbf{w}_{oj}^T]$$
    <p>
@@ -864,8 +869,8 @@ y_{n1} &amp; y_{n2}
    <p>
     At the hidden layer the gradient ${\partial \xi}/{\partial \mathbf{w}_{hj}}$ over all $N$ samples can be computed by:
    </p>
-   $$\frac{\partial \xi}{\partial \mathbf{w}_{hj}} = 
-\frac{\partial Z_{h}}{\partial \mathbf{w}_{hj}} \frac{\partial H}{\partial Z_{h}} \frac{\partial \xi}{\partial H} = 
+   $$\frac{\partial \xi}{\partial \mathbf{w}_{hj}} =
+\frac{\partial Z_{h}}{\partial \mathbf{w}_{hj}} \frac{\partial H}{\partial Z_{h}} \frac{\partial \xi}{\partial H} =
 \frac{\partial Z_{h}}{\partial \mathbf{w}_{hj}} \frac{\partial \xi}{\partial Z_h} =
 \sum_{i=1}^N x_{ij} \delta_{hi}$$
    <p>
@@ -880,7 +885,7 @@ y_{n1} &amp; y_{n2}
     :
    </p>
    $$J_{W_h} = \frac{\partial \xi}{\partial W_{h}} =
-\begin{bmatrix} 
+\begin{bmatrix}
 \frac{\partial \xi}{\partial w_{h11}} &amp; \frac{\partial \xi}{\partial w_{h12}} &amp; \frac{\partial \xi}{\partial w_{h13}} \\
 \frac{\partial \xi}{\partial w_{h21}} &amp; \frac{\partial \xi}{\partial w_{h22}} &amp; \frac{\partial \xi}{\partial w_{h23}} \\
 \end{bmatrix}$$
@@ -910,7 +915,7 @@ y_{n1} &amp; y_{n2}
     The resulting gradient is a $1 \times 3$ Jacobian matrix:
    </p>
    $$J_{b_h} = \frac{\partial \xi}{\partial \mathbf{b}_{h}} =
-\begin{bmatrix} 
+\begin{bmatrix}
 \frac{\partial \xi}{\partial b_{h1}} &amp; \frac{\partial \xi}{\partial b_{h2}} &amp; \frac{\partial \xi}{\partial b_{h3}}
 \end{bmatrix}$$
    <p>
@@ -947,7 +952,7 @@ y_{n1} &amp; y_{n2}
     <span class="k">return</span> <span class="n">X</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Eh</span><span class="p">)</span>
 
 <span class="c"># Define the gradient function for the bias parameters at the output layer</span>
-<span class="k">def</span> <span class="nf">gradient_bias_hidden</span><span class="p">(</span><span class="n">Eh</span><span class="p">):</span> 
+<span class="k">def</span> <span class="nf">gradient_bias_hidden</span><span class="p">(</span><span class="n">Eh</span><span class="p">):</span>
     <span class="k">return</span>  <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">Eh</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
 </pre>
     </div>

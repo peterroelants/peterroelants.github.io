@@ -1,4 +1,9 @@
---- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Intermezzo 2 \n---\n\n
+---
+layout: notebook_simple_ann_post
+title: How to implement a neural network Intermezzo 2
+---
+
+
 <div class="cell border-box-sizing text_cell rendered">
  <div class="prompt input_prompt">
  </div>
@@ -94,26 +99,26 @@ For multiclass classification there exists an extension of this logistic functio
    </p>
    $$ y_c = \varsigma(\mathbf{z})_c = \frac{e^{z_c}}{\sum_{d=1}^C e^{z_d}} \quad \text{for} \; c = 1 \cdots C$$
    <p>
-    The denominator $\sum_{d=1}^C e^{z_d}$ acts as a regularizer to make sure that $\sum_{c=1}^C y_c = 1$. 
+    The denominator $\sum_{d=1}^C e^{z_d}$ acts as a regularizer to make sure that $\sum_{c=1}^C y_c = 1$.
 As the output layer of a neural network, the softmax function can be represented graphically as a layer with $C$ neurons.
    </p>
    <p>
     We can write the probabilities that the class is $t=c$ for $c = 1 \ldots C$ given input $\mathbf{z}$ as:
    </p>
-   $$ 
-\begin{bmatrix} 
+   $$
+\begin{bmatrix}
 P(t=1 | \mathbf{z}) \\
 \vdots \\
 P(t=C | \mathbf{z}) \\
 \end{bmatrix}
-= 
-\begin{bmatrix} 
+=
+\begin{bmatrix}
 \varsigma(\mathbf{z})_1 \\
 \vdots \\
 \varsigma(\mathbf{z})_C \\
 \end{bmatrix}
 = \frac{1}{\sum_{d=1}^C e^{z_d}}
-\begin{bmatrix} 
+\begin{bmatrix}
 e^{z_1} \\
 \vdots \\
 e^{z_C} \\
