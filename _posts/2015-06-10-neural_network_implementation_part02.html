@@ -1,61 +1,54 @@
---- 
-layout: notebook_simple_ann_post 
-title: How to implement a neural network Part 2 
----
-
-
-<html>
- <body>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Logistic-regression-(classification)">
-      Logistic regression (classification)
-      <a class="anchor-link" href="#Logistic-regression-(classification)">
-       ¶
-      </a>
-     </h2>
-     <p>
-      This part will cover:
-     </p>
-     <ul>
-      <li>
-       The
-       <a href="http://peterroelants.github.io/posts/neural_network_implementation_part02/#Logistic-function-and-cross-entropy-cost-function">
-        logistic classification
-       </a>
-       model
-      </li>
-     </ul>
-     <p>
-      While the previous tutorial described a very simple one-input-one-output linear regression model, this tutorial will describe a 2-class classification neural network with two input dimensions. This model is known in statistics as the
-      <a href="http://en.wikipedia.org/wiki/Logistic_regression">
-       logistic regression
-      </a>
-      model. This network can be represented graphically as:
-     </p>
-     <p>
-      <img alt="Image of the logistic model" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/SimpleANN02.png"/>
-     </p>
-     <p>
-      The notebook starts out with importing the libraries we need:
-     </p>
-    </div>
-   </div>
+--- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Part 2 \n---\n\n
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Logistic-regression-(classification)">
+    Logistic regression (classification)
+    <a class="anchor-link" href="#Logistic-regression-(classification)">
+     ¶
+    </a>
+   </h2>
+   <p>
+    This part will cover:
+   </p>
+   <ul>
+    <li>
+     The
+     <a href="http://peterroelants.github.io/posts/neural_network_implementation_part02/#Logistic-function-and-cross-entropy-cost-function">
+      logistic classification
+     </a>
+     model
+    </li>
+   </ul>
+   <p>
+    While the previous tutorial described a very simple one-input-one-output linear regression model, this tutorial will describe a 2-class classification neural network with two input dimensions. This model is known in statistics as the
+    <a href="http://en.wikipedia.org/wiki/Logistic_regression">
+     logistic regression
+    </a>
+    model. This network can be represented graphically as:
+   </p>
+   <p>
+    <img alt="Image of the logistic model" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/SimpleANN02.png"/>
+   </p>
+   <p>
+    The notebook starts out with importing the libraries we need:
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [1]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [1]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Python imports</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Python imports</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c"># Matrix and vector computation package</span>
 <span class="n">np</span><span class="o">.</span><span class="n">seterr</span><span class="p">(</span><span class="nb">all</span><span class="o">=</span><span class="s">'ignore'</span><span class="p">)</span> <span class="c"># ignore numpy warning like multiplication of inf</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
@@ -66,40 +59,40 @@ title: How to implement a neural network Part 2
 <span class="c"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
 <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Define-the-class-distributions">
-      Define the class distributions
-      <a class="anchor-link" href="#Define-the-class-distributions">
-       ¶
-      </a>
-     </h2>
-     <p>
-      In this example the target classes $t$ will be generated from 2 class distributions: blue ($t=1$) and red ($t=0$). Samples from both classes are sampled from their respective distributions. These samples are plotted in the figure below.
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Define-the-class-distributions">
+    Define the class distributions
+    <a class="anchor-link" href="#Define-the-class-distributions">
+     ¶
+    </a>
+   </h2>
+   <p>
+    In this example the target classes $t$ will be generated from 2 class distributions: blue ($t=1$) and red ($t=0$). Samples from both classes are sampled from their respective distributions. These samples are plotted in the figure below.
 Note that $X$ is a $N \times 2$ matrix of individual input samples $\mathbf{x}_i$, and that $\mathbf{t}$ is a corresponding $N \times 1$ vector of target values $t_i$.
-     </p>
-    </div>
-   </div>
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [2]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [2]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define and generate the samples</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define and generate the samples</span>
 <span class="n">nb_of_samples_per_class</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c"># The number of sample in each class</span>
 <span class="n">red_mean</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>  <span class="c"># The mean of the red class</span>
 <span class="n">blue_mean</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>  <span class="c"># The mean of the blue class</span>
@@ -112,22 +105,22 @@ Note that $X$ is a $N \times 2$ matrix of individual input samples $\mathbf{x}_i
 <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">x_red</span><span class="p">,</span> <span class="n">x_blue</span><span class="p">))</span>
 <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span><span class="mi">1</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span><span class="mi">1</span><span class="p">))))</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [3]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [3]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot both classes on the x1, x2 plane</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot both classes on the x1, x2 plane</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_red</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_red</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'ro'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'class red'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_blue</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_blue</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'bo'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'class blue'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
@@ -138,17 +131,17 @@ Note that $X$ is a $N \times 2$ matrix of individual input samples $\mathbf{x}_i
 <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'red vs. blue classes in the input space'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYQAAAEeCAYAAACKQGL2AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYQAAAEeCAYAAACKQGL2AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzt3Xt8XHWd//HXpxdSaEsbLNdCCTsiCqwGLVVx22RXm+mD
 cNPVlUuLEVZZfz+SLLKKJg0NthUFXE2y7KqIRkTAH66rkpE2XewkIguI22ARBAzSK5RLSymXBJp+
 fn+cM2GSzCRnkjNzzpl8no/HPJpzZubMe86Znu853+/5nq+oKsYYY8yUoAMYY4wJBysQjDHGAFYg
@@ -366,101 +359,102 @@ DCSgMeNkBYIxE7ME+G1qQkTer6qvqmorQ0dRMyb0rEAwJkci8g8i8rCITAPOBv7szj8P2Dfqm40J
 MWtUNiZ324HNOIMKfRqoEZGZOON8h3FMXWM8sQLBmByp6n04A82kdAWVxRg/WZWRMfkVtuE+jcnK
 CgRjfCYi00WkFjgRqBWRU4LOZIwX1g/BGGMMYGcIxhhjXFYgGGOMAaxAMMYY47ICwRhjDGAFgjHG
 GJcVCMYYYwArEIwxxrisQDDGGANYgWCMMcb1/wEjRGlbAbFYWAAAAABJRU5ErkJggg==
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Logistic-function-and-cross-entropy-cost-function">
-      Logistic function and cross-entropy cost function
-      <a class="anchor-link" href="#Logistic-function-and-cross-entropy-cost-function">
-       ¶
-      </a>
-     </h2>
-     <h3 id="Logistic-function">
-      Logistic function
-      <a class="anchor-link" href="#Logistic-function">
-       ¶
-      </a>
-     </h3>
-     <p>
-      The goal is to predict the target class $t$ from the input values $x$. The network is defined as having an input $\mathbf{x} = [x_1, x_2]$ which gets transformed by the weights $\mathbf{w} = [w_1, w_2]$ to generate the probability that sample $\mathbf{x}$ belongs to class $t=1$. This probability $P(t=1| \mathbf{x},\mathbf{w})$ is represented by the output $y$ of the network computed as $y = \sigma(\mathbf{x} * \mathbf{w}^T)$. $\sigma$ is the
-      <a href="http://en.wikipedia.org/wiki/Logistic_function">
-       logistic function
-      </a>
-      and is defined as:
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Logistic-function-and-cross-entropy-cost-function">
+    Logistic function and cross-entropy cost function
+    <a class="anchor-link" href="#Logistic-function-and-cross-entropy-cost-function">
+     ¶
+    </a>
+   </h2>
+   <h3 id="Logistic-function">
+    Logistic function
+    <a class="anchor-link" href="#Logistic-function">
+     ¶
+    </a>
+   </h3>
+   <p>
+    The goal is to predict the target class $t$ from the input values $x$. The network is defined as having an input $\mathbf{x} = [x_1, x_2]$ which gets transformed by the weights $\mathbf{w} = [w_1, w_2]$ to generate the probability that sample $\mathbf{x}$ belongs to class $t=1$. This probability $P(t=1| \mathbf{x},\mathbf{w})$ is represented by the output $y$ of the network computed as $y = \sigma(\mathbf{x} * \mathbf{w}^T)$. $\sigma$ is the
+    <a href="http://en.wikipedia.org/wiki/Logistic_function">
+     logistic function
+    </a>
+    and is defined as:
 $$ \sigma(z) = \frac{1}{1+e^{-z}} $$
-     </p>
-     <p>
-      This logistic function and its derivative are explained in detail in
-      <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
-       intermezzo 1
-      </a>
-      of this tutorial. The logistic function is implemented below by the
-      <code>
-       logistic(z)
-      </code>
-      method.
-     </p>
-     <h3 id="Cross-entropy-cost-function">
-      Cross-entropy cost function
-      <a class="anchor-link" href="#Cross-entropy-cost-function">
-       ¶
-      </a>
-     </h3>
-     <p>
-      The cost function used to optimize the classification is the
-      <a href="http://en.wikipedia.org/wiki/Cross_entropy">
-       cross-entropy error function
-      </a>
-      . And is defined for sample $i$ as:
-     </p>
-     $$ \xi(t_i,y_i) = -t_i log(y_i) - (1-t_i)log(1-y_i) $$
-     <p>
-      Which will give $\xi(t,y) = - \sum_{i=1}^{n} \left[ t_i log(y_i) + (1-t_i)log(1-y_i) \right]$ if we sum over all $N$ samples.
-     </p>
-     <p>
-      The explanation and derivative of this cost function are given in detail in
-      <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
-       intermezzo 1
-      </a>
-      of this tutorial. The cost function is implemented below by the
-      <code>
-       cost(y, t)
-      </code>
-      method, and its output with respect to the parameters $\mathbf{w}$ over all samples $\mathbf{x}$ is plotted in the figure below.
-     </p>
-     <p>
-      The neural network output is implemented by the
-      <code>
-       nn(x, w)
-      </code>
-      method, and the neural network prediction by the
-      <code>
-       nn_predict(x,w)
-      </code>
-      method.
-     </p>
-    </div>
-   </div>
+   </p>
+   <p>
+    This logistic function and its derivative are explained in detail in
+    <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
+     intermezzo 1
+    </a>
+    of this tutorial. The logistic function is implemented below by the
+    <code>
+     logistic(z)
+    </code>
+    method.
+   </p>
+   <h3 id="Cross-entropy-cost-function">
+    Cross-entropy cost function
+    <a class="anchor-link" href="#Cross-entropy-cost-function">
+     ¶
+    </a>
+   </h3>
+   <p>
+    The cost function used to optimize the classification is the
+    <a href="http://en.wikipedia.org/wiki/Cross_entropy">
+     cross-entropy error function
+    </a>
+    . And is defined for sample $i$ as:
+   </p>
+   $$ \xi(t_i,y_i) = -t_i log(y_i) - (1-t_i)log(1-y_i) $$
+   <p>
+    Which will give $\xi(t,y) = - \sum_{i=1}^{n} \left[ t_i log(y_i) + (1-t_i)log(1-y_i) \right]$ if we sum over all $N$ samples.
+   </p>
+   <p>
+    The explanation and derivative of this cost function are given in detail in
+    <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
+     intermezzo 1
+    </a>
+    of this tutorial. The cost function is implemented below by the
+    <code>
+     cost(y, t)
+    </code>
+    method, and its output with respect to the parameters $\mathbf{w}$ over all samples $\mathbf{x}$ is plotted in the figure below.
+   </p>
+   <p>
+    The neural network output is implemented by the
+    <code>
+     nn(x, w)
+    </code>
+    method, and the neural network prediction by the
+    <code>
+     nn_predict(x,w)
+    </code>
+    method.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [4]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [4]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the logistic function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the logistic function</span>
 <span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> 
     <span class="k">return</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
 
@@ -477,22 +471,22 @@ $$ \sigma(z) = \frac{1}{1+e^{-z}} $$
 <span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
     <span class="k">return</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">y</span><span class="p">))</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">((</span><span class="mi">1</span><span class="o">-</span><span class="n">t</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">y</span><span class="p">)))</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [5]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [5]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the cost in function of the weights</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the cost in function of the weights</span>
 <span class="c"># Define a vector of weights for which we want to plot the cost</span>
 <span class="n">nb_of_ws</span> <span class="o">=</span> <span class="mi">100</span> <span class="c"># compute the cost nb_of_ws times in each dimension</span>
 <span class="n">ws1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c"># weight 1</span>
@@ -513,17 +507,17 @@ $$ \sigma(z) = \frac{1}{1+e^{-z}} $$
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYcAAAEeCAYAAABhd9n1AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYcAAAEeCAYAAABhd9n1AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJztnXm8XVV5978PyQ0JuRkYDWQgpCFAGEKChAgqomLjyMdW
 X2ertq9atPKiWIv49tVWsY5YFftpq1RbC1oBqdQBUyvKDJLBxCTEawwZyEBILuSGwL1JnvePvffN
 zrln2PucPay9zvP9fM6Hu/ZZe5217g37d57ntwZRVQzDMAwjzhFld8AwDMNwDxMHwzAMYwQmDoZh
@@ -777,115 +771,116 @@ jjuAy0Tkg8CRBGdgv11ETic4HGdJqb0zDE8wcTAqhaoeBN5bc/lHZfTFMHzG0kqG70jZHTCMKmLi
 YHiHiPSIyF8ApwJ/ISJnlt0nw6gadkyoYRiGMQKLHAzDMIwRmDgYhmEYIzBxMAzDMEZg4mAYhmGM
 wMTBMAzDGIGJg2EYhjECEwfDMAxjBCYOhmEYxghMHAzDMIwR/H+O+YtS/nFsJgAAAABJRU5ErkJg
 gg==
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Gradient-descent-optimization-of-the-cost-function">
-      Gradient descent optimization of the cost function
-      <a class="anchor-link" href="#Gradient-descent-optimization-of-the-cost-function">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The
-      <a href="http://en.wikipedia.org/wiki/Gradient_descent">
-       gradient descent
-      </a>
-      algorithm works by taking the
-      <a href="http://en.wikipedia.org/wiki/Derivative">
-       derivative
-      </a>
-      of the cost function $\xi$ with respect to the parameters, and updates the parameters in the direction of the negative
-      <a href="http://en.wikipedia.org/wiki/Gradient">
-       gradient
-      </a>
-      .
-     </p>
-     <p>
-      The parameters $\mathbf{w}$ are updated by taking steps proportional to the negative of the gradient: $\mathbf{w}(k+1) = \mathbf{w}(k) - \Delta \mathbf{w}(k+1)$. $\Delta \mathbf{w}$ is defined as: $\Delta \mathbf{w} = \mu \frac{\partial \xi}{\partial \mathbf{w}}$ with $\mu$ the learning rate.
-     </p>
-     <p>
-      ${\partial \xi_i}/{\partial \mathbf{w}}$, for each sample $i$ is computed as follows:
-     </p>
-     $$\frac{\partial \xi_i}{\partial \mathbf{w}} = \frac{\partial z_i}{\partial \mathbf{w}} \frac{\partial y_i}{\partial z_i} \frac{\partial \xi_i}{\partial y_i}$$
-     <p>
-      Where $y_i = \sigma(z_i)$ is the output of the logistic neuron, and $z_i = \mathbf{x}_i * \mathbf{w}^T$ the input to the logistic neuron.
-     </p>
-     <ul>
-      <li>
-       <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
-        Intermezzo 1
-       </a>
-       derived that ${\partial \xi_i}/{\partial y_i}$ can be calculated as:
-      </li>
-     </ul>
-     $$\frac{\partial \xi_i}{\partial y_i} = \frac{y_i - t_i}{y_i (1 - y_i)}$$
-     <ul>
-      <li>
-       <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
-        Intermezzo 1
-       </a>
-       derived that ${\partial y_i}/{\partial z_i}$ can be calculated as:
-      </li>
-     </ul>
-     $$\frac{\partial y_i}{\partial z_i} = y_i (1 - y_i)$$
-     <ul>
-      <li>
-       ${\partial z_i}/{\partial \mathbf{w}}$ can be calculated as:
-      </li>
-     </ul>
-     $$\frac{\partial z}{\partial \mathbf{w}} = \frac{\partial (\mathbf{x} * \mathbf{w})}{\partial \mathbf{w}} = \mathbf{x} $$
-     <p>
-      Bringing this together we can write:
-     </p>
-     $$\frac{\partial \xi_i}{\partial \mathbf{w}} = \frac{\partial z_i}{\partial \mathbf{w}} \frac{\partial y_i}{\partial z_i} \frac{\partial \xi_i}{\partial y_i} = \mathbf{x} * y_i (1 - y_i) * \frac{y_i - t_i}{y_i (1-y_i)} = \mathbf{x} * (y_i-t_i) $$
-     <p>
-      Notice how this gradient is the same (negating the constant factor) as the gradient of the squared error regression.
-     </p>
-     <p>
-      So the full update function $\Delta w_j$ for each weight will become
-     </p>
-     $$\Delta w_j = \mu * \frac{\partial \xi_i}{\partial w_j} = \mu * x_j * (y_i-t_i)$$
-     <p>
-      In the batch processing, we just add up all the gradients for each sample:
-     </p>
-     $$\Delta w_j = \mu * \sum_{i=1}^{N} x_{ij} (y_i - t_i)$$
-     <p>
-      To start out the gradient descent algorithm, you typically start with picking the initial parameters at random and start updating these parameters according to the delta rule with $\Delta w$ until convergence.
-     </p>
-     <p>
-      The gradient ${\partial \xi}/{\partial \mathbf{w}}$ is implemented by the
-      <code>
-       gradient(w, x, t)
-      </code>
-      function. $\Delta \mathbf{w}$ is computed by the
-      <code>
-       delta_w(w_k, x, t, learning_rate)
-      </code>
-      .
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Gradient-descent-optimization-of-the-cost-function">
+    Gradient descent optimization of the cost function
+    <a class="anchor-link" href="#Gradient-descent-optimization-of-the-cost-function">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The
+    <a href="http://en.wikipedia.org/wiki/Gradient_descent">
+     gradient descent
+    </a>
+    algorithm works by taking the
+    <a href="http://en.wikipedia.org/wiki/Derivative">
+     derivative
+    </a>
+    of the cost function $\xi$ with respect to the parameters, and updates the parameters in the direction of the negative
+    <a href="http://en.wikipedia.org/wiki/Gradient">
+     gradient
+    </a>
+    .
+   </p>
+   <p>
+    The parameters $\mathbf{w}$ are updated by taking steps proportional to the negative of the gradient: $\mathbf{w}(k+1) = \mathbf{w}(k) - \Delta \mathbf{w}(k+1)$. $\Delta \mathbf{w}$ is defined as: $\Delta \mathbf{w} = \mu \frac{\partial \xi}{\partial \mathbf{w}}$ with $\mu$ the learning rate.
+   </p>
+   <p>
+    ${\partial \xi_i}/{\partial \mathbf{w}}$, for each sample $i$ is computed as follows:
+   </p>
+   $$\frac{\partial \xi_i}{\partial \mathbf{w}} = \frac{\partial z_i}{\partial \mathbf{w}} \frac{\partial y_i}{\partial z_i} \frac{\partial \xi_i}{\partial y_i}$$
+   <p>
+    Where $y_i = \sigma(z_i)$ is the output of the logistic neuron, and $z_i = \mathbf{x}_i * \mathbf{w}^T$ the input to the logistic neuron.
+   </p>
+   <ul>
+    <li>
+     <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
+      Intermezzo 1
+     </a>
+     derived that ${\partial \xi_i}/{\partial y_i}$ can be calculated as:
+    </li>
+   </ul>
+   $$\frac{\partial \xi_i}{\partial y_i} = \frac{y_i - t_i}{y_i (1 - y_i)}$$
+   <ul>
+    <li>
+     <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
+      Intermezzo 1
+     </a>
+     derived that ${\partial y_i}/{\partial z_i}$ can be calculated as:
+    </li>
+   </ul>
+   $$\frac{\partial y_i}{\partial z_i} = y_i (1 - y_i)$$
+   <ul>
+    <li>
+     ${\partial z_i}/{\partial \mathbf{w}}$ can be calculated as:
+    </li>
+   </ul>
+   $$\frac{\partial z}{\partial \mathbf{w}} = \frac{\partial (\mathbf{x} * \mathbf{w})}{\partial \mathbf{w}} = \mathbf{x} $$
+   <p>
+    Bringing this together we can write:
+   </p>
+   $$\frac{\partial \xi_i}{\partial \mathbf{w}} = \frac{\partial z_i}{\partial \mathbf{w}} \frac{\partial y_i}{\partial z_i} \frac{\partial \xi_i}{\partial y_i} = \mathbf{x} * y_i (1 - y_i) * \frac{y_i - t_i}{y_i (1-y_i)} = \mathbf{x} * (y_i-t_i) $$
+   <p>
+    Notice how this gradient is the same (negating the constant factor) as the gradient of the squared error regression.
+   </p>
+   <p>
+    So the full update function $\Delta w_j$ for each weight will become
+   </p>
+   $$\Delta w_j = \mu * \frac{\partial \xi_i}{\partial w_j} = \mu * x_j * (y_i-t_i)$$
+   <p>
+    In the batch processing, we just add up all the gradients for each sample:
+   </p>
+   $$\Delta w_j = \mu * \sum_{i=1}^{N} x_{ij} (y_i - t_i)$$
+   <p>
+    To start out the gradient descent algorithm, you typically start with picking the initial parameters at random and start updating these parameters according to the delta rule with $\Delta w$ until convergence.
+   </p>
+   <p>
+    The gradient ${\partial \xi}/{\partial \mathbf{w}}$ is implemented by the
+    <code>
+     gradient(w, x, t)
+    </code>
+    function. $\Delta \mathbf{w}$ is computed by the
+    <code>
+     delta_w(w_k, x, t, learning_rate)
+    </code>
+    .
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [6]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [6]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># define the gradient function.</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># define the gradient function.</span>
 <span class="k">def</span> <span class="nf">gradient</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span> 
     <span class="k">return</span> <span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="o">*</span> <span class="n">x</span>
 
@@ -894,40 +889,40 @@ gg==
 <span class="k">def</span> <span class="nf">delta_w</span><span class="p">(</span><span class="n">w_k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">gradient</span><span class="p">(</span><span class="n">w_k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Gradient-descent-updates">
-      Gradient descent updates
-      <a class="anchor-link" href="#Gradient-descent-updates">
-       ¶
-      </a>
-     </h3>
-     <p>
-      Gradient descent is run on the example inputs $X$ and targets $\mathbf{t}$ for 10 iterations.
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Gradient-descent-updates">
+    Gradient descent updates
+    <a class="anchor-link" href="#Gradient-descent-updates">
+     ¶
+    </a>
+   </h3>
+   <p>
+    Gradient descent is run on the example inputs $X$ and targets $\mathbf{t}$ for 10 iterations.
 The first 3 iterations are shown in the figure below. The blue dots represent the weight parameter values $\mathbf{w}(k)$ at iteration $k$.
-     </p>
-    </div>
-   </div>
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [7]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [7]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Set the initial weight parameter</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Set the initial weight parameter</span>
 <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asmatrix</span><span class="p">([</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">])</span>
 <span class="c"># Set the learning rate</span>
 <span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.05</span>
@@ -940,22 +935,22 @@ The first 3 iterations are shown in the figure below. The blue dots represent th
     <span class="n">w</span> <span class="o">=</span> <span class="n">w</span><span class="o">-</span><span class="n">dw</span>  <span class="c"># Update the weights</span>
     <span class="n">w_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">w</span><span class="p">)</span>  <span class="c"># Store the weights for plotting</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [8]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [8]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the first weight updates on the error surface</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the first weight updates on the error surface</span>
 <span class="c"># Plot the error surface</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span><span class="p">,</span> <span class="n">cost_ws</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">pink</span><span class="p">)</span>
 <span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
@@ -980,17 +975,17 @@ The first 3 iterations are shown in the figure below. The blue dots represent th
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAX8AAAEeCAYAAABi7BWYAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAX8AAAEeCAYAAABi7BWYAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzsnXeYHEeZ/z/v7swmSatk5WxZsqwsy5KD5IAxxhhjg49k
 A8bmDu6AH5jMGbg77AOTDvDBge+OAwN32CQbgxNgg+UgK1k5WjntKu5K2pU2zm79/uju2d7ZCdUz
 3TPdvf15nnl2eqa6u2pm9q23vvXWW6KUIiIiIiKif1FW6gpERERERBSfyPhHRERE9EMi4x8RERHR
@@ -1374,43 +1369,44 @@ eYYF+SRtwfJXS36rqi+AxxhWvAS4D/iyqv4cj99nWOOHJC8luXn+MaXFZ/mrGVV1LskNDFsbbpT/
 W4Bfx+PjwGfTRZPa0f1OXmrOp8DJJM8Bexn2ID6V5DaGzU9WJ00nNcLyV1Oq6i/g9L9Ot7wBvTQJ
 h3207DJ1AGkRWf5aOkn2JDkD3AqcSXL71JmkReM2jpLUIZ/8JalDlr8kdcjyl6QOWf6S1CHLX5I6
 ZPlLUocsf0nqkOUvSR2y/CWpQ38DZvIzv+NVeqMAAAAASUVORK5CYII=
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Visualization-of-the-trained-classifier">
-      Visualization of the trained classifier
-      <a class="anchor-link" href="#Visualization-of-the-trained-classifier">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The resulting decision boundary of running gradient descent on the example inputs $X$ and targets $\mathbf{t}$ is shown in the figure below. The background color refers to the classification decision of the trained classifier. Note that since this decision plane is linear that not all examples can be classified correctly. Two blue dots will be misclassified as red, and four red spots will be misclassified as blue.
-     </p>
-     <p>
-      Note that the decision boundary goes through the point $(0,0)$ since we don't have a bias parameter on the logistic output unit.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Visualization-of-the-trained-classifier">
+    Visualization of the trained classifier
+    <a class="anchor-link" href="#Visualization-of-the-trained-classifier">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The resulting decision boundary of running gradient descent on the example inputs $X$ and targets $\mathbf{t}$ is shown in the figure below. The background color refers to the classification decision of the trained classifier. Note that since this decision plane is linear that not all examples can be classified correctly. Two blue dots will be misclassified as red, and four red spots will be misclassified as blue.
+   </p>
+   <p>
+    Note that the decision boundary goes through the point $(0,0)$ since we don't have a bias parameter on the logistic output unit.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [9]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [9]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the resulting decision boundary</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the resulting decision boundary</span>
 <span class="c"># Generate a grid over the input space to plot the color of the</span>
 <span class="c">#  classification at that grid point</span>
 <span class="n">nb_of_xs</span> <span class="o">=</span> <span class="mi">200</span>
@@ -1438,17 +1434,17 @@ ZPlLUocsf0nqkOUvSR2y/CWpQ38DZvIzv+NVeqMAAAAASUVORK5CYII=
 <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'red vs. blue classification boundary'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYQAAAEeCAYAAACKQGL2AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYQAAAEeCAYAAACKQGL2AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzt3X18VOWd///Xh5sEilgRjSHeRdGIqKvUZlq1YLqWm5ZB
 629VVptarEuttor7qwsFTAMGqmS7LWJba9NuqUWRVduuDFtuNnUM1t2SamAjAREioiQRiqgBC+Hm
 +v5xzoRJMklmkpk555p8no8HD3LOzJx55yQ515zrVowxKKWUUv28DqCUUsoftEBQSikFaIGglFLK
@@ -1713,29 +1709,28 @@ pAWCUr0zDvhTZENEPmOMOWiMWULbVdSU8j0tEJRKkIjcIiKbRGQAMAXY7u7/MtDc5YuV8jFtVFYq
 ce8CtTiLCt0BTBORITjrfPtxTV2l4qIFglIJMsa8grPQTMRLXmVRKpm0ykip1PLbcp9KdUoLBKWS
 TEQGisi9wIXAvSJyideZlIqHjkNQSikF6B2CUkoplxYISimlAC0QlFJKubRAUEopBWiBoJRSyqUF
 glJKKUALBKWUUi4tEJRSSgFaICillHL9P3CFm/bo/T/LAAAAAElFTkSuQmCC
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <p>
-      This post at
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part02/">
-       peterroelants.github.io
-      </a>
-      is generated from an IPython notebook file.
-      <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/neural_net_implementation/neural_network_implementation_part02.ipynb">
-       Link to the full IPython notebook file
-      </a>
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post at
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part02/">
+     peterroelants.github.io
+    </a>
+    is generated from an IPython notebook file.
+    <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/neural_net_implementation/neural_network_implementation_part02.ipynb">
+     Link to the full IPython notebook file
+    </a>
+   </p>
   </div>
- </body>
-</html>
+ </div>
+</div>

@@ -1,69 +1,62 @@
---- 
-layout: notebook_simple_ann_post 
-title: How to implement a neural network Intermezzo 2 
----
-
-
-<html>
- <body>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Softmax-classification-function">
-      Softmax classification function
-      <a class="anchor-link" href="#Softmax-classification-function">
-       ¶
-      </a>
-     </h2>
-     <p>
-      This intermezzo will cover:
-     </p>
-     <ul>
-      <li>
-       The
-       <a href="http://peterroelants.github.io/posts/neural_network_implementation_intermezzo02/#Softmax-function">
-        softmax function
-       </a>
-      </li>
-      <li>
-       <a href="http://peterroelants.github.io/posts/neural_network_implementation_intermezzo02/#Cross-entropy-cost-function-for-the-softmax-function">
-        Cross-entropy
-       </a>
-       cost function
-      </li>
-     </ul>
-     <p>
-      The previous intermezzo described how to do a classification of 2 classes with the help of the
-      <a href="http://en.wikipedia.org/wiki/Logistic_function">
-       logistic function
-      </a>
-      .
+--- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Intermezzo 2 \n---\n\n
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Softmax-classification-function">
+    Softmax classification function
+    <a class="anchor-link" href="#Softmax-classification-function">
+     ¶
+    </a>
+   </h2>
+   <p>
+    This intermezzo will cover:
+   </p>
+   <ul>
+    <li>
+     The
+     <a href="http://peterroelants.github.io/posts/neural_network_implementation_intermezzo02/#Softmax-function">
+      softmax function
+     </a>
+    </li>
+    <li>
+     <a href="http://peterroelants.github.io/posts/neural_network_implementation_intermezzo02/#Cross-entropy-cost-function-for-the-softmax-function">
+      Cross-entropy
+     </a>
+     cost function
+    </li>
+   </ul>
+   <p>
+    The previous intermezzo described how to do a classification of 2 classes with the help of the
+    <a href="http://en.wikipedia.org/wiki/Logistic_function">
+     logistic function
+    </a>
+    .
 For multiclass classification there exists an extension of this logistic function called the
-      <a href="http://en.wikipedia.org/wiki/Softmax_function">
-       softmax function
-      </a>
-      which is used in
-      <a href="http://en.wikipedia.org/wiki/Multinomial_logistic_regression">
-       multinomial logistic regression
-      </a>
-      . The following section will explain the softmax function and how to derive it.
-     </p>
-    </div>
-   </div>
+    <a href="http://en.wikipedia.org/wiki/Softmax_function">
+     softmax function
+    </a>
+    which is used in
+    <a href="http://en.wikipedia.org/wiki/Multinomial_logistic_regression">
+     multinomial logistic regression
+    </a>
+    . The following section will explain the softmax function and how to derive it.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [1]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [1]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Python imports</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Python imports</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c"># Matrix and vector computation package</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
 <span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span> <span class="c"># some plotting functions</span>
@@ -72,42 +65,42 @@ For multiclass classification there exists an extension of this logistic functio
 <span class="c"># Allow matplotlib to plot inside this notebook</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Softmax-function">
-      Softmax function
-      <a class="anchor-link" href="#Softmax-function">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The
-      <a href="http://en.wikipedia.org/wiki/Logistic_function">
-       logistic output function
-      </a>
-      described in the previous intermezzo can only be used for the classification between two target classes $t=1$ and $t=0$. This logistic function can be generalized to output a multiclass categorical probability distribution by the
-      <a href="http://en.wikipedia.org/wiki/Softmax_function">
-       softmax function
-      </a>
-      . This softmax function $\varsigma$ takes as input a $C$-dimensional vector $\mathbf{z}$ and outputs a $C$-dimensional vector $\mathbf{y}$ of real values between $0$ and $1$. This function is a normalized exponential and is defined as:
-     </p>
-     $$ y_c = \varsigma(\mathbf{z})_c = \frac{e^{z_c}}{\sum_{d=1}^C e^{z_d}} \quad \text{for} \; c = 1 \cdots C$$
-     <p>
-      The denominator $\sum_{d=1}^C e^{z_d}$ acts as a regularizer to make sure that $\sum_{c=1}^C y_c = 1$. 
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Softmax-function">
+    Softmax function
+    <a class="anchor-link" href="#Softmax-function">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The
+    <a href="http://en.wikipedia.org/wiki/Logistic_function">
+     logistic output function
+    </a>
+    described in the previous intermezzo can only be used for the classification between two target classes $t=1$ and $t=0$. This logistic function can be generalized to output a multiclass categorical probability distribution by the
+    <a href="http://en.wikipedia.org/wiki/Softmax_function">
+     softmax function
+    </a>
+    . This softmax function $\varsigma$ takes as input a $C$-dimensional vector $\mathbf{z}$ and outputs a $C$-dimensional vector $\mathbf{y}$ of real values between $0$ and $1$. This function is a normalized exponential and is defined as:
+   </p>
+   $$ y_c = \varsigma(\mathbf{z})_c = \frac{e^{z_c}}{\sum_{d=1}^C e^{z_d}} \quad \text{for} \; c = 1 \cdots C$$
+   <p>
+    The denominator $\sum_{d=1}^C e^{z_d}$ acts as a regularizer to make sure that $\sum_{c=1}^C y_c = 1$. 
 As the output layer of a neural network, the softmax function can be represented graphically as a layer with $C$ neurons.
-     </p>
-     <p>
-      We can write the probabilities that the class is $t=c$ for $c = 1 \ldots C$ given input $\mathbf{z}$ as:
-     </p>
-     $$ 
+   </p>
+   <p>
+    We can write the probabilities that the class is $t=c$ for $c = 1 \ldots C$ given input $\mathbf{z}$ as:
+   </p>
+   $$ 
 \begin{bmatrix} 
 P(t=1 | \mathbf{z}) \\
 \vdots \\
@@ -126,45 +119,45 @@ e^{z_1} \\
 e^{z_C} \\
 \end{bmatrix}
 $$
-     <p>
-      Where $P(t=c | \mathbf{z})$ is thus the probability that that the class is $c$ given the input $\mathbf{z}$.
-     </p>
-     <p>
-      These probabilities of the output $P(t=1|\mathbf{z})$ for an example system with 2 classes ($t=1$, $t=2$) and input $\mathbf{z} = [z_1, z_2]$ is shown in the figure below. The other probability $P(t=2|\mathbf{z})$ will be complementary.
-     </p>
-    </div>
-   </div>
+   <p>
+    Where $P(t=c | \mathbf{z})$ is thus the probability that that the class is $c$ given the input $\mathbf{z}$.
+   </p>
+   <p>
+    These probabilities of the output $P(t=1|\mathbf{z})$ for an example system with 2 classes ($t=1$, $t=2$) and input $\mathbf{z} = [z_1, z_2]$ is shown in the figure below. The other probability $P(t=2|\mathbf{z})$ will be complementary.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [2]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [2]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the softmax function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the softmax function</span>
 <span class="k">def</span> <span class="nf">softmax</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">z</span><span class="p">))</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [3]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [3]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the softmax output for 2 dimensions for both classes</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the softmax output for 2 dimensions for both classes</span>
 <span class="c"># Plot the output in function of the weights</span>
 <span class="c"># Define a vector of weights for which we want to plot the ooutput</span>
 <span class="n">nb_of_zs</span> <span class="o">=</span> <span class="mi">200</span>
@@ -190,17 +183,17 @@ $$
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWEAAAD3CAYAAADMt+U9AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWEAAAD3CAYAAADMt+U9AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzsvXmUXOd53vn77lL70tUL0I19b2zEDhIEQFEyRVOUYimJ
 jiMpiiVLskI7I9saWYljTRSLE9labCqLOYl5NJFoyzOyfGbiyD6WpbEckaG4ACKIhdiXXtD73rXf
 uts3f9xauwpAowECRKOec+oAfZfv3qq69dz3Pt/7Pq+QUtJEE0000cTdgXK3T6CJJppo4n5Gk4Sb
@@ -1097,102 +1090,103 @@ IQjCU8AmIB/jzPwN4DngV0AF0AXcqOv6+2/kLoMM5gFBEI6LkGYFfZ4PbNd1fcv0z/cCWuLmnCAI
 uq4rgiDcAfx/zKQttyamLeu6/oIgCFsFQTgMBIDPLuGSgUwlnEEGGWSwpMhszGWQQQYZLCEyJJxB
 BhlksITIkHAGGWSQwRIiQ8IZZJBBBkuIDAlnkEEGGSwhMiScQQYZZLCEyJBwBhlkkMESIkPCGWSQ
 QQZLiP8fQe571187//cAAAAASUVORK5CYII=
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Derivative-of-the-softmax-function">
-      Derivative of the softmax function
-      <a class="anchor-link" href="#Derivative-of-the-softmax-function">
-       ¶
-      </a>
-     </h3>
-     <p>
-      To use the softmax function in neural networks, we need to compute its derivative. This derivative ${\partial y_i}/{\partial z_j}$ of the output $\mathbf{y}$ of the softmax function with respect to its input $\mathbf{z}$ can be calculated as:
-     </p>
-     $$
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Derivative-of-the-softmax-function">
+    Derivative of the softmax function
+    <a class="anchor-link" href="#Derivative-of-the-softmax-function">
+     ¶
+    </a>
+   </h3>
+   <p>
+    To use the softmax function in neural networks, we need to compute its derivative. If we define $\Sigma_C = \sum_{d=1}^C e^{z_d} \, \text{for} \; c = 1 \cdots C$ so that $y_c = e^{z_c} / \Sigma_C$, then this derivative ${\partial y_i}/{\partial z_j}$ of the output $\mathbf{y}$ of the softmax function with respect to its input $\mathbf{z}$ can be calculated as:
+   </p>
+   $$
 \begin{split}
-\text{if} \; i = j :&amp; \frac{\partial y_i}{\partial z_i} = \frac{\partial \frac{e^{z_i}}{e^{z_i}}}{\partial z_i} = \frac{e^{2z_i}-e^{2z_i}}{e^{2z_i}} = \frac{e^{z_i}}{e^{z_i}} \frac{e^{z_i}-e^{z_i}}{e^{z_i}} = \frac{e^{z_i}}{e^{z_i}} (1 - \frac{e^{z_i}}{e^{z_i}}) = y_i (1 - y_i) \\
-\text{if} \; i \neq j :&amp; \frac{\partial y_i}{\partial z_j} = \frac{\partial \frac{e^{z_i}}{e^{z_j}}}{\partial z_j} = \frac{0 - e^{z_i}e^{z_j}}{e^{2z_j}} = -\frac{e^{z_i}}{e^{z_j}} \frac{e^{z_j}}{e^{z_j}} = -y_i y_j
+\text{if} \; i = j :&amp; \frac{\partial y_i}{\partial z_i} = \frac{\partial \frac{e^{z_i}}{\Sigma_C}}{\partial z_i} = \frac{e^{z_i}\Sigma_C - 2e^{z_i}}{2\Sigma_C} = \frac{e^{z_i}}{\Sigma_C}\frac{\Sigma_C - e^{z_i}}{\Sigma_C} = \frac{e^{z_i}}{\Sigma_C}(1-\frac{e^{z_i}}{\Sigma_C}) =  y_i (1 - y_i)\\
+\text{if} \; i \neq j :&amp; \frac{\partial y_i}{\partial z_j} = \frac{\partial \frac{e^{z_i}}{\Sigma_C}}{\partial z_j} = \frac{0 - e^{z_i}e^{z_j}}{2\Sigma_C} = -\frac{e^{z_i}}{\Sigma_C} \frac{e^{z_j}}{\Sigma_C} = -y_i y_j
 \end{split}$$
-     <p>
-      Note that if $i = j$ this derivative is similar to the derivative of the logistic function.
-     </p>
-    </div>
-   </div>
+   <p>
+    Note that if $i = j$ this derivative is similar to the derivative of the logistic function.
+   </p>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Cross-entropy-cost-function-for-the-softmax-function">
-      Cross-entropy cost function for the softmax function
-      <a class="anchor-link" href="#Cross-entropy-cost-function-for-the-softmax-function">
-       ¶
-      </a>
-     </h3>
-     <p>
-      To derive the cost function for the softmax function we start out from the
-      <a href="http://en.wikipedia.org/wiki/Likelihood_function">
-       likelihood function
-      </a>
-      that a given set of parameters $\theta$ of the model can result in prediction of the correct class of each input sample, as in the derivation for the logistic cost function. The maximization of this likelihood can be written as:
-     </p>
-     $$\underset{\theta}{\text{argmax}}\; \mathcal{L}(\theta|\mathbf{t},\mathbf{z})$$
-     <p>
-      The likelihood $\mathcal{L}(\theta|\mathbf{t},\mathbf{z})$ can be rewritten as the
-      <a href="http://en.wikipedia.org/wiki/Joint_probability_distribution">
-       joint probability
-      </a>
-      of generating $\mathbf{t}$ and $\mathbf{z}$ given the parameters $\theta$: $P(\mathbf{t},\mathbf{z}|\theta)$. Which can be written as a conditional distribution:
-     </p>
-     $$P(\mathbf{t},\mathbf{z}|\theta) = P(\mathbf{t}|\mathbf{z},\theta)P(\mathbf{z}|\theta)$$
-     <p>
-      Since we are not interested in the probability of $\mathbf{z}$ we can reduce this to: $\mathcal{L}(\theta|\mathbf{t},\mathbf{z}) = P(\mathbf{t}|\mathbf{z},\theta)$. Which can be written as $P(\mathbf{t}|\mathbf{z})$ for fixed $\theta$.
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Cross-entropy-cost-function-for-the-softmax-function">
+    Cross-entropy cost function for the softmax function
+    <a class="anchor-link" href="#Cross-entropy-cost-function-for-the-softmax-function">
+     ¶
+    </a>
+   </h3>
+   <p>
+    To derive the cost function for the softmax function we start out from the
+    <a href="http://en.wikipedia.org/wiki/Likelihood_function">
+     likelihood function
+    </a>
+    that a given set of parameters $\theta$ of the model can result in prediction of the correct class of each input sample, as in the derivation for the logistic cost function. The maximization of this likelihood can be written as:
+   </p>
+   $$\underset{\theta}{\text{argmax}}\; \mathcal{L}(\theta|\mathbf{t},\mathbf{z})$$
+   <p>
+    The likelihood $\mathcal{L}(\theta|\mathbf{t},\mathbf{z})$ can be rewritten as the
+    <a href="http://en.wikipedia.org/wiki/Joint_probability_distribution">
+     joint probability
+    </a>
+    of generating $\mathbf{t}$ and $\mathbf{z}$ given the parameters $\theta$: $P(\mathbf{t},\mathbf{z}|\theta)$. Which can be written as a conditional distribution:
+   </p>
+   $$P(\mathbf{t},\mathbf{z}|\theta) = P(\mathbf{t}|\mathbf{z},\theta)P(\mathbf{z}|\theta)$$
+   <p>
+    Since we are not interested in the probability of $\mathbf{z}$ we can reduce this to: $\mathcal{L}(\theta|\mathbf{t},\mathbf{z}) = P(\mathbf{t}|\mathbf{z},\theta)$. Which can be written as $P(\mathbf{t}|\mathbf{z})$ for fixed $\theta$.
 Since each $t_i$ is dependent on the full $\mathbf{z}$, and only 1 class can be activated in the $\mathbf{t}$ we can write
-     </p>
-     $$P(\mathbf{t}|\mathbf{z}) = \prod_{i=c}^{C} P(t_c|\mathbf{z})^{t_c} = \prod_{i=c}^{C} \varsigma(\mathbf{z})_c^{t_c} = \prod_{i=c}^{C} y_c^{t_c}$$
-     <p>
-      As was noted during the derivation of the cost function of the logistic function, maximizing this likelihood can also be done by minimizing the negative log-likelihood:
-     </p>
-     $$- log \mathcal{L}(\theta|\mathbf{t},\mathbf{z}) = \xi(\mathbf{t},\mathbf{z}) = - log \prod_{i=c}^{C} y_c^{t_c} = - \sum_{i=c}^{C} t_c \cdot log(y_c)$$
-     <p>
-      Which is the cross-entropy error function $\xi$.
+   </p>
+   $$P(\mathbf{t}|\mathbf{z}) = \prod_{i=c}^{C} P(t_c|\mathbf{z})^{t_c} = \prod_{i=c}^{C} \varsigma(\mathbf{z})_c^{t_c} = \prod_{i=c}^{C} y_c^{t_c}$$
+   <p>
+    As was noted during the derivation of the cost function of the logistic function, maximizing this likelihood can also be done by minimizing the negative log-likelihood:
+   </p>
+   $$- log \mathcal{L}(\theta|\mathbf{t},\mathbf{z}) = \xi(\mathbf{t},\mathbf{z}) = - log \prod_{i=c}^{C} y_c^{t_c} = - \sum_{i=c}^{C} t_c \cdot log(y_c)$$
+   <p>
+    Which is the cross-entropy error function $\xi$.
 Note that for a 2 class system output $t_2 = 1 - t_1$ and this results in the same error function as for logistic regression: $\xi(\mathbf{t},\mathbf{y}) =- t_c log(y_c) - (1-t_c) log(1-y_c) $.
-     </p>
-     <p>
-      The cross-entropy error function over a batch of multiple samples of size $n$ can be calculated as:
-     </p>
-     $$\xi(T,Y) = \sum_{i=1}^n \xi(\mathbf{t}_i,\mathbf{y}_i) = - \sum_{i=1}^n \sum_{i=c}^{C} t_{ic} \cdot log( y_{ic}) $$
-     <p>
-      Where $t_{ic}$ is 1 if and only if sample $i$ belongs to class $c$, and $y_{ic}$ is the output probability that sample $i$ belongs to class $c$.
-     </p>
-    </div>
-   </div>
+   </p>
+   <p>
+    The cross-entropy error function over a batch of multiple samples of size $n$ can be calculated as:
+   </p>
+   $$\xi(T,Y) = \sum_{i=1}^n \xi(\mathbf{t}_i,\mathbf{y}_i) = - \sum_{i=1}^n \sum_{i=c}^{C} t_{ic} \cdot log( y_{ic}) $$
+   <p>
+    Where $t_{ic}$ is 1 if and only if sample $i$ belongs to class $c$, and $y_{ic}$ is the output probability that sample $i$ belongs to class $c$.
+   </p>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h4 id="Derivative-of-the-cross-entropy-cost-function-for-the-softmax-function">
-      Derivative of the cross-entropy cost function for the softmax function
-      <a class="anchor-link" href="#Derivative-of-the-cross-entropy-cost-function-for-the-softmax-function">
-       ¶
-      </a>
-     </h4>
-     <p>
-      The derivative ${\partial \xi}/{\partial z_i}$ of the cost function with respect to the softmax input $z_i$ can be calculated as:
-     </p>
-     $$\begin{split}
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h4 id="Derivative-of-the-cross-entropy-cost-function-for-the-softmax-function">
+    Derivative of the cross-entropy cost function for the softmax function
+    <a class="anchor-link" href="#Derivative-of-the-cross-entropy-cost-function-for-the-softmax-function">
+     ¶
+    </a>
+   </h4>
+   <p>
+    The derivative ${\partial \xi}/{\partial z_i}$ of the cost function with respect to the softmax input $z_i$ can be calculated as:
+   </p>
+   $$\begin{split}
 \frac{\partial \xi}{\partial z_i} &amp; = - \sum_{j=1}^C \frac{\partial t_j log(y_j)}{\partial z_i}{} =
 - \sum_{j=1}^C t_j \frac{\partial log(y_j)}{\partial z_i} = - \sum_{j=1}^C t_j \frac{1}{y_j} \frac{\partial y_j}{\partial z_i} \\
 &amp; = - \frac{t_i}{y_i} \frac{\partial y_i}{\partial z_i} - \sum_{j \neq i}^C \frac{t_j}{y_j} \frac{\partial y_j}{\partial z_i}
@@ -1201,32 +1195,30 @@ Note that for a 2 class system output $t_2 = 1 - t_1$ and this results in the sa
 = -t_i + y_i \sum_{j = 1}^C t_j \\
 &amp; = y_i - t_i
 \end{split}$$
-     <p>
-      Note that we already derived ${\partial y_j}/{\partial z_i}$ for $i=j$ and $i \neq j$ above.
-     </p>
-     <p>
-      The result that ${\partial \xi}/{\partial z_i} = y_i - t_i$ for all $i \in C$ is the same as the derivative of the cross-entropy for the logistic function which had only one output node.
-     </p>
-    </div>
-   </div>
+   <p>
+    Note that we already derived ${\partial y_j}/{\partial z_i}$ for $i=j$ and $i \neq j$ above.
+   </p>
+   <p>
+    The result that ${\partial \xi}/{\partial z_i} = y_i - t_i$ for all $i \in C$ is the same as the derivative of the cross-entropy for the logistic function which had only one output node.
+   </p>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <p>
-      This post at
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_intermezzo02/">
-       peterroelants.github.io
-      </a>
-      is generated from an IPython notebook file.
-      <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/neural_net_implementation/neural_network_implementation_intermezzo02.ipynb">
-       Link to the full IPython notebook file
-      </a>
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post at
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_intermezzo02/">
+     peterroelants.github.io
+    </a>
+    is generated from an IPython notebook file.
+    <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/neural_net_implementation/neural_network_implementation_intermezzo02.ipynb">
+     Link to the full IPython notebook file
+    </a>
+   </p>
   </div>
- </body>
-</html>
+ </div>
+</div>

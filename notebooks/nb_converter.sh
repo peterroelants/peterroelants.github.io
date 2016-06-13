@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Convert ipython notebooks into stripped down html with the
 #  Jekyll front matter.
@@ -52,7 +52,7 @@ filename="${nb_file/.ipynb/.html}"
 
 # Add the collapse/expand tags
 python $script_dir/insertCollapseTags.py $filename $indices_to_collapse > tmp.html
-mv tmp.html $filename 
+mv tmp.html $filename
 
 # Add the front matter before the html
 echo "--- \n\

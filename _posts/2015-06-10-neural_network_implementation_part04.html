@@ -1,73 +1,66 @@
---- 
-layout: notebook_simple_ann_post 
-title: How to implement a neural network Part 4 
----
-
-
-<html>
- <body>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Vectorization">
-      Vectorization
-      <a class="anchor-link" href="#Vectorization">
-       ¶
-      </a>
-     </h2>
-     <p>
-      This part will cover:
-     </p>
-     <ul>
-      <li>
-       <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Vectorization-of-backpropagation">
-        Vectorization of backpropagation
-       </a>
-      </li>
-      <li>
-       <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Gradient-checking">
-        Gradient checking
-       </a>
-      </li>
-      <li>
-       <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Backpropagation-updates-with-momentum">
-        Momentum
-       </a>
-      </li>
-     </ul>
-     <p>
-      The previous tutorial described a very simple neural network with only one input, one hidden neuron and one output. This tutorial will describe a neural network that takes 2-dimensional input samples, projects them onto a 3-dimensional hidden layer, and classifies them with a 2-dimensional
-      <a href="http://en.wikipedia.org/wiki/Softmax_function">
-       softmax
-      </a>
-      output classfier, this softmax function is explained in
-      <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo02 %}">
-       intermezzo 2
-      </a>
-      . While we didn't add the bias parameters to the previous 2 models, we will add them to this model. We will work out the vector computations needed to optimize and run this neural network in this tutorial. The network of this model is shown in the following figure:
-     </p>
-     <p>
-      <img alt="Image of the neural network" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/SimpleANN04.png"/>
-     </p>
-     <p>
-      The notebook starts out with importing the libraries we need:
-     </p>
-    </div>
-   </div>
+--- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Part 4 \n---\n\n
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Vectorization">
+    Vectorization
+    <a class="anchor-link" href="#Vectorization">
+     ¶
+    </a>
+   </h2>
+   <p>
+    This part will cover:
+   </p>
+   <ul>
+    <li>
+     <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Vectorization-of-backpropagation">
+      Vectorization of backpropagation
+     </a>
+    </li>
+    <li>
+     <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Gradient-checking">
+      Gradient checking
+     </a>
+    </li>
+    <li>
+     <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Backpropagation-updates-with-momentum">
+      Momentum
+     </a>
+    </li>
+   </ul>
+   <p>
+    The previous tutorial described a very simple neural network with only one input, one hidden neuron and one output. This tutorial will describe a neural network that takes 2-dimensional input samples, projects them onto a 3-dimensional hidden layer, and classifies them with a 2-dimensional
+    <a href="http://en.wikipedia.org/wiki/Softmax_function">
+     softmax
+    </a>
+    output classfier, this softmax function is explained in
+    <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo02 %}">
+     intermezzo 2
+    </a>
+    . While we didn't add the bias parameters to the previous 2 models, we will add them to this model. We will work out the vector computations needed to optimize and run this neural network in this tutorial. The network of this model is shown in the following figure:
+   </p>
+   <p>
+    <img alt="Image of the neural network" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/SimpleANN04.png"/>
+   </p>
+   <p>
+    The notebook starts out with importing the libraries we need:
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [1]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [1]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Python imports</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Python imports</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>  <span class="c"># Matrix and vector computation package</span>
 <span class="kn">import</span> <span class="nn">sklearn.datasets</span> <span class="c"># To generate the dataset</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
@@ -79,75 +72,75 @@ title: How to implement a neural network Part 4
 <span class="c"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
 <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Define-the-dataset">
-      Define the dataset
-      <a class="anchor-link" href="#Define-the-dataset">
-       ¶
-      </a>
-     </h2>
-     <p>
-      In this example the target classes $t$ corresponding to the inputs $x$ will be generated from 2 class distributions: red ($t=0$) and blue ($t=1$). Where the red class is a circular distribution that surrounds the distribution of the blue class. The dataset is generated by the scikit-learn
-      <a href="http://scikit-learn.org/stable/modules/generated/sklearn.datasets.make_circles.html#sklearn-datasets-make-circles">
-       <code>
-        make_circles
-       </code>
-      </a>
-      method.
-     </p>
-     <p>
-      This results in a 2D dataset that is not linearly separable. The model from
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part02/">
-       part 2
-      </a>
-      won't be able to classify both classes correctly since it can learn only linear separators. By adding a hidden layer, the model will be able to train a non-linear separator.
-     </p>
-     <p>
-      The $N$ input samples with $2$ variables each are given as a $N \times 2$ matrix $X$:
-     </p>
-     $$X =
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Define-the-dataset">
+    Define the dataset
+    <a class="anchor-link" href="#Define-the-dataset">
+     ¶
+    </a>
+   </h2>
+   <p>
+    In this example the target classes $t$ corresponding to the inputs $x$ will be generated from 2 class distributions: red ($t=0$) and blue ($t=1$). Where the red class is a circular distribution that surrounds the distribution of the blue class. The dataset is generated by the scikit-learn
+    <a href="http://scikit-learn.org/stable/modules/generated/sklearn.datasets.make_circles.html#sklearn-datasets-make-circles">
+     <code>
+      make_circles
+     </code>
+    </a>
+    method.
+   </p>
+   <p>
+    This results in a 2D dataset that is not linearly separable. The model from
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part02/">
+     part 2
+    </a>
+    won't be able to classify both classes correctly since it can learn only linear separators. By adding a hidden layer, the model will be able to train a non-linear separator.
+   </p>
+   <p>
+    The $N$ input samples with $2$ variables each are given as a $N \times 2$ matrix $X$:
+   </p>
+   $$X =
 \begin{bmatrix} 
 x_{11} &amp; x_{12} \\
 \vdots &amp; \vdots \\
 x_{N1} &amp; x_{N2}
 \end{bmatrix}$$
-     <p>
-      Where $x_{ij}$ is the value of the $j$-th variable of the $i$-th input sample.
-     </p>
-     <p>
-      Since the softmax output function is used the targets for each input sample are given as a $N \times 2$ matrix $T$:
-     </p>
-     $$T = \begin{bmatrix} 
+   <p>
+    Where $x_{ij}$ is the value of the $j$-th variable of the $i$-th input sample.
+   </p>
+   <p>
+    Since the softmax output function is used the targets for each input sample are given as a $N \times 2$ matrix $T$:
+   </p>
+   $$T = \begin{bmatrix} 
 t_{11} &amp; t_{12}\\
 \vdots &amp; \vdots \\
 t_{N1} &amp; t_{N2} 
 \end{bmatrix}$$
-     <p>
-      Where $t_{ij} = 1$ if and only if the $i$-th input sample belongs to class $j$. So blue points are labelled T = [0 1] and red points are labelled T = [1 0].
-     </p>
-    </div>
-   </div>
+   <p>
+    Where $t_{ij} = 1$ if and only if the $i$-th input sample belongs to class $j$. So blue points are labelled T = [0 1] and red points are labelled T = [1 0].
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [2]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [2]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Generate the dataset</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Generate the dataset</span>
 <span class="n">X</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">sklearn</span><span class="o">.</span><span class="n">datasets</span><span class="o">.</span><span class="n">make_circles</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">factor</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
 <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">100</span><span class="p">,</span><span class="mi">2</span><span class="p">))</span> <span class="c"># Define target matrix</span>
 <span class="n">T</span><span class="p">[</span><span class="n">t</span><span class="o">==</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
@@ -159,35 +152,35 @@ t_{N1} &amp; t_{N2}
 <span class="k">print</span><span class="p">(</span><span class="s">'shape of X: {}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
 <span class="k">print</span><span class="p">(</span><span class="s">'shape of T: {}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
 </pre>
-      </div>
-     </div>
-    </div>
-   </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>shape of X: (100, 2)
-shape of T: (100, 2)
-</pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [3]:
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot both classes on the x1, x2 plane</span>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>shape of X: (100, 2)
+shape of T: (100, 2)
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [3]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot both classes on the x1, x2 plane</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_red</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_red</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'ro'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'class red'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_blue</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_blue</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'bo'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'class blue'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
@@ -198,17 +191,17 @@ shape of T: (100, 2)
 <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'red vs blue classes in the input space'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZIAAAEeCAYAAACg8JNZAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZIAAAEeCAYAAACg8JNZAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJztnXt4HWW18H+rF9JS2iZtoS2lbTxRkYtSpC23Q5PPI9mV
 IAdQLgKVAkfrUZocRYE2LQnQfijoObYFP0HRIhzBg5ejJFJSpUmQe5W7IBDo/UIpoZTeIOn6/pjZ
 6U4ye2ff98xk/Z5nP9kz8+6Zd+13Z9a86/aKqmIYhmEY6TKg0B0wDMMwgo0pEsMwDCMjTJEYhmEY
@@ -471,39 +464,40 @@ gM/jlBxHRM4Gdib8sGEECHO2G0bu2ICz+NZ3gMuA2e6iXBtU9e8F7ZlhZBFTJIaRI1T1MZxFgaK0
 FKovhpFLzLRlGP4g3hLKhuF7TJEYRoEQkcEiMhf4GDBXRI4pdJ8MIx0sj8QwDMPICJuRGIZhGBlh
 isQwDMPICFMkhmEYRkaYIjEMwzAywhSJYRiGkRGmSAzDMIyMMEViGIZhZIQpEsMwDCMjTJEYhmEY
 GfH/AWnSyHjf9fyiAAAAAElFTkSuQmCC
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Vectorization-of-backpropagation">
-      Vectorization of backpropagation
-      <a class="anchor-link" href="#Vectorization-of-backpropagation">
-       ¶
-      </a>
-     </h2>
-     <h3 id="1.-Vectorization-of-the-forward-step">
-      1. Vectorization of the forward step
-      <a class="anchor-link" href="#1.-Vectorization-of-the-forward-step">
-       ¶
-      </a>
-     </h3>
-     <h4 id="Compute-activations-of-hidden-layer">
-      Compute activations of hidden layer
-      <a class="anchor-link" href="#Compute-activations-of-hidden-layer">
-       ¶
-      </a>
-     </h4>
-     <p>
-      The 2-dimensional inputs $X$ are projected onto the 3 dimensions of the hidden layer $H$ by the weight matrix $W_h$ ($w_{hij}$ is the weight of the connection between input variable $i$ and hidden neuron activation $j$) and bias vector $\mathbf{b}_h$ :
-     </p>
-     $$\begin{align}
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Vectorization-of-backpropagation">
+    Vectorization of backpropagation
+    <a class="anchor-link" href="#Vectorization-of-backpropagation">
+     ¶
+    </a>
+   </h2>
+   <h3 id="1.-Vectorization-of-the-forward-step">
+    1. Vectorization of the forward step
+    <a class="anchor-link" href="#1.-Vectorization-of-the-forward-step">
+     ¶
+    </a>
+   </h3>
+   <h4 id="Compute-activations-of-hidden-layer">
+    Compute activations of hidden layer
+    <a class="anchor-link" href="#Compute-activations-of-hidden-layer">
+     ¶
+    </a>
+   </h4>
+   <p>
+    The 2-dimensional inputs $X$ are projected onto the 3 dimensions of the hidden layer $H$ by the weight matrix $W_h$ ($w_{hij}$ is the weight of the connection between input variable $i$ and hidden neuron activation $j$) and bias vector $\mathbf{b}_h$ :
+   </p>
+   $$\begin{align}
 W_h =
 \begin{bmatrix} 
 w_{h11} &amp; w_{h12} &amp; w_{h13} \\
@@ -514,56 +508,56 @@ w_{h21} &amp; w_{h22} &amp; w_{h23}
 b_{h1} &amp; b_{h2} &amp; b_{h3}
 \end{bmatrix}
 \end{align}$$
-     <p>
-      following computation:
-     </p>
-     $$H = \sigma(X \cdot W_h + \mathbf{b}_h) = \frac{1}{1+e^{-(X \cdot W_h + \mathbf{b}_h)}} = \begin{bmatrix} 
+   <p>
+    following computation:
+   </p>
+   $$H = \sigma(X \cdot W_h + \mathbf{b}_h) = \frac{1}{1+e^{-(X \cdot W_h + \mathbf{b}_h)}} = \begin{bmatrix} 
 h_{11} &amp; h_{12} &amp; h_{13} \\
 \vdots &amp; \vdots &amp; \vdots \\
 h_{N1} &amp; h_{N2} &amp; h_{N3}
 \end{bmatrix}$$
-     <p>
-      With $\sigma$ the logistic function, and with $H$ resulting in a $N \times 3$ matrix.
-     </p>
-     <p>
-      This computation flow is illustrated by the figure below. Each input $x_{ij}$ is multiplied with the weight parameters from the corresponding column $w_{hj1}, w_{hj2}, w_{hj3}$. The multiplication results for each row $k$ ($x_{ij} * w_{hjk}$) are summed to form the $z_{ik}$, after which these are transformed by the logistic function $\sigma$ to the $h_{ik}$. Note that the bias $B_h$ can be incorporated in $W_h$ by adding a new variable to each input $\mathbf{x}_i$ that is always $+1$.
-     </p>
-     <p>
-      <img alt="Image of the hidden layer computation" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/ANN_layer_projection.png"/>
-     </p>
-     <p>
-      $\mathbf{b}_h$ and $W_h$ are represented in the code below by
-      <code>
-       bh
-      </code>
-      and
-      <code>
-       Wh
-      </code>
-      respectively. The hidden layer activations are computed by the
-      <code>
-       hidden_activations(X, Wh, bh)
-      </code>
-      method.
-     </p>
-    </div>
-   </div>
+   <p>
+    With $\sigma$ the logistic function, and with $H$ resulting in a $N \times 3$ matrix.
+   </p>
+   <p>
+    This computation flow is illustrated by the figure below. Each input $x_{ij}$ is multiplied with the weight parameters from the corresponding column $w_{hj1}, w_{hj2}, w_{hj3}$. The multiplication results for each row $k$ ($x_{ij} * w_{hjk}$) are summed to form the $z_{ik}$, after which these are transformed by the logistic function $\sigma$ to the $h_{ik}$. Note that the bias $B_h$ can be incorporated in $W_h$ by adding a new variable to each input $\mathbf{x}_i$ that is always $+1$.
+   </p>
+   <p>
+    <img alt="Image of the hidden layer computation" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/ANN_layer_projection.png"/>
+   </p>
+   <p>
+    $\mathbf{b}_h$ and $W_h$ are represented in the code below by
+    <code>
+     bh
+    </code>
+    and
+    <code>
+     Wh
+    </code>
+    respectively. The hidden layer activations are computed by the
+    <code>
+     hidden_activations(X, Wh, bh)
+    </code>
+    method.
+   </p>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h4 id="Compute-activations-of-output">
-      Compute activations of output
-      <a class="anchor-link" href="#Compute-activations-of-output">
-       ¶
-      </a>
-     </h4>
-     <p>
-      To compute the output activations the hidden layer activations can be projected onto the 2-dimensional output layer. This is done by the $3 \times 2$ weight matrix $W_o$ ($w_{oij}$ is the weight of the connection between hidden layer neuron $i$ and output activation $j$) and $2 \times 1$ bias vector $\mathbf{b}_o$ :
-     </p>
-     $$\begin{align}
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h4 id="Compute-activations-of-output">
+    Compute activations of output
+    <a class="anchor-link" href="#Compute-activations-of-output">
+     ¶
+    </a>
+   </h4>
+   <p>
+    To compute the output activations the hidden layer activations can be projected onto the 2-dimensional output layer. This is done by the $3 \times 2$ weight matrix $W_o$ ($w_{oij}$ is the weight of the connection between hidden layer neuron $i$ and output activation $j$) and $2 \times 1$ bias vector $\mathbf{b}_o$ :
+   </p>
+   $$\begin{align}
 W_o =
 \begin{bmatrix} 
 w_{o11} &amp; w_{o12} \\
@@ -575,10 +569,10 @@ w_{o31} &amp; w_{o32}
 b_{o1} &amp; b_{o2}
 \end{bmatrix}
 \end{align}$$
-     <p>
-      following computation:
-     </p>
-     $$Y = \varsigma(H \cdot W_o + \mathbf{b}_o)
+   <p>
+    following computation:
+   </p>
+   $$Y = \varsigma(H \cdot W_o + \mathbf{b}_o)
 = \frac{e^{Z_o}}{\sum_{d=1}^C e^{\mathbf{z}_{od}}}
 = \frac{e^{H \cdot W_o + \mathbf{b}_o}}{\sum_{d=1}^C e^{H \cdot \mathbf{w}_{od} + b_{od}}}
 = \begin{bmatrix} 
@@ -586,38 +580,38 @@ y_{11} &amp; y_{12}\\
 \vdots &amp; \vdots \\
 y_{n1} &amp; y_{n2} 
 \end{bmatrix}$$
-     <p>
-      With $\varsigma$ the softmax function, $Y$ resulting in a $n \times 2$ matrix, $\mathbf{z}_{od}$ the $d$-th column of the $Z_o$ matrix, $\mathbf{w}_{od}$ the $d$-th column of the $W_o$ matrix, and $b_{od}$ the $d$-th element of the $b_o$ vector.
-     </p>
-     <p>
-      $\mathbf{b}_o$ and $W_o$ are represented in the code below by
-      <code>
-       bo
-      </code>
-      and
-      <code>
-       Wo
-      </code>
-      respectively. The hidden layer activations are computed by the
-      <code>
-       output_activations(H, Wo, bo)
-      </code>
-      method.
-     </p>
-    </div>
-   </div>
+   <p>
+    With $\varsigma$ the softmax function, $Y$ resulting in a $n \times 2$ matrix, $\mathbf{z}_{od}$ the $d$-th column of the $Z_o$ matrix, $\mathbf{w}_{od}$ the $d$-th column of the $W_o$ matrix, and $b_{od}$ the $d$-th element of the $b_o$ vector.
+   </p>
+   <p>
+    $\mathbf{b}_o$ and $W_o$ are represented in the code below by
+    <code>
+     bo
+    </code>
+    and
+    <code>
+     Wo
+    </code>
+    respectively. The hidden layer activations are computed by the
+    <code>
+     output_activations(H, Wo, bo)
+    </code>
+    method.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [4]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [4]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the logistic function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the logistic function</span>
 <span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> 
     <span class="k">return</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
 
@@ -642,152 +636,152 @@ y_{n1} &amp; y_{n2}
 <span class="k">def</span> <span class="nf">nn_predict</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">):</span> 
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">around</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">))</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="2.-Vectorization-of-the-backward-step">
-      2. Vectorization of the backward step
-      <a class="anchor-link" href="#2.-Vectorization-of-the-backward-step">
-       ¶
-      </a>
-     </h3>
-     <h4 id="Vectorization-of-the-output-layer-backward-step">
-      Vectorization of the output layer backward step
-      <a class="anchor-link" href="#Vectorization-of-the-output-layer-backward-step">
-       ¶
-      </a>
-     </h4>
-     <h5 id="Compute-the-error-at-the-output">
-      Compute the error at the output
-      <a class="anchor-link" href="#Compute-the-error-at-the-output">
-       ¶
-      </a>
-     </h5>
-     <p>
-      The output layer is a
-      <a href="http://en.wikipedia.org/wiki/Softmax_function">
-       softmax
-      </a>
-      layer with corresponding
-      <a href="http://en.wikipedia.org/wiki/Cross_entropy">
-       cross-entropy
-      </a>
-      cost function, which are described in detail in
-      <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo02 %}">
-       intermezzo 2
-      </a>
-      . The cost function $\xi$ for $N$ samples and $C$ classes used in this model is defined as:
-     </p>
-     $$\xi(T,Y) = \sum_{i=1}^n \xi(\mathbf{t}_i,\mathbf{y}_i) = - \sum_{i=1}^n \sum_{i=c}^{C} t_{ic} \cdot log( y_{ic}) $$
-     <p>
-      The error gradient $\delta_{o}$ of this cost function at the softmax output layer is simply:
-     </p>
-     $$\delta_{o} = \frac{\partial \xi}{\partial Z_o} = Y - T$$
-     <p>
-      With $Z_o$ a $n \times 2$ matrix of inputs to the softmax layer ($Z_o = H \cdot W_o + \mathbf{b}_o$), and $T$ a $n \times 2$ target matrix that corresponds to $Y$. Note that $\delta_{o}$ also results in a $n \times 2$ matrix.
-     </p>
-     <p>
-      $\delta_{o}$ will be defined in the code as
-      <code>
-       Eo
-      </code>
-      and will be computed by the
-      <code>
-       error_output(Y, T)
-      </code>
-      method defined below.
-     </p>
-     <h5 id="Update-the-output-layer-weights">
-      Update the output layer weights
-      <a class="anchor-link" href="#Update-the-output-layer-weights">
-       ¶
-      </a>
-     </h5>
-     <p>
-      At the output the gradient $\delta_{\mathbf{w}_{oj}}$ over all $N$ samples is computed by ${\partial \xi}/{\partial \mathbf{w}_{oj}}$:
-     </p>
-     $$\frac{\partial \xi}{\partial \mathbf{w}_{oj}} = 
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="2.-Vectorization-of-the-backward-step">
+    2. Vectorization of the backward step
+    <a class="anchor-link" href="#2.-Vectorization-of-the-backward-step">
+     ¶
+    </a>
+   </h3>
+   <h4 id="Vectorization-of-the-output-layer-backward-step">
+    Vectorization of the output layer backward step
+    <a class="anchor-link" href="#Vectorization-of-the-output-layer-backward-step">
+     ¶
+    </a>
+   </h4>
+   <h5 id="Compute-the-error-at-the-output">
+    Compute the error at the output
+    <a class="anchor-link" href="#Compute-the-error-at-the-output">
+     ¶
+    </a>
+   </h5>
+   <p>
+    The output layer is a
+    <a href="http://en.wikipedia.org/wiki/Softmax_function">
+     softmax
+    </a>
+    layer with corresponding
+    <a href="http://en.wikipedia.org/wiki/Cross_entropy">
+     cross-entropy
+    </a>
+    cost function, which are described in detail in
+    <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo02 %}">
+     intermezzo 2
+    </a>
+    . The cost function $\xi$ for $N$ samples and $C$ classes used in this model is defined as:
+   </p>
+   $$\xi(T,Y) = \sum_{i=1}^n \xi(\mathbf{t}_i,\mathbf{y}_i) = - \sum_{i=1}^n \sum_{i=c}^{C} t_{ic} \cdot log( y_{ic}) $$
+   <p>
+    The error gradient $\delta_{o}$ of this cost function at the softmax output layer is simply:
+   </p>
+   $$\delta_{o} = \frac{\partial \xi}{\partial Z_o} = Y - T$$
+   <p>
+    With $Z_o$ a $n \times 2$ matrix of inputs to the softmax layer ($Z_o = H \cdot W_o + \mathbf{b}_o$), and $T$ a $n \times 2$ target matrix that corresponds to $Y$. Note that $\delta_{o}$ also results in a $n \times 2$ matrix.
+   </p>
+   <p>
+    $\delta_{o}$ will be defined in the code as
+    <code>
+     Eo
+    </code>
+    and will be computed by the
+    <code>
+     error_output(Y, T)
+    </code>
+    method defined below.
+   </p>
+   <h5 id="Update-the-output-layer-weights">
+    Update the output layer weights
+    <a class="anchor-link" href="#Update-the-output-layer-weights">
+     ¶
+    </a>
+   </h5>
+   <p>
+    At the output the gradient $\delta_{\mathbf{w}_{oj}}$ over all $N$ samples is computed by ${\partial \xi}/{\partial \mathbf{w}_{oj}}$:
+   </p>
+   $$\frac{\partial \xi}{\partial \mathbf{w}_{oj}} = 
 \frac{\partial Z_{o}}{\partial \mathbf{w}_{oj}} \frac{\partial Y}{\partial Z_{o}} \frac{\partial \xi}{\partial Y} = 
 \frac{\partial Z_{o}}{\partial w_{oji}} \frac{\partial \xi}{\partial Z_o} =
 \sum_{i=1}^N h_{ij} (\mathbf{y}_i - \mathbf{t}_i) = 
 \sum_{i=1}^N h_{ij} \delta_{oi}$$
-     <p>
-      With $\mathbf{w}_{oj}$ the $j$-th row of $W_o$ and thus a $1 \times 2$ vector. This formula can be written out as matrix operations with the parameters of the output layer:
-     </p>
-     $$\frac{\partial \xi}{\partial W_o} = H^T \cdot (Y-T) = H^T \cdot \delta_{o}$$
-     <p>
-      The resulting gradient is a $3 \times 2$
-      <a href="http://en.wikipedia.org/wiki/Jacobian_matrix_and_determinant">
-       Jacobian matrix
-      </a>
-      :
-     </p>
-     $$J_{W_o} = \frac{\partial \xi}{\partial W_o} =
+   <p>
+    With $\mathbf{w}_{oj}$ the $j$-th row of $W_o$ and thus a $1 \times 2$ vector. This formula can be written out as matrix operations with the parameters of the output layer:
+   </p>
+   $$\frac{\partial \xi}{\partial W_o} = H^T \cdot (Y-T) = H^T \cdot \delta_{o}$$
+   <p>
+    The resulting gradient is a $3 \times 2$
+    <a href="http://en.wikipedia.org/wiki/Jacobian_matrix_and_determinant">
+     Jacobian matrix
+    </a>
+    :
+   </p>
+   $$J_{W_o} = \frac{\partial \xi}{\partial W_o} =
 \begin{bmatrix} 
 \frac{\partial \xi}{\partial w_{o11}} &amp; \frac{\partial \xi}{\partial w_{o12}} \\
 \frac{\partial \xi}{\partial w_{o21}} &amp; \frac{\partial \xi}{\partial w_{o22}} \\
 \frac{\partial \xi}{\partial w_{o31}} &amp; \frac{\partial \xi}{\partial w_{o32}}
 \end{bmatrix}$$
-     <p>
-      $J_{W_o}$ will be defined in the code as
-      <code>
-       JWo
-      </code>
-      and will be computed by the
-      <code>
-       gradient_weight_out(H, Eo)
-      </code>
-      method defined below.
-     </p>
-     <h5 id="Update-the-output-layer-bias">
-      Update the output layer bias
-      <a class="anchor-link" href="#Update-the-output-layer-bias">
-       ¶
-      </a>
-     </h5>
-     <p>
-      The bias $\mathbf{b}_o$ can be updated in the same manner. The formula to compute the gradient ${\partial \xi}/{\partial \mathbf{b}_{o}}$ for batch processing over all $N$ samples is:
-     </p>
-     $$\frac{\partial \xi}{\partial \mathbf{b}_{o}} = \frac{\partial Z_{o}}{\partial \mathbf{b}_{o}} \frac{\partial Y}{\partial Z_{o}} \frac{\partial \xi}{\partial Y} = \sum_{i=1}^N 1 * (\mathbf{y}_i - \mathbf{t}_i) = \sum_{i=1}^N \delta_{oi}$$
-     <p>
-      The resulting gradient is a $2 \times 1$ Jacobian matrix:
-     </p>
-     $$J_{b_o} = \frac{\partial \xi}{\partial \mathbf{b}_o} =
+   <p>
+    $J_{W_o}$ will be defined in the code as
+    <code>
+     JWo
+    </code>
+    and will be computed by the
+    <code>
+     gradient_weight_out(H, Eo)
+    </code>
+    method defined below.
+   </p>
+   <h5 id="Update-the-output-layer-bias">
+    Update the output layer bias
+    <a class="anchor-link" href="#Update-the-output-layer-bias">
+     ¶
+    </a>
+   </h5>
+   <p>
+    The bias $\mathbf{b}_o$ can be updated in the same manner. The formula to compute the gradient ${\partial \xi}/{\partial \mathbf{b}_{o}}$ for batch processing over all $N$ samples is:
+   </p>
+   $$\frac{\partial \xi}{\partial \mathbf{b}_{o}} = \frac{\partial Z_{o}}{\partial \mathbf{b}_{o}} \frac{\partial Y}{\partial Z_{o}} \frac{\partial \xi}{\partial Y} = \sum_{i=1}^N 1 * (\mathbf{y}_i - \mathbf{t}_i) = \sum_{i=1}^N \delta_{oi}$$
+   <p>
+    The resulting gradient is a $2 \times 1$ Jacobian matrix:
+   </p>
+   $$J_{b_o} = \frac{\partial \xi}{\partial \mathbf{b}_o} =
 \begin{bmatrix} 
 \frac{\partial \xi}{\partial b_{o1}} &amp; \frac{\partial \xi}{\partial b_{o2}}
 \end{bmatrix}$$
-     <p>
-      $J_{b_o}$ will be defined in the code as
-      <code>
-       Jbo
-      </code>
-      and will be computed by the
-      <code>
-       gradient_bias_out(Eo)
-      </code>
-      method defined below.
-     </p>
-    </div>
-   </div>
+   <p>
+    $J_{b_o}$ will be defined in the code as
+    <code>
+     Jbo
+    </code>
+    and will be computed by the
+    <code>
+     gradient_bias_out(Eo)
+    </code>
+    method defined below.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [5]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [5]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the cost function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the cost function</span>
 <span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
     <span class="k">return</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">Y</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
 
@@ -803,147 +797,147 @@ y_{n1} &amp; y_{n2}
 <span class="k">def</span> <span class="nf">gradient_bias_out</span><span class="p">(</span><span class="n">Eo</span><span class="p">):</span> 
     <span class="k">return</span>  <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">Eo</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h4 id="Vectorization-of-the-hidden-layer-backward-step">
-      Vectorization of the hidden layer backward step
-      <a class="anchor-link" href="#Vectorization-of-the-hidden-layer-backward-step">
-       ¶
-      </a>
-     </h4>
-     <h5 id="Compute-the-error-at-the-hidden-layer">
-      Compute the error at the hidden layer
-      <a class="anchor-link" href="#Compute-the-error-at-the-hidden-layer">
-       ¶
-      </a>
-     </h5>
-     <p>
-      The error gradient $\delta_{h}$ of the cost function at the hidden layer is defined as:
-     </p>
-     $$\delta_{h} = \frac{\partial \xi}{\partial Z_h} = \frac{\partial H}{\partial Z_h} \frac{\partial \xi}{\partial H} = \frac{\partial H}{\partial Z_h} \frac{\partial Z_o}{\partial H} \frac{\partial \xi}{\partial Z_o}$$
-     <p>
-      With $Z_h$ a $n \times 3$ matrix of inputs to the logistic functions in the hidden neurons ($Z_h = X \cdot W_h + \mathbf{b}_h$). Note that $\delta_{h}$ will also result in a $N \times 3$ matrix.
-     </p>
-     <p>
-      Lets first derive the error gradient $\delta_{hij}$ for one sample $i$ at hidden neuron $j$. The gradients that backpropagate from the previous layer via the weighted connections are summed for each origin $h_{ij}$.
-     </p>
-     $$\delta_{hij} = \frac{\partial \xi}{\partial z_{hij}} 
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h4 id="Vectorization-of-the-hidden-layer-backward-step">
+    Vectorization of the hidden layer backward step
+    <a class="anchor-link" href="#Vectorization-of-the-hidden-layer-backward-step">
+     ¶
+    </a>
+   </h4>
+   <h5 id="Compute-the-error-at-the-hidden-layer">
+    Compute the error at the hidden layer
+    <a class="anchor-link" href="#Compute-the-error-at-the-hidden-layer">
+     ¶
+    </a>
+   </h5>
+   <p>
+    The error gradient $\delta_{h}$ of the cost function at the hidden layer is defined as:
+   </p>
+   $$\delta_{h} = \frac{\partial \xi}{\partial Z_h} = \frac{\partial H}{\partial Z_h} \frac{\partial \xi}{\partial H} = \frac{\partial H}{\partial Z_h} \frac{\partial Z_o}{\partial H} \frac{\partial \xi}{\partial Z_o}$$
+   <p>
+    With $Z_h$ a $n \times 3$ matrix of inputs to the logistic functions in the hidden neurons ($Z_h = X \cdot W_h + \mathbf{b}_h$). Note that $\delta_{h}$ will also result in a $N \times 3$ matrix.
+   </p>
+   <p>
+    Lets first derive the error gradient $\delta_{hij}$ for one sample $i$ at hidden neuron $j$. The gradients that backpropagate from the previous layer via the weighted connections are summed for each origin $h_{ij}$.
+   </p>
+   $$\delta_{hij} = \frac{\partial \xi}{\partial z_{hij}} 
 = \frac{\partial h_{ij}}{\partial z_{hij}} \frac{\partial \mathbf{z}_{oi}}{\partial h_{ij}} \frac{\partial \xi}{\partial \mathbf{z}_{oi}} 
 = h_{ij} (1-h_{ij}) \sum_{k=1}^2 w_{ojk} (y_{ik}-t_{ik})
 = h_{ij} (1-h_{ij}) [\delta_{oi} \cdot \mathbf{w}_{oj}^T]$$
-     <p>
-      Where $\mathbf{w}_{oj}$ is the $j$-th row of $W_o$, and thus a $1 \times 2$ vector and $\delta_{oi}$ is a $1 \times 2$ vector. The full $N \times 3$ error matrix $\delta_{h}$ can thus be calculated as:
-     </p>
-     $$\delta_{h} = \frac{\partial \xi}{\partial Z_h} = H \circ (1 - H) \circ [\delta_{o} \cdot W_o^T]$$
-     <p>
-      With $\circ$ the
-      <a href="http://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29">
-       elementwise product
-      </a>
-      .
-     </p>
-     <p>
-      $\delta_{h}$ will be defined in the code as
-      <code>
-       Eh
-      </code>
-      and will be computed by the
-      <code>
-       error_hidden(H, Wo, Eo)
-      </code>
-      method defined below.
-     </p>
-     <h5 id="Update-the-hidden-layer-weights">
-      Update the hidden layer weights
-      <a class="anchor-link" href="#Update-the-hidden-layer-weights">
-       ¶
-      </a>
-     </h5>
-     <p>
-      At the hidden layer the gradient ${\partial \xi}/{\partial \mathbf{w}_{hj}}$ over all $N$ samples can be computed by:
-     </p>
-     $$\frac{\partial \xi}{\partial \mathbf{w}_{hj}} = 
+   <p>
+    Where $\mathbf{w}_{oj}$ is the $j$-th row of $W_o$, and thus a $1 \times 2$ vector and $\delta_{oi}$ is a $1 \times 2$ vector. The full $N \times 3$ error matrix $\delta_{h}$ can thus be calculated as:
+   </p>
+   $$\delta_{h} = \frac{\partial \xi}{\partial Z_h} = H \circ (1 - H) \circ [\delta_{o} \cdot W_o^T]$$
+   <p>
+    With $\circ$ the
+    <a href="http://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29">
+     elementwise product
+    </a>
+    .
+   </p>
+   <p>
+    $\delta_{h}$ will be defined in the code as
+    <code>
+     Eh
+    </code>
+    and will be computed by the
+    <code>
+     error_hidden(H, Wo, Eo)
+    </code>
+    method defined below.
+   </p>
+   <h5 id="Update-the-hidden-layer-weights">
+    Update the hidden layer weights
+    <a class="anchor-link" href="#Update-the-hidden-layer-weights">
+     ¶
+    </a>
+   </h5>
+   <p>
+    At the hidden layer the gradient ${\partial \xi}/{\partial \mathbf{w}_{hj}}$ over all $N$ samples can be computed by:
+   </p>
+   $$\frac{\partial \xi}{\partial \mathbf{w}_{hj}} = 
 \frac{\partial Z_{h}}{\partial \mathbf{w}_{hj}} \frac{\partial H}{\partial Z_{h}} \frac{\partial \xi}{\partial H} = 
 \frac{\partial Z_{h}}{\partial \mathbf{w}_{hj}} \frac{\partial \xi}{\partial Z_h} =
 \sum_{i=1}^N x_{ij} \delta_{hi}$$
-     <p>
-      With $\mathbf{w}_{hj}$ the $j$-th row of $W_h$ and thus a $1 \times 3$ vector.  We can write this formula out as matrix operations with the parameters of the hidden layer:
-     </p>
-     $$\frac{\partial \xi}{\partial W_h} = X^T \cdot \delta_{h}$$
-     <p>
-      The resulting gradient is a $2 \times 3$
-      <a href="http://en.wikipedia.org/wiki/Jacobian_matrix_and_determinant">
-       Jacobian matrix
-      </a>
-      :
-     </p>
-     $$J_{W_h} = \frac{\partial \xi}{\partial W_{h}} =
+   <p>
+    With $\mathbf{w}_{hj}$ the $j$-th row of $W_h$ and thus a $1 \times 3$ vector.  We can write this formula out as matrix operations with the parameters of the hidden layer:
+   </p>
+   $$\frac{\partial \xi}{\partial W_h} = X^T \cdot \delta_{h}$$
+   <p>
+    The resulting gradient is a $2 \times 3$
+    <a href="http://en.wikipedia.org/wiki/Jacobian_matrix_and_determinant">
+     Jacobian matrix
+    </a>
+    :
+   </p>
+   $$J_{W_h} = \frac{\partial \xi}{\partial W_{h}} =
 \begin{bmatrix} 
 \frac{\partial \xi}{\partial w_{h11}} &amp; \frac{\partial \xi}{\partial w_{h12}} &amp; \frac{\partial \xi}{\partial w_{h13}} \\
 \frac{\partial \xi}{\partial w_{h21}} &amp; \frac{\partial \xi}{\partial w_{h22}} &amp; \frac{\partial \xi}{\partial w_{h23}} \\
 \end{bmatrix}$$
-     <p>
-      $J_{W_h}$ will be defined in the code as
-      <code>
-       JWh
-      </code>
-      and will be computed by the
-      <code>
-       gradient_weight_hidden(X, Eh)
-      </code>
-      method defined below.
-     </p>
-     <h5 id="Update-the-hidden-layer-bias">
-      Update the hidden layer bias
-      <a class="anchor-link" href="#Update-the-hidden-layer-bias">
-       ¶
-      </a>
-     </h5>
-     <p>
-      The bias $\mathbf{b}_h$ can be updated in the same manner. The formula to compute the gradient ${\partial \xi}/{\partial \mathbf{b}_{h}}$ for batch processing over all $N$ samples is:
-     </p>
-     $$\frac{\partial \xi}{\partial \mathbf{b}_{h}} = \frac{\partial Z_{h}}{\partial \mathbf{b}_{h}} \frac{\partial H}{\partial Z_{h}} \frac{\partial \xi}{\partial H}
+   <p>
+    $J_{W_h}$ will be defined in the code as
+    <code>
+     JWh
+    </code>
+    and will be computed by the
+    <code>
+     gradient_weight_hidden(X, Eh)
+    </code>
+    method defined below.
+   </p>
+   <h5 id="Update-the-hidden-layer-bias">
+    Update the hidden layer bias
+    <a class="anchor-link" href="#Update-the-hidden-layer-bias">
+     ¶
+    </a>
+   </h5>
+   <p>
+    The bias $\mathbf{b}_h$ can be updated in the same manner. The formula to compute the gradient ${\partial \xi}/{\partial \mathbf{b}_{h}}$ for batch processing over all $N$ samples is:
+   </p>
+   $$\frac{\partial \xi}{\partial \mathbf{b}_{h}} = \frac{\partial Z_{h}}{\partial \mathbf{b}_{h}} \frac{\partial H}{\partial Z_{h}} \frac{\partial \xi}{\partial H}
 = \sum_{j=1}^N \delta_{hj}$$
-     <p>
-      The resulting gradient is a $1 \times 3$ Jacobian matrix:
-     </p>
-     $$J_{b_h} = \frac{\partial \xi}{\partial \mathbf{b}_{h}} =
+   <p>
+    The resulting gradient is a $1 \times 3$ Jacobian matrix:
+   </p>
+   $$J_{b_h} = \frac{\partial \xi}{\partial \mathbf{b}_{h}} =
 \begin{bmatrix} 
 \frac{\partial \xi}{\partial b_{h1}} &amp; \frac{\partial \xi}{\partial b_{h2}} &amp; \frac{\partial \xi}{\partial b_{h3}}
 \end{bmatrix}$$
-     <p>
-      $J_{b_h}$ will be defined in the code as
-      <code>
-       Jbh
-      </code>
-      and will be computed by the
-      <code>
-       gradient_bias_hidden(Eh)
-      </code>
-      method defined below.
-     </p>
-    </div>
-   </div>
+   <p>
+    $J_{b_h}$ will be defined in the code as
+    <code>
+     Jbh
+    </code>
+    and will be computed by the
+    <code>
+     gradient_bias_hidden(Eh)
+    </code>
+    method defined below.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [6]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [6]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the error function at the hidden layer</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the error function at the hidden layer</span>
 <span class="k">def</span> <span class="nf">error_hidden</span><span class="p">(</span><span class="n">H</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">Eo</span><span class="p">):</span>
     <span class="c"># H * (1-H) * (E . Wo^T)</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">H</span><span class="p">,(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">H</span><span class="p">)),</span> <span class="n">Eo</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Wo</span><span class="o">.</span><span class="n">T</span><span class="p">))</span>
@@ -956,58 +950,58 @@ y_{n1} &amp; y_{n2}
 <span class="k">def</span> <span class="nf">gradient_bias_hidden</span><span class="p">(</span><span class="n">Eh</span><span class="p">):</span> 
     <span class="k">return</span>  <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">Eh</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Gradient-checking">
-      Gradient checking
-      <a class="anchor-link" href="#Gradient-checking">
-       ¶
-      </a>
-     </h2>
-     <p>
-      Programming the computation of the backpropagation gradient is prone to bugs. This is why it is recommended to
-      <a href="http://ufldl.stanford.edu/wiki/index.php/Gradient_checking_and_advanced_optimization">
-       check the gradients
-      </a>
-      of your models. Gradient checking is done by computing the
-      <a href="http://en.wikipedia.org/wiki/Numerical_differentiation">
-       numerical gradient
-      </a>
-      of each parameter, and compare this value to the gradient found by backpropagation.
-     </p>
-     <p>
-      The numerical gradient ${\partial \xi}/{\partial \theta_i}$ for a parameter $\theta_i$ can be computed by:
-     </p>
-     $$\frac{\partial \xi}{\partial \theta_i}
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Gradient-checking">
+    Gradient checking
+    <a class="anchor-link" href="#Gradient-checking">
+     ¶
+    </a>
+   </h2>
+   <p>
+    Programming the computation of the backpropagation gradient is prone to bugs. This is why it is recommended to
+    <a href="http://ufldl.stanford.edu/wiki/index.php/Gradient_checking_and_advanced_optimization">
+     check the gradients
+    </a>
+    of your models. Gradient checking is done by computing the
+    <a href="http://en.wikipedia.org/wiki/Numerical_differentiation">
+     numerical gradient
+    </a>
+    of each parameter, and compare this value to the gradient found by backpropagation.
+   </p>
+   <p>
+    The numerical gradient ${\partial \xi}/{\partial \theta_i}$ for a parameter $\theta_i$ can be computed by:
+   </p>
+   $$\frac{\partial \xi}{\partial \theta_i}
 = \frac{f(X, \theta_1, \cdots, \theta_i+\epsilon, \cdots, \theta_m) - f(X, \theta_1, \cdots, \theta_i-\epsilon, \cdots, \theta_m)}{2\epsilon}$$
-     <p>
-      Where $f$ if the neural network function that takes the input $X$ and all parameters $\theta$, and $\epsilon$ is the small change that is used to peturbate the parameter $\theta_i$.
-     </p>
-     <p>
-      The numerical gradient for each parameter should be close to the backpropagation gradient for that parameter.
-     </p>
-    </div>
-   </div>
+   <p>
+    Where $f$ if the neural network function that takes the input $X$ and all parameters $\theta$, and $\epsilon$ is the small change that is used to peturbate the parameter $\theta_i$.
+   </p>
+   <p>
+    The numerical gradient for each parameter should be close to the backpropagation gradient for that parameter.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [7]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [7]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Initialize weights and biases</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Initialize weights and biases</span>
 <span class="n">init_var</span> <span class="o">=</span> <span class="mi">1</span>
 <span class="c"># Initialize hidden layer parameters</span>
 <span class="n">bh</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">init_var</span>
@@ -1029,22 +1023,22 @@ y_{n1} &amp; y_{n2}
 <span class="n">JWh</span> <span class="o">=</span> <span class="n">gradient_weight_hidden</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Eh</span><span class="p">)</span>
 <span class="n">Jbh</span> <span class="o">=</span> <span class="n">gradient_bias_hidden</span><span class="p">(</span><span class="n">Eh</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [8]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [8]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Combine all parameter matrices in a list</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Combine all parameter matrices in a list</span>
 <span class="n">params</span> <span class="o">=</span> <span class="p">[</span><span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">]</span>
 <span class="c"># Combine all parameter gradients in a list</span>
 <span class="n">grad_params</span> <span class="o">=</span> <span class="p">[</span><span class="n">JWh</span><span class="p">,</span> <span class="n">Jbh</span><span class="p">,</span> <span class="n">JWo</span><span class="p">,</span> <span class="n">Jbo</span><span class="p">]</span>
@@ -1074,123 +1068,123 @@ y_{n1} &amp; y_{n2}
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">'Numerical gradient of {:.6f} is not close to the backpropagation gradient of {:.6f}!'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">grad_num</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">grad_params</span><span class="p">[</span><span class="n">p_idx</span><span class="p">][</span><span class="n">row</span><span class="p">,</span><span class="n">col</span><span class="p">])))</span>
 <span class="k">print</span><span class="p">(</span><span class="s">'No gradient errors found'</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
-    </div>
-   </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>No gradient errors found
-</pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>No gradient errors found
+</pre>
+    </div>
    </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Backpropagation-updates-with-momentum">
-      Backpropagation updates with momentum
-      <a class="anchor-link" href="#Backpropagation-updates-with-momentum">
-       ¶
-      </a>
-     </h3>
-     <p>
-      In the previous examples we used simple
-      <a href="http://en.wikipedia.org/wiki/Gradient_descent">
-       gradient decent
-      </a>
-      to optimize the parameters with respect to the cost function (which was
-      <a href="http://en.wikipedia.org/wiki/Convex_function">
-       convex
-      </a>
-      in the
-      <a href="{% post_url 2015-06-10-neural_network_implementation_part01 %}">
-       first
-      </a>
-      and
-      <a href="{% post_url 2015-06-10-neural_network_implementation_part02 %}">
-       second
-      </a>
-      example). Multilayer neural networks with non-linear activation functions and many parameters are highly unlikely to have convex cost functions. Simple  gradient decent is not the best method to find a global minimum of a non-convex cost function since it is a
-      <a href="http://en.wikipedia.org/wiki/Local_search_%28optimization%29">
-       local optimization
-      </a>
-      method that tends to converge to a
-      <a href="http://en.wikipedia.org/wiki/Local_optimum">
-       local minimum
-      </a>
-      .
-     </p>
-     <p>
-      To solve this issue this example uses a variant of gradient decent called
-      <a href="http://www.willamette.edu/~gorr/classes/cs449/momrate.html">
-       momentum
-      </a>
-      . The method of momentum can be visualized as a ball rolling down the surface of the cost function, this ball will increase in velocity while rolling downhill, and will decrease in velocity when rolling uphill. This momentum update is formulated as:
-     </p>
-     $$\begin{split}
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Backpropagation-updates-with-momentum">
+    Backpropagation updates with momentum
+    <a class="anchor-link" href="#Backpropagation-updates-with-momentum">
+     ¶
+    </a>
+   </h3>
+   <p>
+    In the previous examples we used simple
+    <a href="http://en.wikipedia.org/wiki/Gradient_descent">
+     gradient decent
+    </a>
+    to optimize the parameters with respect to the cost function (which was
+    <a href="http://en.wikipedia.org/wiki/Convex_function">
+     convex
+    </a>
+    in the
+    <a href="{% post_url 2015-06-10-neural_network_implementation_part01 %}">
+     first
+    </a>
+    and
+    <a href="{% post_url 2015-06-10-neural_network_implementation_part02 %}">
+     second
+    </a>
+    example). Multilayer neural networks with non-linear activation functions and many parameters are highly unlikely to have convex cost functions. Simple  gradient decent is not the best method to find a global minimum of a non-convex cost function since it is a
+    <a href="http://en.wikipedia.org/wiki/Local_search_%28optimization%29">
+     local optimization
+    </a>
+    method that tends to converge to a
+    <a href="http://en.wikipedia.org/wiki/Local_optimum">
+     local minimum
+    </a>
+    .
+   </p>
+   <p>
+    To solve this issue this example uses a variant of gradient decent called
+    <a href="http://www.willamette.edu/~gorr/classes/cs449/momrate.html">
+     momentum
+    </a>
+    . The method of momentum can be visualized as a ball rolling down the surface of the cost function, this ball will increase in velocity while rolling downhill, and will decrease in velocity when rolling uphill. This momentum update is formulated as:
+   </p>
+   $$\begin{split}
 V(i+1) &amp; = \lambda V(i) - \mu \frac{\partial \xi}{\partial \theta(i)} \\
 \theta(i+1) &amp; = \theta(i) + V(i+1)
 \end{split}$$
-     <p>
-      Where $V(i)$ is the velocity of the parameters at iteration $i$, $\theta(i)$ is the location of the parameters at iteration $i$, ${\partial \xi}/{\partial \theta(i)}$ the gradient of the parameters with respect to the cost function at iteration $i$, $\lambda$ how much the velocity decreases due to 'resistance' and $\mu$ the learning rate (how much the gradient affects the velocity). This formula can be visualised as in the following illustration:
-     </p>
-     <p>
-      <img alt="Momentum updates" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/Momentum.png"/>
-     </p>
-     <p>
-      The velocities $V_{W_h}, V_{\mathbf{b}_h}, V_{W_o}, V_{\mathbf{b}_o},$ corresponding to the parameters $ W_h, \mathbf{b}_h, W_o, \mathbf{b}_o$ are represented in the code by
-      <code>
-       VWh
-      </code>
-      ,
-      <code>
-       Vbh
-      </code>
-      ,
-      <code>
-       VWo
-      </code>
-      ,
-      <code>
-       Vbo
-      </code>
-      . And kept in a list
-      <code>
-       Vs
-      </code>
-      . They are updated by the
-      <code>
-       update_velocity(X, T, ls_of_params, Vs, momentum_term, learning_rate)
-      </code>
-      method. After updating the velocities the parameters are updated via the
-      <code>
-       update_params(ls_of_params, Vs)
-      </code>
-      method.
-     </p>
-    </div>
-   </div>
+   <p>
+    Where $V(i)$ is the velocity of the parameters at iteration $i$, $\theta(i)$ is the location of the parameters at iteration $i$, ${\partial \xi}/{\partial \theta(i)}$ the gradient of the parameters with respect to the cost function at iteration $i$, $\lambda$ how much the velocity decreases due to 'resistance' and $\mu$ the learning rate (how much the gradient affects the velocity). This formula can be visualised as in the following illustration:
+   </p>
+   <p>
+    <img alt="Momentum updates" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/Momentum.png"/>
+   </p>
+   <p>
+    The velocities $V_{W_h}, V_{\mathbf{b}_h}, V_{W_o}, V_{\mathbf{b}_o},$ corresponding to the parameters $ W_h, \mathbf{b}_h, W_o, \mathbf{b}_o$ are represented in the code by
+    <code>
+     VWh
+    </code>
+    ,
+    <code>
+     Vbh
+    </code>
+    ,
+    <code>
+     VWo
+    </code>
+    ,
+    <code>
+     Vbo
+    </code>
+    . And kept in a list
+    <code>
+     Vs
+    </code>
+    . They are updated by the
+    <code>
+     update_velocity(X, T, ls_of_params, Vs, momentum_term, learning_rate)
+    </code>
+    method. After updating the velocities the parameters are updated via the
+    <code>
+     update_params(ls_of_params, Vs)
+    </code>
+    method.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [9]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [9]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the update function to update the network parameters over 1 iteration</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the update function to update the network parameters over 1 iteration</span>
 <span class="k">def</span> <span class="nf">backprop_gradients</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">):</span>
     <span class="c"># Compute the output of the network</span>
     <span class="c"># Compute the activations of the layers</span>
@@ -1217,33 +1211,33 @@ V(i+1) &amp; = \lambda V(i) - \mu \frac{\partial \xi}{\partial \theta(i)} \\
     <span class="c"># Vs = [VWh, Vbh, VWo, Vbo]</span>
     <span class="k">return</span> <span class="p">[</span><span class="n">P</span> <span class="o">+</span> <span class="n">V</span> <span class="k">for</span> <span class="n">P</span><span class="p">,</span><span class="n">V</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">ls_of_params</span><span class="p">,</span> <span class="n">Vs</span><span class="p">)]</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <p>
-      Training the neural network model with this momentum method over $300$ iterations on the dataset $X$ and $T$ defined in the beginning results in the training convergence plotted in the figure below. This smooth convergence would almost never result from simple gradient descent. You can try it out yourself and implement gradient descent optimization for this model. You will notice that if you run your gradient descent a couple of times from different starting points that it will almost always converge to a sub-optimal solution. Note that momentum is less sensitive to the learning rate than gradient descent, but the learning rate hyperparameter still needs to be tuned separately. In this tutorial, this learning rate was tuned by experimentation.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    Training the neural network model with this momentum method over $300$ iterations on the dataset $X$ and $T$ defined in the beginning results in the training convergence plotted in the figure below. This smooth convergence would almost never result from simple gradient descent. You can try it out yourself and implement gradient descent optimization for this model. You will notice that if you run your gradient descent a couple of times from different starting points that it will almost always converge to a sub-optimal solution. Note that momentum is less sensitive to the learning rate than gradient descent, but the learning rate hyperparameter still needs to be tuned separately. In this tutorial, this learning rate was tuned by experimentation.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [10]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [10]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Run backpropagation</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Run backpropagation</span>
 <span class="c"># Initialize weights and biases</span>
 <span class="n">init_var</span> <span class="o">=</span> <span class="mf">0.1</span>
 <span class="c"># Initialize hidden layer parameters</span>
@@ -1270,22 +1264,22 @@ V(i+1) &amp; = \lambda V(i) - \mu \frac{\partial \xi}{\partial \theta(i)} \\
     <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span> <span class="o">=</span> <span class="n">update_params</span><span class="p">([</span><span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">],</span> <span class="n">Vs</span><span class="p">)</span>
     <span class="n">ls_costs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">,</span> <span class="n">Wo</span><span class="p">,</span> <span class="n">bo</span><span class="p">),</span> <span class="n">T</span><span class="p">))</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [11]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [11]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the cost over the iterations</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the cost over the iterations</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ls_costs</span><span class="p">,</span> <span class="s">'b-'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'iteration'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
@@ -1293,17 +1287,17 @@ V(i+1) &amp; = \lambda V(i) - \mu \frac{\partial \xi}{\partial \theta(i)} \\
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYwAAAEZCAYAAACEkhK6AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYwAAAEZCAYAAACEkhK6AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzt3Xuc1XWdx/HXBwbkpg2kAQI63kgtdEwhXTVHvGVrajdv
 xQJrlpl2L3XTpFpbdTe1i9umqaCuupuaaeUmFmNqJpqMd0BLRFSGTFDAO3z2j+/3OIdxBoa5nO/v
 8n4+Hucx53c5v9/nM9+Z3+f8vt/f7xxzd0RERDakX+oAREQkH1QwRESkS1QwRESkS1QwRESkS1Qw
@@ -1498,40 +1492,41 @@ SkboDEOkzUqgeoD6t8BJZlYHYGbjzWxIB6/bDFgei8WOwJ5Vy96ovL6dO4Cj4zjJFsAHCB8r3dHX
 hIpkgt65iLS9s38AWBO7li4HfkjoDro/fo/CMsJ3JbT/xrL/A040s0cJH71/d9Wyi4EHzezP7j6l
 8jp3/4WZ7RX36YSPoV5mZjvx9m8806WMkgm6rFZERLpEXVIiItIlKhgiItIlKhgiItIlKhgiItIl
 KhgiItIlKhgiItIlKhgiItIlKhgiItIl/w+YjYsSc3/odAAAAABJRU5ErkJggg==
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Visualization-of-the-trained-classifier">
-      Visualization of the trained classifier
-      <a class="anchor-link" href="#Visualization-of-the-trained-classifier">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The resulting decision boundary of running backpropagation with momentum on the example inputs $X$ and targets $T$ is shown in the figure below. The background color (blue, red) refers to the classification decision of the trained classifier at that position in the input space. Note that the classifier is able to surround the blue samples and that all examples are classified correctly by the trained classifier.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Visualization-of-the-trained-classifier">
+    Visualization of the trained classifier
+    <a class="anchor-link" href="#Visualization-of-the-trained-classifier">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The resulting decision boundary of running backpropagation with momentum on the example inputs $X$ and targets $T$ is shown in the figure below. The background color (blue, red) refers to the classification decision of the trained classifier at that position in the input space. Note that the classifier is able to surround the blue samples and that all examples are classified correctly by the trained classifier.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [12]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [12]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the resulting decision boundary</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the resulting decision boundary</span>
 <span class="c"># Generate a grid over the input space to plot the color of the</span>
 <span class="c">#  classification at that grid point</span>
 <span class="n">nb_of_xs</span> <span class="o">=</span> <span class="mi">200</span>
@@ -1562,17 +1557,17 @@ KhgiItIlKhgiItIlKhgiItIlKhgiItIl/w+YjYsSc3/odAAAAABJRU5ErkJggg==
 <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'red vs blue classification boundary'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZIAAAEeCAYAAACg8JNZAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZIAAAEeCAYAAACg8JNZAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJztnXt8FOW5+L8PwQAiQghCDIpBW4pQq1gTFQumWi7FQL0h
 olg57eHYWsWf2oNHMAIKVdPLQVttLbUH26hY9dhK0BJKu8aWtomaeiJooyg3A6IhKAUhEt7fHzMb
 NpvdzV5md2cmz/fz4UPmsjPvs7MzzzzXV4wxKIqiKEqy9Mj2ABRFURRvo4pEURRFSQlVJIqiKEpK
@@ -1873,40 +1868,41 @@ G/PDiuIhNNiuKOljO9bkW/8J/Bsw256Ua7sxZmNWR6YoDqKKRFHShDFmPdakQEFezNZYFCWdqGtL
 UdxBtCmUFcX1qCJRlCwhIkeJyI3AZ4EbRWR0tsekKMmgdSSKoihKSqhFoiiKoqSEKhJFURQlJVSR
 KIqiKCmhikRRFEVJCVUkiqIoSkqoIlEURVFSQhWJoiiKkhKqSBRFUZSUUEWiKIqipMT/B9OfxBi7
 HDn3AAAAAElFTkSuQmCC
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Transformation-of-the-input-domain">
-      Transformation of the input domain
-      <a class="anchor-link" href="#Transformation-of-the-input-domain">
-       ¶
-      </a>
-     </h2>
-     <p>
-      There are two reasons why the neural network is able to separate the non-linearly separable classes. First of all the non-linear logistic functions in the hidden layer can help to make non-linear transformations of the data. And second the hidden layer contains three dimensions. By projecting the 2-dimensional input data to 3 dimensions, the classes can become linearly separable in this 3-dimensional space. This projection in illustrated in the figure below that plots the transformations of the input samples upon this 3-dimensional hidden layer.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Transformation-of-the-input-domain">
+    Transformation of the input domain
+    <a class="anchor-link" href="#Transformation-of-the-input-domain">
+     ¶
+    </a>
+   </h2>
+   <p>
+    There are two reasons why the neural network is able to separate the non-linearly separable classes. First of all the non-linear logistic functions in the hidden layer can help to make non-linear transformations of the data. And second the hidden layer contains three dimensions. By projecting the 2-dimensional input data to 3 dimensions, the classes can become linearly separable in this 3-dimensional space. This projection in illustrated in the figure below that plots the transformations of the input samples upon this 3-dimensional hidden layer.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [13]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [13]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the projection of the input onto the hidden layer</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the projection of the input onto the hidden layer</span>
 
 <span class="c"># Define the projections of the blue and red classes</span>
 <span class="n">H_blue</span> <span class="o">=</span> <span class="n">hidden_activations</span><span class="p">(</span><span class="n">x_blue</span><span class="p">,</span> <span class="n">Wh</span><span class="p">,</span> <span class="n">bh</span><span class="p">)</span>
@@ -1924,17 +1920,17 @@ HDn3AAAAAElFTkSuQmCC
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAb4AAAEuCAYAAADx63eqAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAb4AAAEuCAYAAADx63eqAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzsnXt8FNX5/z+z2c3mQiAJ9yRAbtwEAQUqykUUgUAV/NVq
 45UKIgSpUr9+i6BW1CqXalsrJeKleGlLsbbfom1ABRTQfgG/4q1CFQiBJCKCBMhtL7N7fn+EM5yd
 zOzOXpKdzTzv1yuv7M7O7pyZOXM+53nOc54jMcZAEARBEFbBFu8CEARBEER7QsJHEARBWAoSPoIg
@@ -2399,29 +2395,28 @@ hBCLQoGPEEKIRaHARwghxKJQ4COEEGJRKPARQgixKBT4CCGEWBQKfIQQQiwKBT5CCCEWhQIfIYQQ
 i0KBjxBCiEWhwEcIIcSiUOAjhBBiUSjwEUIIsSgU+AghhFgUCnyEEEIsCgU+QgghFoUCHyGEEItC
 gY8QQohFocBHCCHEolj38bxoUHpBCCGEDBIa8RFCCLEoFPgIIYRYFAp8hBBCLAoFPkIIIRaFAh8h
 hBCLQoGPEEKIRfkf4pErIh5kMIQAAAAASUVORK5CYII=
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <p>
-      This post at
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/">
-       peterroelants.github.io
-      </a>
-      is generated from an IPython notebook file.
-      <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/neural_net_implementation/neural_network_implementation_part04.ipynb">
-       Link to the full IPython notebook file
-      </a>
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post at
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/">
+     peterroelants.github.io
+    </a>
+    is generated from an IPython notebook file.
+    <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/neural_net_implementation/neural_network_implementation_part04.ipynb">
+     Link to the full IPython notebook file
+    </a>
+   </p>
   </div>
- </body>
-</html>
+ </div>
+</div>

@@ -1,63 +1,56 @@
---- 
-layout: notebook_simple_ann_post 
-title: How to implement a neural network Part 3 
----
-
-
-<html>
- <body>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Hidden-layer">
-      Hidden layer
-      <a class="anchor-link" href="#Hidden-layer">
-       ¶
-      </a>
-     </h2>
-     <p>
-      This part will cover:
-     </p>
-     <ul>
-      <li>
-       Hidden layers
-      </li>
-      <li>
-       <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/#Non-linear-transfer-function">
-        Non-linear transfer functions
-       </a>
-      </li>
-      <li>
-       <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/#Optimization-by-backpropagation">
-        Backpropagation
-       </a>
-      </li>
-     </ul>
-     <p>
-      While the previous tutorials described very simple single layer regression and classification models, this tutorial will describe a 2-class classification neural network with 1 input dimension, and a non-linear hidden layer with 1 neuron. This network can be represented graphically as:
-     </p>
-     <p>
-      <img alt="Image of the logistic model" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/SimpleANN03.png"/>
-     </p>
-     <p>
-      The notebook starts out with importing the libraries we need:
-     </p>
-    </div>
-   </div>
+--- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Part 3 \n---\n\n
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Hidden-layer">
+    Hidden layer
+    <a class="anchor-link" href="#Hidden-layer">
+     ¶
+    </a>
+   </h2>
+   <p>
+    This part will cover:
+   </p>
+   <ul>
+    <li>
+     Hidden layers
+    </li>
+    <li>
+     <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/#Non-linear-transfer-function">
+      Non-linear transfer functions
+     </a>
+    </li>
+    <li>
+     <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/#Optimization-by-backpropagation">
+      Backpropagation
+     </a>
+    </li>
+   </ul>
+   <p>
+    While the previous tutorials described very simple single layer regression and classification models, this tutorial will describe a 2-class classification neural network with 1 input dimension, and a non-linear hidden layer with 1 neuron. This network can be represented graphically as:
+   </p>
+   <p>
+    <img alt="Image of the logistic model" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/neural_net_implementation/img/SimpleANN03.png"/>
+   </p>
+   <p>
+    The notebook starts out with importing the libraries we need:
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [1]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [1]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Python imports</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Python imports</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c"># Matrix and vector computation package</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
 <span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span> <span class="c"># some plotting functions</span>
@@ -68,46 +61,46 @@ title: How to implement a neural network Part 3
 <span class="c"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
 <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Define-the-dataset">
-      Define the dataset
-      <a class="anchor-link" href="#Define-the-dataset">
-       ¶
-      </a>
-     </h2>
-     <p>
-      In this example the target classes $t$ corresponding to the inputs $x$ will be generated from 2 class distributions: blue ($t=1$) and red ($t=0$). Where the red class is a
-      <a href="http://en.wikipedia.org/wiki/Multimodal_distribution">
-       multimodal distribution
-      </a>
-      that surrounds the distribution of the blue class. This results in a 1D dataset that is not linearly separable. These samples are plotted in the figure below.
-     </p>
-     <p>
-      The model from part 2 won't be able to classify both classes correctly since it can learn only linear separators. By adding a hidden layer with a non-linear transfer function, the model will be able to train a non-linear classifier.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Define-the-dataset">
+    Define the dataset
+    <a class="anchor-link" href="#Define-the-dataset">
+     ¶
+    </a>
+   </h2>
+   <p>
+    In this example the target classes $t$ corresponding to the inputs $x$ will be generated from 2 class distributions: blue ($t=1$) and red ($t=0$). Where the red class is a
+    <a href="http://en.wikipedia.org/wiki/Multimodal_distribution">
+     multimodal distribution
+    </a>
+    that surrounds the distribution of the blue class. This results in a 1D dataset that is not linearly separable. These samples are plotted in the figure below.
+   </p>
+   <p>
+    The model from part 2 won't be able to classify both classes correctly since it can learn only linear separators. By adding a hidden layer with a non-linear transfer function, the model will be able to train a non-linear classifier.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [2]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [2]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define and generate the samples</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define and generate the samples</span>
 <span class="n">nb_of_samples_per_class</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c"># The number of sample in each class</span>
 <span class="n">blue_mean</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c"># The mean of the blue class</span>
 <span class="n">red_left_mean</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>  <span class="c"># The mean of the red class</span>
@@ -126,22 +119,22 @@ title: How to implement a neural network Part 3
                <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">x_red_left</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="mi">1</span><span class="p">)),</span> 
                <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">x_red_right</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">))))</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [3]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [3]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot samples from both classes as lines on a 1D space</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot samples from both classes as lines on a 1D space</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span><span class="mf">0.5</span><span class="p">))</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
@@ -154,17 +147,17 @@ title: How to implement a neural network Part 3
 <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$x$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdUAAABbCAYAAAAldB/rAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdUAAABbCAYAAAAldB/rAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAD2FJREFUeJzt3Xu0X+Odx/H3R8QlCXGJDiGSFm2HGnR1zHQUWUymqlq6
 hpre1KWjdJaaGToEnVOMxtR00OpCO0qTjrthVVta7QilhlI6CCIuORJJiEQuyIjkO388z4+d7XfL
 Ofv4/c7J57XWWWv/9uXZ3+f5PWd/9372cxJFBGZmZtZ/63U6ADMzs6HCSdXMzKwiTqpmZmYVcVI1
@@ -235,82 +228,84 @@ YAHp/+g1sy7h/6XGrMtJGgbsHhEPSNoKeBYYHRFvdDYyMyvzk6pZl4uIVcAD+eM+wL1OqGbdyROV
 zAaXfYC7ax8k/VkHYzGzEidVsy4n6dOS/iBpfeATwKy8/hBgWUeDM7M1ePjXrPvNAR4GvgYcBRwp
 aSQwJyJmdDQyM1uDJyqZmZlVxMO/ZmZmFXFSNTMzq4iTqpmZWUWcVM3MzCripGpmZlYRJ1UzM7OK
 OKmamZlVxEnVzMysIk6qZmZmFfl/JWKEmQoI12UAAAAASUVORK5CYII=
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Non-linear-transfer-function">
-      Non-linear transfer function
-      <a class="anchor-link" href="#Non-linear-transfer-function">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The non-linear transfer function used in the hidden layer of this example is the
-      <a href="http://en.wikipedia.org/wiki/Gaussian_function">
-       Gaussian
-      </a>
-      <a href="http://en.wikipedia.org/wiki/Radial_basis_function">
-       radial basis function
-      </a>
-      (RBF).
-      <br/>
-      The RBF is a transfer function that is not usually used in neural networks, except for
-      <a href="http://en.wikipedia.org/wiki/Radial_basis_function_network">
-       radial basis function networks
-      </a>
-      . One of the most common transfer functions in neural networks is the
-      <a href="http://en.wikipedia.org/wiki/Sigmoid_function">
-       sigmoid
-      </a>
-      transfer function.
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Non-linear-transfer-function">
+    Non-linear transfer function
+    <a class="anchor-link" href="#Non-linear-transfer-function">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The non-linear transfer function used in the hidden layer of this example is the
+    <a href="http://en.wikipedia.org/wiki/Gaussian_function">
+     Gaussian
+    </a>
+    <a href="http://en.wikipedia.org/wiki/Radial_basis_function">
+     radial basis function
+    </a>
+    (RBF).
+    <br>
+     The RBF is a transfer function that is not usually used in neural networks, except for
+     <a href="http://en.wikipedia.org/wiki/Radial_basis_function_network">
+      radial basis function networks
+     </a>
+     . One of the most common transfer functions in neural networks is the
+     <a href="http://en.wikipedia.org/wiki/Sigmoid_function">
+      sigmoid
+     </a>
+     transfer function.
 The RBF will allow to separate the blue samples from the red samples in this simple example by only activating for a certain region around the origin. The RBF is plotted in the figure below and is defined in this example as:
-     </p>
-     $$ \text{RBF} = \phi(z) = e^{-z^2} $$
-     <p>
-      The derivative of this RBF function is:
-     </p>
-     $$ \frac{d \phi(z)}{dz} = -2 z e^{-z^2} = -2 z \phi(z)$$
-    </div>
-   </div>
+    </br>
+   </p>
+   $$ \text{RBF} = \phi(z) = e^{-z^2} $$
+   <p>
+    The derivative of this RBF function is:
+   </p>
+   $$ \frac{d \phi(z)}{dz} = -2 z e^{-z^2} = -2 z \phi(z)$$
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [4]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [4]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the rbf function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the rbf function</span>
 <span class="k">def</span> <span class="nf">rbf</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [5]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [5]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the rbf function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the rbf function</span>
 <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">6</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">100</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">rbf</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="s">'b-'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$z$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
@@ -319,17 +314,17 @@ The RBF will allow to separate the blue samples from the red samples in this sim
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYsAAAEeCAYAAAB7Szl7AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYsAAAEeCAYAAAB7Szl7AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzt3XucFOWV//HPEcRL1KBiUAFBFFGIMIp3o44XhBijyWaz
 SrxkNPmFNVETN7tr1PyM2UT9EXXFSzQkUUmMxtxd3VWRTZjEaCCogBeQmxIuBhUVxBsX5/z+qB5t
 R2a6Z7qqn6pnvu/Xa15MdRfV51BNn67nVD1l7o6IiEhHNgsdgIiI5J+KhYiIVKRiISIiFalYiIhI
@@ -507,96 +502,97 @@ JJFOU7EQyVDpzmMHAUcBL5jZ9cC9YaMS6TzNOiuSMTPbzN1bzGwUsNrdF4eOSaSzVCxE6sDMDgGW
 ufuK0LGIdIWGoUQyZmZHAwvcfYWZ9TCzWG4ZK92IioVIhkr3FB8LjDWzEcCNwPNBgxLpAhULkYyY
 2XBgqbtfCIwBfg9Mi+y2qtJNqGchIiIV6chCREQqUrEQEZGKVCxERKQiFQsREalIxUJERCpSsRAR
 kYpULEREpCIVCxERqUjFQkREKvr/1vHrpZbI9OAAAAAASUVORK5CYII=
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Optimization-by-backpropagation">
-      Optimization by backpropagation
-      <a class="anchor-link" href="#Optimization-by-backpropagation">
-       ¶
-      </a>
-     </h2>
-     <p>
-      We will train this model by using the
-      <a href="http://en.wikipedia.org/wiki/Backpropagation">
-       backpropagation
-      </a>
-      algorithm that is typically used to train neural networks. Each iteration of the backpropagation algorithm consists of two steps:
-     </p>
-     <ol>
-      <li>
-       A forward propagation step to compute the output of the network.
-      </li>
-      <li>
-       A backward propagation step in which the error at the end of the network is propagated backward through all the neurons while updating their parameters.
-      </li>
-     </ol>
-     <h3 id="1.-Forward-step">
-      1. Forward step
-      <a class="anchor-link" href="#1.-Forward-step">
-       ¶
-      </a>
-     </h3>
-     <p>
-      During the forward step, the input will be propagated layer by layer through the network to compute the final output of the network.
-     </p>
-     <h4 id="Compute-activations-of-hidden-layer">
-      Compute activations of hidden layer
-      <a class="anchor-link" href="#Compute-activations-of-hidden-layer">
-       ¶
-      </a>
-     </h4>
-     <p>
-      The activations $\mathbf{h}$ of the hidden layer will be computed by:
-     </p>
-     $$\mathbf{h} = \phi(\mathbf{x}*w_h) = e^{-(\mathbf{x}*w_h)^2} $$
-     <p>
-      With $w_h$ the weight parameter that transforms the input before applying the RBF transfer function. This is implemented below by the
-      <code>
-       hidden_activations(x, wh)
-      </code>
-      method.
-     </p>
-     <h4 id="Compute-activations-of-output">
-      Compute activations of output
-      <a class="anchor-link" href="#Compute-activations-of-output">
-       ¶
-      </a>
-     </h4>
-     <p>
-      The output of the final layer and network will be computed by passing the hidden activations $\mathbf{h}$ as input to the logistic output function:
-     </p>
-     $$ \mathbf{y} = \sigma(\mathbf{h} * w_o - 1) = \frac{1}{1+e^{-\mathbf{h} * w_o - 1}} $$
-     <p>
-      With $w_o$ the weight parameter of the output layer. This is implemented below as the
-      <code>
-       output_activations(h , wo)
-      </code>
-      method.
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Optimization-by-backpropagation">
+    Optimization by backpropagation
+    <a class="anchor-link" href="#Optimization-by-backpropagation">
+     ¶
+    </a>
+   </h2>
+   <p>
+    We will train this model by using the
+    <a href="http://en.wikipedia.org/wiki/Backpropagation">
+     backpropagation
+    </a>
+    algorithm that is typically used to train neural networks. Each iteration of the backpropagation algorithm consists of two steps:
+   </p>
+   <ol>
+    <li>
+     A forward propagation step to compute the output of the network.
+    </li>
+    <li>
+     A backward propagation step in which the error at the end of the network is propagated backward through all the neurons while updating their parameters.
+    </li>
+   </ol>
+   <h3 id="1.-Forward-step">
+    1. Forward step
+    <a class="anchor-link" href="#1.-Forward-step">
+     ¶
+    </a>
+   </h3>
+   <p>
+    During the forward step, the input will be propagated layer by layer through the network to compute the final output of the network.
+   </p>
+   <h4 id="Compute-activations-of-hidden-layer">
+    Compute activations of hidden layer
+    <a class="anchor-link" href="#Compute-activations-of-hidden-layer">
+     ¶
+    </a>
+   </h4>
+   <p>
+    The activations $\mathbf{h}$ of the hidden layer will be computed by:
+   </p>
+   $$\mathbf{h} = \phi(\mathbf{x}*w_h) = e^{-(\mathbf{x}*w_h)^2} $$
+   <p>
+    With $w_h$ the weight parameter that transforms the input before applying the RBF transfer function. This is implemented below by the
+    <code>
+     hidden_activations(x, wh)
+    </code>
+    method.
+   </p>
+   <h4 id="Compute-activations-of-output">
+    Compute activations of output
+    <a class="anchor-link" href="#Compute-activations-of-output">
+     ¶
+    </a>
+   </h4>
+   <p>
+    The output of the final layer and network will be computed by passing the hidden activations $\mathbf{h}$ as input to the logistic output function:
+   </p>
+   $$ \mathbf{y} = \sigma(\mathbf{h} * w_o - 1) = \frac{1}{1+e^{-\mathbf{h} * w_o - 1}} $$
+   <p>
+    With $w_o$ the weight parameter of the output layer. This is implemented below as the
+    <code>
+     output_activations(h , wo)
+    </code>
+    method.
 Note that we add a bias (intercept) term of $-1$ to the input of the logistic output neuron. Remember from part 2 that the logistic output neuron without bias can only learn a decision boundary that goes through the origin $(0)$. Since the RBF in the hidden layer projects all input variables to a range between $0$ and $+ \infty$, the output layer without an intercept will not be able to learn any useful classifier, because none of the samples will be below $0$ and thus lie on the left side of the decision boundary. By adding a bias term the decision boundary is moved from the intercept. Normally the value of this bias termed is learned together with the rest of the weight parameters, but to keep this model simple we just make this bias constant in this example.
-     </p>
-    </div>
-   </div>
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [6]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [6]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the logistic function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the logistic function</span>
 <span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> 
     <span class="k">return</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
 
@@ -617,72 +613,73 @@ Note that we add a bias (intercept) term of $-1$ to the input of the logistic ou
 <span class="k">def</span> <span class="nf">nn_predict</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">):</span> 
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">around</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">))</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="2.-Backward-step">
-      2. Backward step
-      <a class="anchor-link" href="#2.-Backward-step">
-       ¶
-      </a>
-     </h3>
-     <p>
-      The backward step will begin with computing the cost at the output node. This cost will then be propagated backwards layer by layer through the network to update the parameters.
-     </p>
-     <p>
-      The
-      <a href="http://en.wikipedia.org/wiki/Gradient_descent">
-       gradient descent
-      </a>
-      algorithm is used in every layer to update the parameters in the direction of the negative
-      <a href="http://en.wikipedia.org/wiki/Gradient">
-       gradient
-      </a>
-      .
-     </p>
-     <p>
-      The parameters $w_h$ and $w_o$ are updated by $w(k+1) = w(k) - \Delta w(k+1)$. $\Delta w$ is defined as: $\Delta w = \mu * {\partial \xi}/{\partial w}$ with $\mu$ the learning rate and ${\partial \xi}/{\partial w}$ the gradient of the parameter $w$ with respect to the cost function $\xi$.
-     </p>
-     <h4 id="Compute-the-cost-function">
-      Compute the cost function
-      <a class="anchor-link" href="#Compute-the-cost-function">
-       ¶
-      </a>
-     </h4>
-     <p>
-      The cost function $\xi$ used in this model is the same cross-entropy cost function explained in
-      <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
-       intermezzo 1
-      </a>
-      :
-     </p>
-     $$\xi(t_i,y_i) = - \left[ t_i log(y_i) + (1-t_i)log(1-y_i) \right]$$
-     <p>
-      This cost function is plotted for the $w_h$ and $w_o$ parameters in the next figure. Note that this error surface is not convex anymore and that the $w_h$ parameter mirrors the cost function along the $w_h = 0$ axis.
-      <br/>
-      Also, notice that this cost function has a very sharp gradient around $w_h = 0$ starting from $w_o &gt; 0$ and that the minima run along the lower edge of this peak. If the learning rate will be to big, the updates might jump over the minima gap, onto the sharp gradient. Because the gradient is sharp, the update will be large, and we might end up further from the minima than we started.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="2.-Backward-step">
+    2. Backward step
+    <a class="anchor-link" href="#2.-Backward-step">
+     ¶
+    </a>
+   </h3>
+   <p>
+    The backward step will begin with computing the cost at the output node. This cost will then be propagated backwards layer by layer through the network to update the parameters.
+   </p>
+   <p>
+    The
+    <a href="http://en.wikipedia.org/wiki/Gradient_descent">
+     gradient descent
+    </a>
+    algorithm is used in every layer to update the parameters in the direction of the negative
+    <a href="http://en.wikipedia.org/wiki/Gradient">
+     gradient
+    </a>
+    .
+   </p>
+   <p>
+    The parameters $w_h$ and $w_o$ are updated by $w(k+1) = w(k) - \Delta w(k+1)$. $\Delta w$ is defined as: $\Delta w = \mu * {\partial \xi}/{\partial w}$ with $\mu$ the learning rate and ${\partial \xi}/{\partial w}$ the gradient of the parameter $w$ with respect to the cost function $\xi$.
+   </p>
+   <h4 id="Compute-the-cost-function">
+    Compute the cost function
+    <a class="anchor-link" href="#Compute-the-cost-function">
+     ¶
+    </a>
+   </h4>
+   <p>
+    The cost function $\xi$ used in this model is the same cross-entropy cost function explained in
+    <a href="{% post_url 2015-06-10-neural_network_implementation_intermezzo01 %}">
+     intermezzo 1
+    </a>
+    :
+   </p>
+   $$\xi(t_i,y_i) = - \left[ t_i log(y_i) + (1-t_i)log(1-y_i) \right]$$
+   <p>
+    This cost function is plotted for the $w_h$ and $w_o$ parameters in the next figure. Note that this error surface is not convex anymore and that the $w_h$ parameter mirrors the cost function along the $w_h = 0$ axis.
+    <br>
+     Also, notice that this cost function has a very sharp gradient around $w_h = 0$ starting from $w_o &gt; 0$ and that the minima run along the lower edge of this peak. If the learning rate will be to big, the updates might jump over the minima gap, onto the sharp gradient. Because the gradient is sharp, the update will be large, and we might end up further from the minima than we started.
+    </br>
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [7]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [7]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the cost function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the cost function</span>
 <span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
     <span class="k">return</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">y</span><span class="p">))</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">((</span><span class="mi">1</span><span class="o">-</span><span class="n">t</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">y</span><span class="p">)))</span>
 
@@ -690,22 +687,22 @@ Note that we add a bias (intercept) term of $-1$ to the input of the logistic ou
 <span class="k">def</span> <span class="nf">cost_for_param</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">)</span> <span class="p">,</span> <span class="n">t</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [8]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [8]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the cost in function of the weights</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the cost in function of the weights</span>
 <span class="c"># Define a vector of weights for which we want to plot the cost</span>
 <span class="n">nb_of_ws</span> <span class="o">=</span> <span class="mi">200</span> <span class="c"># compute the cost nb_of_ws times in each dimension</span>
 <span class="n">wsh</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c"># hidden weights</span>
@@ -731,17 +728,17 @@ Note that we add a bias (intercept) term of $-1$ to the input of the logistic ou
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAbgAAAEuCAYAAAD89QftAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAbgAAAEuCAYAAAD89QftAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzsvWmYHOV5Lny/vVTvy+xbzz6jGWkkIYTNAdsc4gXs2M6x
 HXNik0COvxAfL3xfTDCxD44/k3BYDgFkG2OcmFjYJsbxmuCFPQYHkISQBNpGmn3f1+7pvbr7PT+m
 36Kmp6q6q6d7utWq+7rmuqTuWt7e6q77eZ77eQilFBo0aNCgQUOpQVfoBWjQoEGDBg35gEZwGjRo
@@ -1809,100 +1806,101 @@ brpRWFUI8QWwRFGU0w2v3wG+VhRlc8Pr94H9iqLs6MJPkUh6JV3dzSa1KCVWi6Io02/zVkxH7hdC
 ZALebbz1n4qifNYZUzpxrUQiacBaHFRXkQ5O0u0oihJrxG2FQNOFcf4N5yQSicQoZA1OYk6aPmXu
 AR4WQqiFEEFACPX7piQSicQopIOT9ChCiKlCiHwgCtgnhNgPoCjKWeprfGeB/cB8RRaIJRJJF5BN
 JhKJRCKxSmQEJ5FIJBKr5P8BzYCAvJYoVHwAAAAASUVORK5CYII=
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h4 id="Update-the-output-layer">
-      Update the output layer
-      <a class="anchor-link" href="#Update-the-output-layer">
-       ¶
-      </a>
-     </h4>
-     <p>
-      At the output the gradient for sample $i$, ${\partial \xi_i}/{\partial w_o}$, can be worked out the same way as we did in
-      <a href="{% post_url 2015-06-10-neural_network_implementation_part02 %}">
-       part 2
-      </a>
-      :
-     </p>
-     $$\frac{\partial \xi_i}{\partial w_o} = \frac{\partial z_{oi}}{\partial w_o} \frac{\partial y_i}{\partial z_{oi}} \frac{\partial \xi_i}{\partial y_i} = h_i (y_i-t_i) = h_i * \delta_{oi}$$
-     <p>
-      With $z_{oi} = h_i * w_o$, $h_i$ the hidden layer activation of sample $i$ and ${\partial \xi_i}/{\partial z_{oi}} = \delta_{oi}$ the gradient of the error at the output layer of the neural network with respect to the input to this layer.
-     </p>
-     <p>
-      $\delta_{o}$ is defined below as the
-      <code>
-       gradient_output(y, t)
-      </code>
-      method and ${\partial \xi}/{\partial w_o}$ as the
-      <code>
-       gradient_weight_out(h, grad_output)
-      </code>
-      method.
-     </p>
-     <h4 id="Update-the-hidden-layer">
-      Update the hidden layer
-      <a class="anchor-link" href="#Update-the-hidden-layer">
-       ¶
-      </a>
-     </h4>
-     <p>
-      At the hidden layer the gradient for sample $i$, ${\partial \xi_i}/{\partial w_{h}}$, of the hidden neuron is computed the same way:
-     </p>
-     $$\frac{\partial \xi_i}{\partial w_{h}} = \frac{\partial z_{hi}}{\partial w_{h}} \frac{\partial h_i}{\partial z_{hi}} \frac{\partial \xi_i}{\partial h_i}$$
-     <p>
-      With $z_{hi} = x_i * w_{h} $. And with ${\partial \xi_i}/{\partial z_{hi}} = \delta_{hi}$ the gradient of the error at the input of the hidden layer with respect to the input to this layer. This error can be interpreted as the contribution of $z_{hi}$ to the final error.
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h4 id="Update-the-output-layer">
+    Update the output layer
+    <a class="anchor-link" href="#Update-the-output-layer">
+     ¶
+    </a>
+   </h4>
+   <p>
+    At the output the gradient for sample $i$, ${\partial \xi_i}/{\partial w_o}$, can be worked out the same way as we did in
+    <a href="{% post_url 2015-06-10-neural_network_implementation_part02 %}">
+     part 2
+    </a>
+    :
+   </p>
+   $$\frac{\partial \xi_i}{\partial w_o} = \frac{\partial z_{oi}}{\partial w_o} \frac{\partial y_i}{\partial z_{oi}} \frac{\partial \xi_i}{\partial y_i} = h_i (y_i-t_i) = h_i * \delta_{oi}$$
+   <p>
+    With $z_{oi} = h_i * w_o$, $h_i$ the hidden layer activation of sample $i$ and ${\partial \xi_i}/{\partial z_{oi}} = \delta_{oi}$ the gradient of the error at the output layer of the neural network with respect to the input to this layer.
+   </p>
+   <p>
+    $\delta_{o}$ is defined below as the
+    <code>
+     gradient_output(y, t)
+    </code>
+    method and ${\partial \xi}/{\partial w_o}$ as the
+    <code>
+     gradient_weight_out(h, grad_output)
+    </code>
+    method.
+   </p>
+   <h4 id="Update-the-hidden-layer">
+    Update the hidden layer
+    <a class="anchor-link" href="#Update-the-hidden-layer">
+     ¶
+    </a>
+   </h4>
+   <p>
+    At the hidden layer the gradient for sample $i$, ${\partial \xi_i}/{\partial w_{h}}$, of the hidden neuron is computed the same way:
+   </p>
+   $$\frac{\partial \xi_i}{\partial w_{h}} = \frac{\partial z_{hi}}{\partial w_{h}} \frac{\partial h_i}{\partial z_{hi}} \frac{\partial \xi_i}{\partial h_i}$$
+   <p>
+    With $z_{hi} = x_i * w_{h} $. And with ${\partial \xi_i}/{\partial z_{hi}} = \delta_{hi}$ the gradient of the error at the input of the hidden layer with respect to the input to this layer. This error can be interpreted as the contribution of $z_{hi}$ to the final error.
 How do we define this error gradient $\delta_{hi}$ at the input of the hidden neurons? It can be computed as the error gradient propagated back from the output layer through the hidden layer.
-     </p>
-     $$\delta_{hi} = \frac{\partial \xi_i}{\partial z_{hi}} = \frac{\partial h_i}{\partial z_{hi}} \frac{\partial z_{oi}}{\partial h_i} \frac{\partial \xi_i}{\partial z_{oi}} 
+   </p>
+   $$\delta_{hi} = \frac{\partial \xi_i}{\partial z_{hi}} = \frac{\partial h_i}{\partial z_{hi}} \frac{\partial z_{oi}}{\partial h_i} \frac{\partial \xi_i}{\partial z_{oi}} 
 = (-2 * z_{hi} * h_i) * w_{o} * (y_i - t_i) = -2 * z_{hi} * h_i * w_{o} * \delta_{oi} $$
-     <p>
-      Because of this, and because ${\partial z_{hi}}/{\partial w_{h}} = x_i$ we can compute ${\partial \xi_i}/{\partial w_{h}}$ as:
-     </p>
-     $$\frac{\partial \xi_i}{\partial w_{h}} = x_i \delta_{hi}  $$
-     <p>
-      The gradients for each parameter can again be summed up to compute the update for a batch of input examples.
-     </p>
-     <p>
-      $\delta_{h}$ is defined below as the
-      <code>
-       gradient_hidden(wo, grad_output)
-      </code>
-      method and ${\partial \xi}/{\partial w_h}$ as the
-      <code>
-       gradient_weight_hidden(x, zh, h, grad_hidden)
-      </code>
-      method.
-     </p>
-     <p>
-      To start out the gradient descent algorithm, you typically start with picking the initial parameters at random and start updating these parameters in the direction of the negative gradient with help of the backpropagation algorithm. One backpropagation iteration is implemented below by the
-      <code>
-       backprop_update(x, t, wh, wo, learning_rate)
-      </code>
-      method.
-     </p>
-    </div>
-   </div>
+   <p>
+    Because of this, and because ${\partial z_{hi}}/{\partial w_{h}} = x_i$ we can compute ${\partial \xi_i}/{\partial w_{h}}$ as:
+   </p>
+   $$\frac{\partial \xi_i}{\partial w_{h}} = x_i \delta_{hi}  $$
+   <p>
+    The gradients for each parameter can again be summed up to compute the update for a batch of input examples.
+   </p>
+   <p>
+    $\delta_{h}$ is defined below as the
+    <code>
+     gradient_hidden(wo, grad_output)
+    </code>
+    method and ${\partial \xi}/{\partial w_h}$ as the
+    <code>
+     gradient_weight_hidden(x, zh, h, grad_hidden)
+    </code>
+    method.
+   </p>
+   <p>
+    To start out the gradient descent algorithm, you typically start with picking the initial parameters at random and start updating these parameters in the direction of the negative gradient with help of the backpropagation algorithm. One backpropagation iteration is implemented below by the
+    <code>
+     backprop_update(x, t, wh, wo, learning_rate)
+    </code>
+    method.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [9]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [9]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the error function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Define the error function</span>
 <span class="k">def</span> <span class="nf">gradient_output</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">y</span> <span class="o">-</span> <span class="n">t</span>
 
@@ -1937,42 +1935,42 @@ How do we define this error gradient $\delta_{hi}$ at the input of the hidden ne
     <span class="c"># return the update parameters</span>
     <span class="k">return</span> <span class="p">(</span><span class="n">wh</span><span class="o">-</span><span class="n">d_wh</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">wo</span><span class="o">-</span><span class="n">d_wo</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Backpropagation-updates">
-      Backpropagation updates
-      <a class="anchor-link" href="#Backpropagation-updates">
-       ¶
-      </a>
-     </h3>
-     <p>
-      An example run of backpropagation for 50 iterations on the example inputs $\mathbf{x}$ and targets $\mathbf{t}$ is shown in the figure below. The white dots represent the weight parameter values $w_h$ and $w_o$ at iteration $k$ and are plotted on the cost surface.
-     </p>
-     <p>
-      Notice that we decrease the learning rate linearly with each step. This is to make sure that in the end the learning rate is 0 and the sharp gradient will not allow the weight paramaters to fluctuate much during the last few iterations.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Backpropagation-updates">
+    Backpropagation updates
+    <a class="anchor-link" href="#Backpropagation-updates">
+     ¶
+    </a>
+   </h3>
+   <p>
+    An example run of backpropagation for 50 iterations on the example inputs $\mathbf{x}$ and targets $\mathbf{t}$ is shown in the figure below. The white dots represent the weight parameter values $w_h$ and $w_o$ at iteration $k$ and are plotted on the cost surface.
+   </p>
+   <p>
+    Notice that we decrease the learning rate linearly with each step. This is to make sure that in the end the learning rate is 0 and the sharp gradient will not allow the weight paramaters to fluctuate much during the last few iterations.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [10]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [10]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Run backpropagation</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Run backpropagation</span>
 <span class="c"># Set the initial weight parameter</span>
 <span class="n">wh</span> <span class="o">=</span> <span class="mi">2</span>
 <span class="n">wo</span> <span class="o">=</span> <span class="o">-</span><span class="mi">5</span>
@@ -1992,34 +1990,34 @@ How do we define this error gradient $\delta_{hi}$ at the input of the hidden ne
 <span class="c"># Print the final cost</span>
 <span class="k">print</span><span class="p">(</span><span class="s">'final cost is {:.2f} for weights wh: {:.2f} and wo: {:.2f}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">cost_for_param</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">,</span> <span class="n">t</span><span class="p">),</span> <span class="n">wh</span><span class="p">,</span> <span class="n">wo</span><span class="p">))</span>
 </pre>
-      </div>
-     </div>
-    </div>
-   </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>final cost is 9.55 for weights wh: 1.07 and wo: 5.05
-</pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [11]:
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the weight updates on the error surface</span>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>final cost is 9.55 for weights wh: 1.07 and wo: 5.05
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [11]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the weight updates on the error surface</span>
 <span class="c"># Plot the error surface</span>
 <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
 <span class="n">ax</span> <span class="o">=</span> <span class="n">Axes3D</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
@@ -2046,17 +2044,17 @@ How do we define this error gradient $\delta_{hi}$ at the input of the hidden ne
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAbgAAAEuCAYAAAD89QftAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAbgAAAEuCAYAAAD89QftAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzsfXmYHFW99nu6q/d99n3PMpkkxEQ2WYILfKKAXPQDVBTU
 C0blu6B8ssiF6IOBTzCICypyIVyQTZSLEAgQECSQjSSSSTKZZPZ933p63873x/Qpqnuq1+me7unU
 +zzzPEl1nVOnqqvrrfe3EkopJEiQIEGChFyDLNMLkCBBggQJEtIBieAkSJAgQUJOQiI4CRIkSJCQ
@@ -3181,40 +3179,41 @@ DEi66s0mtCgF/RZZlue389aUjpwvSdJ+IMjKW/9PluV/dWYpnThWIBA00l8CVFcRAU7gdGRZTnbg
 tFyguWFcWONrAoFA4BCiBifoTZrfZb4H/FqSJLUkSVHAYBr8pgQCgcAhRIAT9CiSJM2RJCkbSAT2
 SJK0F0CW5W9pqPF9C+wF7pdFgVggEHQB0WQiEAgEgn6J2MEJBAKBoF/yfxRMVeOwEx13AAAAAElF
 TkSuQmCC
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Visualization-of-the-trained-classifier">
-      Visualization of the trained classifier
-      <a class="anchor-link" href="#Visualization-of-the-trained-classifier">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The resulting decision boundary of running backpropagation on the example inputs $\mathbf{x}$ and targets $\mathbf{t}$ is shown in the figure below. The background color (blue, red) refers to the classification decision of the trained classifier at that position in the input space. Note that all examples are classified correctly by the trained classifier.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Visualization-of-the-trained-classifier">
+    Visualization of the trained classifier
+    <a class="anchor-link" href="#Visualization-of-the-trained-classifier">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The resulting decision boundary of running backpropagation on the example inputs $\mathbf{x}$ and targets $\mathbf{t}$ is shown in the figure below. The background color (blue, red) refers to the classification decision of the trained classifier at that position in the input space. Note that all examples are classified correctly by the trained classifier.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [12]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [12]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the resulting decision boundary</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot the resulting decision boundary</span>
 <span class="c"># Generate a grid over the input space to plot the color of the</span>
 <span class="c">#  classification at that grid point</span>
 <span class="n">nb_of_xs</span> <span class="o">=</span> <span class="mi">100</span>
@@ -3245,17 +3244,17 @@ TkSuQmCC
 <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'x'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdUAAABWCAYAAACZ6gw1AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdUAAABWCAYAAACZ6gw1AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAADopJREFUeJzt3XuwXWV5x/HvLyEkhISEGlsIJKRchIJIsDUVCxpAOoC0
 2GmReimmalWYQSiXRkTlAMNFsQNVOxQROSQMICBlQAstAwk3EQQSboFykZAEkkBIyIUEkiZP/3jf
 LYuddfbZOWcd9j7n/D4ze2btdXnX875r7fXs913r7KOIwMzMzHpvSKsDMDMzGyicVM3MzCripGpm
@@ -3322,43 +3321,44 @@ iJOqmZlZRZxUzczMKuKkatYPSPpI/if3wyVtm/+p9N6tjsvM3s2/qGTWT0g6FxgBbAMsjIjvtTgk
 M6vjpGrWT+T/KPIwsA44IPzhNWs7Hv416z/GAdsCo0i9VTNrM+6pmvUTkm4h/e/iXYEdI+LEFodk
 ZnUa/pNyM2sPko4D3o6I6yQNAX4taWpEzG5xaGZW4J6qmZlZRXxP1czMrCJOqmZmZhVxUjUzM6uI
 k6qZmVlFnFTNzMwq4qRqZmZWESdVMzOzijipmpmZVeT/Aa5qsZPceVdRAAAAAElFTkSuQmCC
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Transformation-of-the-input-domain">
-      Transformation of the input domain
-      <a class="anchor-link" href="#Transformation-of-the-input-domain">
-       ¶
-      </a>
-     </h2>
-     <p>
-      How is the neural network able to separate the non-linearly seperable classes with a linear logistic classifier at the output?  The key is the hidden layer with the non-linear RBF transfer function. Note that the RBF transfer function is able to transform the samples near the origin (blue class) to a value larger than $0$, and the samples further from the origin (red samples) to a value near $0$. This projection is plotted in the following figure. Note that the red samples are located around $0$ to the left, and that the blue samples are located more to the right. This projection is linearly seperable by the logistic classifier in the output layer.
-     </p>
-     <p>
-      Also, note that the offset of the peak of the Gaussian function we use is $0$. This means that the Gaussian function is centered around the origin, which can be noted in the symmetrical decision boundaries around the origin on the previous figure.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Transformation-of-the-input-domain">
+    Transformation of the input domain
+    <a class="anchor-link" href="#Transformation-of-the-input-domain">
+     ¶
+    </a>
+   </h2>
+   <p>
+    How is the neural network able to separate the non-linearly seperable classes with a linear logistic classifier at the output?  The key is the hidden layer with the non-linear RBF transfer function. Note that the RBF transfer function is able to transform the samples near the origin (blue class) to a value larger than $0$, and the samples further from the origin (red samples) to a value near $0$. This projection is plotted in the following figure. Note that the red samples are located around $0$ to the left, and that the blue samples are located more to the right. This projection is linearly seperable by the logistic classifier in the output layer.
+   </p>
+   <p>
+    Also, note that the offset of the peak of the Gaussian function we use is $0$. This means that the Gaussian function is centered around the origin, which can be noted in the symmetrical decision boundaries around the origin on the previous figure.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [13]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [13]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot projected samples from both classes as lines on a 1D space</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span class="c"># Plot projected samples from both classes as lines on a 1D space</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span><span class="mf">0.5</span><span class="p">))</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="o">-</span><span class="mf">0.01</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
@@ -3371,17 +3371,17 @@ k6qZmVlFnFTNzMwq4qRqZmZWESdVMzOzijipmpmZVeT/Aa5qsZPceVdRAAAAAElFTkSuQmCC
 <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'h'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdYAAABWCAYAAABy3bc2AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdYAAABWCAYAAABy3bc2AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAEPxJREFUeJzt3Xm0HnV9x/H3hxAIewIBWQIJICIgpSCbRUxYhGhBzgEp
 LQInwGGRgrSlBcRqWARtpbK2iBwQokXKYoFWNpVEgZKchrIjkgghAUIkIQmUPeTbP36/20wmz3oz
 z33uvXxe58zJPLP85ju/+T3znfnN5LmKCMzMzKwaq3Q7ADMzs8HEidXMzKxCTqxmZmYVcmI1MzOr
@@ -3459,29 +3459,28 @@ ObGamZlVyInVzMysQk6sZmZmFXJiNTMzq5ATq1k/lX8QoO6fsjKz/smJ1czMrEJOrGb92xBJP8x/
 vPpeScO6HZCZNebEata/bQNcGRGfAhYBh3U5HjNrwonVrH97ISKeyOOPAGO6GIuZtcCJ1ax/e68w
 /iHN/9SjmXWZE6uZmVmFnFjN+rfyn5/yn6My6+f8Z+PMzMwq5DtWMzOzCjmxmpmZVciJ1czMrEJO
 rGZmZhVyYjUzM6uQE6uZmVmFnFjNzMwq5MRqZmZWof8DbzsJmCuzmfUAAAAASUVORK5CYII=
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <p>
-      This post at
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/">
-       peterroelants.github.io
-      </a>
-      is generated from an IPython notebook file.
-      <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/neural_net_implementation/neural_network_implementation_part03.ipynb">
-       Link to the full IPython notebook file
-      </a>
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post at
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/">
+     peterroelants.github.io
+    </a>
+    is generated from an IPython notebook file.
+    <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/neural_net_implementation/neural_network_implementation_part03.ipynb">
+     Link to the full IPython notebook file
+    </a>
+   </p>
   </div>
- </body>
-</html>
+ </div>
+</div>
