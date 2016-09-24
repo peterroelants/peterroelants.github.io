@@ -55,7 +55,7 @@ python $script_dir/insertCollapseTags.py $filename $indices_to_collapse > tmp.ht
 mv tmp.html $filename
 
 # Add the front matter before the html
-echo "--- \n\
+echo -e "--- \n\
 layout: $template \n\
 title: $title \n\
 ---\n\n" | cat - $filename > tmp && mv tmp $filename
