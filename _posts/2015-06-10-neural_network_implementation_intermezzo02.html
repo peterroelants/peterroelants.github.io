@@ -1,9 +1,4 @@
----
-layout: notebook_simple_ann_post
-title: How to implement a neural network Intermezzo 2
----
-
-
+--- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Intermezzo 2 \n---\n\n
 <div class="cell border-box-sizing text_cell rendered">
  <div class="prompt input_prompt">
  </div>
@@ -61,13 +56,13 @@ For multiclass classification there exists an extension of this logistic functio
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Python imports</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c"># Matrix and vector computation package</span>
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
-<span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span> <span class="c"># some plotting functions</span>
-<span class="kn">from</span> <span class="nn">mpl_toolkits.mplot3d</span> <span class="kn">import</span> <span class="n">Axes3D</span>  <span class="c"># 3D plots</span>
-<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">cm</span> <span class="c"># Colormaps</span>
-<span class="c"># Allow matplotlib to plot inside this notebook</span>
+     <pre><span></span><span class="c1"># Python imports</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c1"># Matrix and vector computation package</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span> <span class="c1"># some plotting functions</span>
+<span class="kn">from</span> <span class="nn">mpl_toolkits.mplot3d</span> <span class="kn">import</span> <span class="n">Axes3D</span>  <span class="c1"># 3D plots</span>
+<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">cm</span> <span class="c1"># Colormaps</span>
+<span class="c1"># Allow matplotlib to plot inside this notebook</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
 </pre>
     </div>
@@ -99,26 +94,26 @@ For multiclass classification there exists an extension of this logistic functio
    </p>
    $$ y_c = \varsigma(\mathbf{z})_c = \frac{e^{z_c}}{\sum_{d=1}^C e^{z_d}} \quad \text{for} \; c = 1 \cdots C$$
    <p>
-    The denominator $\sum_{d=1}^C e^{z_d}$ acts as a regularizer to make sure that $\sum_{c=1}^C y_c = 1$.
+    The denominator $\sum_{d=1}^C e^{z_d}$ acts as a regularizer to make sure that $\sum_{c=1}^C y_c = 1$. 
 As the output layer of a neural network, the softmax function can be represented graphically as a layer with $C$ neurons.
    </p>
    <p>
     We can write the probabilities that the class is $t=c$ for $c = 1 \ldots C$ given input $\mathbf{z}$ as:
    </p>
-   $$
-\begin{bmatrix}
+   $$ 
+\begin{bmatrix} 
 P(t=1 | \mathbf{z}) \\
 \vdots \\
 P(t=C | \mathbf{z}) \\
 \end{bmatrix}
-=
-\begin{bmatrix}
+= 
+\begin{bmatrix} 
 \varsigma(\mathbf{z})_1 \\
 \vdots \\
 \varsigma(\mathbf{z})_C \\
 \end{bmatrix}
 = \frac{1}{\sum_{d=1}^C e^{z_d}}
-\begin{bmatrix}
+\begin{bmatrix} 
 e^{z_1} \\
 \vdots \\
 e^{z_C} \\
@@ -143,7 +138,7 @@ $$
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the softmax function</span>
+     <pre><span></span><span class="c1"># Define the softmax function</span>
 <span class="k">def</span> <span class="nf">softmax</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">z</span><span class="p">))</span>
 </pre>
@@ -162,29 +157,29 @@ $$
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the softmax output for 2 dimensions for both classes</span>
-<span class="c"># Plot the output in function of the weights</span>
-<span class="c"># Define a vector of weights for which we want to plot the ooutput</span>
+     <pre><span></span><span class="c1"># Plot the softmax output for 2 dimensions for both classes</span>
+<span class="c1"># Plot the output in function of the weights</span>
+<span class="c1"># Define a vector of weights for which we want to plot the ooutput</span>
 <span class="n">nb_of_zs</span> <span class="o">=</span> <span class="mi">200</span>
-<span class="n">zs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_zs</span><span class="p">)</span> <span class="c"># input </span>
-<span class="n">zs_1</span><span class="p">,</span> <span class="n">zs_2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">zs</span><span class="p">,</span> <span class="n">zs</span><span class="p">)</span> <span class="c"># generate grid</span>
-<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_zs</span><span class="p">,</span> <span class="n">nb_of_zs</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="c"># initialize output</span>
-<span class="c"># Fill the output matrix for each combination of input z's</span>
+<span class="n">zs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_zs</span><span class="p">)</span> <span class="c1"># input </span>
+<span class="n">zs_1</span><span class="p">,</span> <span class="n">zs_2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">zs</span><span class="p">,</span> <span class="n">zs</span><span class="p">)</span> <span class="c1"># generate grid</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_zs</span><span class="p">,</span> <span class="n">nb_of_zs</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="c1"># initialize output</span>
+<span class="c1"># Fill the output matrix for each combination of input z's</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_zs</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_zs</span><span class="p">):</span>
         <span class="n">y</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">,:]</span> <span class="o">=</span> <span class="n">softmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">zs_1</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">zs_2</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]]))</span>
-<span class="c"># Plot the cost function surfaces for both classes</span>
+<span class="c1"># Plot the cost function surfaces for both classes</span>
 <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
-<span class="c"># Plot the cost function surface for t=1</span>
-<span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">gca</span><span class="p">(</span><span class="n">projection</span><span class="o">=</span><span class="s">'3d'</span><span class="p">)</span>
+<span class="c1"># Plot the cost function surface for t=1</span>
+<span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">gca</span><span class="p">(</span><span class="n">projection</span><span class="o">=</span><span class="s1">'3d'</span><span class="p">)</span>
 <span class="n">surf</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot_surface</span><span class="p">(</span><span class="n">zs_1</span><span class="p">,</span> <span class="n">zs_2</span><span class="p">,</span> <span class="n">y</span><span class="p">[:,:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">coolwarm</span><span class="p">)</span>
 <span class="n">ax</span><span class="o">.</span><span class="n">view_init</span><span class="p">(</span><span class="n">elev</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">azim</span><span class="o">=</span><span class="mi">70</span><span class="p">)</span>
 <span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">surf</span><span class="p">)</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s">'$z_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s">'$z_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">set_zlabel</span><span class="p">(</span><span class="s">'$y_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span> <span class="p">(</span><span class="s">'$P(t=1|\mathbf{z})$'</span><span class="p">)</span>
-<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s">'$P(t=1|\mathbf{z})$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$z_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$z_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_zlabel</span><span class="p">(</span><span class="s1">'$y_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span> <span class="p">(</span><span class="s1">'$P(t=1|\mathbf{z})$'</span><span class="p">)</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$P(t=1|\mathbf{z})$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
@@ -1118,8 +1113,8 @@ QQZLiP8fQe571187//cAAAAASUVORK5CYII=
    </p>
    $$
 \begin{split}
-\text{if} \; i = j :&amp; \frac{\partial y_i}{\partial z_i} = \frac{\partial \frac{e^{z_i}}{\Sigma_C}}{\partial z_i} = \frac{e^{z_i}\Sigma_C - 2e^{z_i}}{2\Sigma_C} = \frac{e^{z_i}}{\Sigma_C}\frac{\Sigma_C - e^{z_i}}{\Sigma_C} = \frac{e^{z_i}}{\Sigma_C}(1-\frac{e^{z_i}}{\Sigma_C}) =  y_i (1 - y_i)\\
-\text{if} \; i \neq j :&amp; \frac{\partial y_i}{\partial z_j} = \frac{\partial \frac{e^{z_i}}{\Sigma_C}}{\partial z_j} = \frac{0 - e^{z_i}e^{z_j}}{\Sigma_C * \Sigma_C} = -\frac{e^{z_i}}{\Sigma_C} \frac{e^{z_j}}{\Sigma_C} = -y_i y_j
+\text{if} \; i = j :&amp; \frac{\partial y_i}{\partial z_i} = \frac{\partial \frac{e^{z_i}}{\Sigma_C}}{\partial z_i} = \frac{e^{z_i}\Sigma_C - e^{z_i}e^{z_i}}{\Sigma_C^2} = \frac{e^{z_i}}{\Sigma_C}\frac{\Sigma_C - e^{z_i}}{\Sigma_C} = \frac{e^{z_i}}{\Sigma_C}(1-\frac{e^{z_i}}{\Sigma_C}) =  y_i (1 - y_i)\\
+\text{if} \; i \neq j :&amp; \frac{\partial y_i}{\partial z_j} = \frac{\partial \frac{e^{z_i}}{\Sigma_C}}{\partial z_j} = \frac{0 - e^{z_i}e^{z_j}}{\Sigma_C^2} = -\frac{e^{z_i}}{\Sigma_C} \frac{e^{z_j}}{\Sigma_C} = -y_i y_j
 \end{split}$$
    <p>
     Note that if $i = j$ this derivative is similar to the derivative of the logistic function.

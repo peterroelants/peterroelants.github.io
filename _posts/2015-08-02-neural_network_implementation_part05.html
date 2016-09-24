@@ -1,9 +1,4 @@
----
-layout: notebook_simple_ann_post
-title: How to implement a neural network Part 5
----
-
-
+--- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Part 5 \n---\n\n
 <div class="cell border-box-sizing text_cell rendered">
  <div class="prompt input_prompt">
  </div>
@@ -54,15 +49,15 @@ title: How to implement a neural network Part 5
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Python imports</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c"># Matrix and vector computation package</span>
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
-<span class="c"># Allow matplotlib to plot inside this notebook</span>
+     <pre><span></span><span class="c1"># Python imports</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c1"># Matrix and vector computation package</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="c1"># Allow matplotlib to plot inside this notebook</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
-<span class="c"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
+<span class="c1"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
 <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-<span class="kn">from</span> <span class="nn">sklearn</span> <span class="kn">import</span> <span class="n">datasets</span><span class="p">,</span> <span class="n">cross_validation</span><span class="p">,</span> <span class="n">metrics</span> <span class="c"># data and evaluation utils</span>
-<span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span> <span class="c"># some plotting functions</span>
+<span class="kn">from</span> <span class="nn">sklearn</span> <span class="kn">import</span> <span class="n">datasets</span><span class="p">,</span> <span class="n">cross_validation</span><span class="p">,</span> <span class="n">metrics</span> <span class="c1"># data and evaluation utils</span>
+<span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span> <span class="c1"># some plotting functions</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
 <span class="kn">import</span> <span class="nn">collections</span>
 </pre>
@@ -156,19 +151,19 @@ title: How to implement a neural network Part 5
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># load the data from scikit-learn.</span>
+     <pre><span></span><span class="c1"># load the data from scikit-learn.</span>
 <span class="n">digits</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">load_digits</span><span class="p">()</span>
 
-<span class="c"># Load the targets.</span>
-<span class="c"># Note that the targets are stored as digits, these need to be </span>
-<span class="c">#  converted to one-hot-encoding for the output sofmax layer.</span>
+<span class="c1"># Load the targets.</span>
+<span class="c1"># Note that the targets are stored as digits, these need to be </span>
+<span class="c1">#  converted to one-hot-encoding for the output sofmax layer.</span>
 <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">digits</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="mi">10</span><span class="p">))</span>
 <span class="n">T</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">T</span><span class="p">)),</span> <span class="n">digits</span><span class="o">.</span><span class="n">target</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
 
-<span class="c"># Divide the data into a train and test set.</span>
+<span class="c1"># Divide the data into a train and test set.</span>
 <span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">T_train</span><span class="p">,</span> <span class="n">T_test</span> <span class="o">=</span> <span class="n">cross_validation</span><span class="o">.</span><span class="n">train_test_split</span><span class="p">(</span>
     <span class="n">digits</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="mf">0.4</span><span class="p">)</span>
-<span class="c"># Divide the test set into a validation set and final test set.</span>
+<span class="c1"># Divide the test set into a validation set and final test set.</span>
 <span class="n">X_validation</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">T_validation</span><span class="p">,</span> <span class="n">T_test</span> <span class="o">=</span> <span class="n">cross_validation</span><span class="o">.</span><span class="n">train_test_split</span><span class="p">(</span>
     <span class="n">X_test</span><span class="p">,</span> <span class="n">T_test</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
 </pre>
@@ -187,12 +182,12 @@ title: How to implement a neural network Part 5
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot an example of each image.</span>
+     <pre><span></span><span class="c1"># Plot an example of each image.</span>
 <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
     <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">ax</span><span class="o">.</span><span class="n">matshow</span><span class="p">(</span><span class="n">digits</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">cmap</span><span class="o">=</span><span class="s">'binary'</span><span class="p">)</span>
-    <span class="n">ax</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s">'off'</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">matshow</span><span class="p">(</span><span class="n">digits</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">'binary'</span><span class="p">)</span> 
+    <span class="n">ax</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">'off'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
     </div>
@@ -343,14 +338,14 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the non-linear functions used</span>
-<span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
+     <pre><span></span><span class="c1"># Define the non-linear functions used</span>
+<span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> 
     <span class="k">return</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
 
-<span class="k">def</span> <span class="nf">logistic_deriv</span><span class="p">(</span><span class="n">y</span><span class="p">):</span>  <span class="c"># Derivative of logistic function</span>
+<span class="k">def</span> <span class="nf">logistic_deriv</span><span class="p">(</span><span class="n">y</span><span class="p">):</span>  <span class="c1"># Derivative of logistic function</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">y</span><span class="p">))</span>
-
-<span class="k">def</span> <span class="nf">softmax</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
+    
+<span class="k">def</span> <span class="nf">softmax</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> 
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
 </pre>
     </div>
@@ -368,17 +363,17 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the layers used in this model</span>
+     <pre><span></span><span class="c1"># Define the layers used in this model</span>
 <span class="k">class</span> <span class="nc">Layer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">"""Base class for the different layers.</span>
 <span class="sd">    Defines base methods and documentation of methods."""</span>
-
+    
     <span class="k">def</span> <span class="nf">get_params_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">"""Return an iterator over the parameters (if any).</span>
 <span class="sd">        The iterator has the same order as get_params_grad.</span>
 <span class="sd">        The elements returned by the iterator are editable in-place."""</span>
         <span class="k">return</span> <span class="p">[]</span>
-
+    
     <span class="k">def</span> <span class="nf">get_params_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">):</span>
         <span class="sd">"""Return a list of gradients over the parameters.</span>
 <span class="sd">        The list has the same order as the get_params_iter iterator.</span>
@@ -386,12 +381,12 @@ Each layer has the option to
 <span class="sd">        output_grad is the gradient at the output of this layer.</span>
 <span class="sd">        """</span>
         <span class="k">return</span> <span class="p">[]</span>
-
+    
     <span class="k">def</span> <span class="nf">get_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">"""Perform the forward step linear transformation.</span>
 <span class="sd">        X is the input."""</span>
         <span class="k">pass</span>
-
+    
     <span class="k">def</span> <span class="nf">get_input_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">output_grad</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">"""Return the gradient at the inputs of this layer.</span>
 <span class="sd">        Y is the pre-computed output of this layer (not needed in this case).</span>
@@ -416,31 +411,31 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="k">class</span> <span class="nc">LinearLayer</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+     <pre><span></span><span class="k">class</span> <span class="nc">LinearLayer</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
     <span class="sd">"""The linear layer performs a linear transformation to its input."""</span>
-
+    
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_in</span><span class="p">,</span> <span class="n">n_out</span><span class="p">):</span>
         <span class="sd">"""Initialize hidden layer parameters.</span>
 <span class="sd">        n_in is the number of input variables.</span>
 <span class="sd">        n_out is the number of output variables."""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n_in</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_out</span><span class="p">)</span>
-
+        
     <span class="k">def</span> <span class="nf">get_params_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">"""Return an iterator over the parameters."""</span>
-        <span class="k">return</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s">'readwrite'</span><span class="p">]),</span>
-                               <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s">'readwrite'</span><span class="p">]))</span>
-
+        <span class="k">return</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+                               <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]))</span>
+    
     <span class="k">def</span> <span class="nf">get_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">"""Perform the forward step linear transformation."""</span>
         <span class="k">return</span> <span class="n">X</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span>
-
+        
     <span class="k">def</span> <span class="nf">get_params_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">):</span>
         <span class="sd">"""Return a list of gradients over the parameters."""</span>
         <span class="n">JW</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">output_grad</span><span class="p">)</span>
         <span class="n">Jb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">output_grad</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">g</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="n">JW</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="n">Jb</span><span class="p">))]</span>
-
+    
     <span class="k">def</span> <span class="nf">get_input_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">):</span>
         <span class="sd">"""Return the gradient at the inputs of this layer."""</span>
         <span class="k">return</span> <span class="n">output_grad</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
@@ -460,13 +455,13 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="k">class</span> <span class="nc">LogisticLayer</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+     <pre><span></span><span class="k">class</span> <span class="nc">LogisticLayer</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
     <span class="sd">"""The logistic layer applies the logistic function to its inputs."""</span>
-
+    
     <span class="k">def</span> <span class="nf">get_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">"""Perform the forward step transformation."""</span>
         <span class="k">return</span> <span class="n">logistic</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
-
+    
     <span class="k">def</span> <span class="nf">get_input_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">):</span>
         <span class="sd">"""Return the gradient at the inputs of this layer."""</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">logistic_deriv</span><span class="p">(</span><span class="n">Y</span><span class="p">),</span> <span class="n">output_grad</span><span class="p">)</span>
@@ -486,17 +481,17 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="k">class</span> <span class="nc">SoftmaxOutputLayer</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+     <pre><span></span><span class="k">class</span> <span class="nc">SoftmaxOutputLayer</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
     <span class="sd">"""The softmax output layer computes the classification propabilities at the output."""</span>
-
+    
     <span class="k">def</span> <span class="nf">get_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">"""Perform the forward step transformation."""</span>
         <span class="k">return</span> <span class="n">softmax</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
-
+    
     <span class="k">def</span> <span class="nf">get_input_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
         <span class="sd">"""Return the gradient at the inputs of this layer."""</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">Y</span> <span class="o">-</span> <span class="n">T</span><span class="p">)</span> <span class="o">/</span> <span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-
+    
     <span class="k">def</span> <span class="nf">get_cost</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
         <span class="sd">"""Return the cost at the output of this output layer."""</span>
         <span class="k">return</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">Y</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
@@ -542,18 +537,18 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define a sample model to be trained on the data</span>
-<span class="n">hidden_neurons_1</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c"># Number of neurons in the first hidden-layer</span>
-<span class="n">hidden_neurons_2</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c"># Number of neurons in the second hidden-layer</span>
-<span class="c"># Create the model</span>
-<span class="n">layers</span> <span class="o">=</span> <span class="p">[]</span> <span class="c"># Define a list of layers</span>
-<span class="c"># Add first hidden layer</span>
+     <pre><span></span><span class="c1"># Define a sample model to be trained on the data</span>
+<span class="n">hidden_neurons_1</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c1"># Number of neurons in the first hidden-layer</span>
+<span class="n">hidden_neurons_2</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c1"># Number of neurons in the second hidden-layer</span>
+<span class="c1"># Create the model</span>
+<span class="n">layers</span> <span class="o">=</span> <span class="p">[]</span> <span class="c1"># Define a list of layers</span>
+<span class="c1"># Add first hidden layer</span>
 <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LinearLayer</span><span class="p">(</span><span class="n">X_train</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">hidden_neurons_1</span><span class="p">))</span>
 <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LogisticLayer</span><span class="p">())</span>
-<span class="c"># Add second hidden layer</span>
+<span class="c1"># Add second hidden layer</span>
 <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LinearLayer</span><span class="p">(</span><span class="n">hidden_neurons_1</span><span class="p">,</span> <span class="n">hidden_neurons_2</span><span class="p">))</span>
 <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LogisticLayer</span><span class="p">())</span>
-<span class="c"># Add output layer</span>
+<span class="c1"># Add output layer</span>
 <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LinearLayer</span><span class="p">(</span><span class="n">hidden_neurons_2</span><span class="p">,</span> <span class="n">T_train</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
 <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">SoftmaxOutputLayer</span><span class="p">())</span>
 </pre>
@@ -614,7 +609,7 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the forward propagation step as a method.</span>
+     <pre><span></span><span class="c1"># Define the forward propagation step as a method.</span>
 <span class="k">def</span> <span class="nf">forward_step</span><span class="p">(</span><span class="n">input_samples</span><span class="p">,</span> <span class="n">layers</span><span class="p">):</span>
     <span class="sd">"""</span>
 <span class="sd">    Compute and return the forward activation of each layer in layers.</span>
@@ -625,14 +620,14 @@ Each layer has the option to
 <span class="sd">        A list of activations where the activation at each index i+1 corresponds to</span>
 <span class="sd">        the activation of layer i in layers. activations[0] contains the input samples.  </span>
 <span class="sd">    """</span>
-    <span class="n">activations</span> <span class="o">=</span> <span class="p">[</span><span class="n">input_samples</span><span class="p">]</span> <span class="c"># List of layer activations</span>
-    <span class="c"># Compute the forward activations for each layer starting from the first</span>
+    <span class="n">activations</span> <span class="o">=</span> <span class="p">[</span><span class="n">input_samples</span><span class="p">]</span> <span class="c1"># List of layer activations</span>
+    <span class="c1"># Compute the forward activations for each layer starting from the first</span>
     <span class="n">X</span> <span class="o">=</span> <span class="n">input_samples</span>
     <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="n">layers</span><span class="p">:</span>
-        <span class="n">Y</span> <span class="o">=</span> <span class="n">layer</span><span class="o">.</span><span class="n">get_output</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>  <span class="c"># Get the output of the current layer</span>
-        <span class="n">activations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Y</span><span class="p">)</span>  <span class="c"># Store the output for future processing</span>
-        <span class="n">X</span> <span class="o">=</span> <span class="n">activations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c"># Set the current input as the activations of the previous layer</span>
-    <span class="k">return</span> <span class="n">activations</span>  <span class="c"># Return the activations of each layer</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="n">layer</span><span class="o">.</span><span class="n">get_output</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>  <span class="c1"># Get the output of the current layer</span>
+        <span class="n">activations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Y</span><span class="p">)</span>  <span class="c1"># Store the output for future processing</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">activations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># Set the current input as the activations of the previous layer</span>
+    <span class="k">return</span> <span class="n">activations</span>  <span class="c1"># Return the activations of each layer</span>
 </pre>
     </div>
    </div>
@@ -678,7 +673,7 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the backward propagation step as a method</span>
+     <pre><span></span><span class="c1"># Define the backward propagation step as a method</span>
 <span class="k">def</span> <span class="nf">backward_step</span><span class="p">(</span><span class="n">activations</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">layers</span><span class="p">):</span>
     <span class="sd">"""</span>
 <span class="sd">    Perform the backpropagation step over all the layers and return the parameter gradients.</span>
@@ -692,26 +687,26 @@ Each layer has the option to
 <span class="sd">        A list of parameter gradients where the gradients at each index corresponds to</span>
 <span class="sd">        the parameters gradients of the layer at the same index in layers. </span>
 <span class="sd">    """</span>
-    <span class="n">param_grads</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">()</span>  <span class="c"># List of parameter gradients for each layer</span>
-    <span class="n">output_grad</span> <span class="o">=</span> <span class="bp">None</span>  <span class="c"># The error gradient at the output of the current layer</span>
-    <span class="c"># Propagate the error backwards through all the layers.</span>
-    <span class="c">#  Use reversed to iterate backwards over the list of layers.</span>
-    <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">layers</span><span class="p">):</span>
-        <span class="n">Y</span> <span class="o">=</span> <span class="n">activations</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>  <span class="c"># Get the activations of the last layer on the stack</span>
-        <span class="c"># Compute the error at the output layer.</span>
-        <span class="c"># The output layer error is calculated different then hidden layer error.</span>
+    <span class="n">param_grads</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">()</span>  <span class="c1"># List of parameter gradients for each layer</span>
+    <span class="n">output_grad</span> <span class="o">=</span> <span class="bp">None</span>  <span class="c1"># The error gradient at the output of the current layer</span>
+    <span class="c1"># Propagate the error backwards through all the layers.</span>
+    <span class="c1">#  Use reversed to iterate backwards over the list of layers.</span>
+    <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">layers</span><span class="p">):</span>   
+        <span class="n">Y</span> <span class="o">=</span> <span class="n">activations</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>  <span class="c1"># Get the activations of the last layer on the stack</span>
+        <span class="c1"># Compute the error at the output layer.</span>
+        <span class="c1"># The output layer error is calculated different then hidden layer error.</span>
         <span class="k">if</span> <span class="n">output_grad</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="n">input_grad</span> <span class="o">=</span> <span class="n">layer</span><span class="o">.</span><span class="n">get_input_grad</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>  <span class="c"># output_grad is not None (layer is not output layer)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># output_grad is not None (layer is not output layer)</span>
             <span class="n">input_grad</span> <span class="o">=</span> <span class="n">layer</span><span class="o">.</span><span class="n">get_input_grad</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">)</span>
-        <span class="c"># Get the input of this layer (activations of the previous layer)</span>
+        <span class="c1"># Get the input of this layer (activations of the previous layer)</span>
         <span class="n">X</span> <span class="o">=</span> <span class="n">activations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-        <span class="c"># Compute the layer parameter gradients used to update the parameters</span>
+        <span class="c1"># Compute the layer parameter gradients used to update the parameters</span>
         <span class="n">grads</span> <span class="o">=</span> <span class="n">layer</span><span class="o">.</span><span class="n">get_params_grad</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">)</span>
         <span class="n">param_grads</span><span class="o">.</span><span class="n">appendleft</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span>
-        <span class="c"># Compute gradient at output of previous layer (input of current layer):</span>
+        <span class="c1"># Compute gradient at output of previous layer (input of current layer):</span>
         <span class="n">output_grad</span> <span class="o">=</span> <span class="n">input_grad</span>
-    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">param_grads</span><span class="p">)</span>  <span class="c"># Return the parameter gradients</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">param_grads</span><span class="p">)</span>  <span class="c1"># Return the parameter gradients</span>
 </pre>
     </div>
    </div>
@@ -764,37 +759,37 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Perform gradient checking</span>
-<span class="n">nb_samples_gradientcheck</span> <span class="o">=</span> <span class="mi">10</span> <span class="c"># Test the gradients on a subset of the data</span>
+     <pre><span></span><span class="c1"># Perform gradient checking</span>
+<span class="n">nb_samples_gradientcheck</span> <span class="o">=</span> <span class="mi">10</span> <span class="c1"># Test the gradients on a subset of the data</span>
 <span class="n">X_temp</span> <span class="o">=</span> <span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">nb_samples_gradientcheck</span><span class="p">,:]</span>
 <span class="n">T_temp</span> <span class="o">=</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">nb_samples_gradientcheck</span><span class="p">,:]</span>
-<span class="c"># Get the parameter gradients with backpropagation</span>
+<span class="c1"># Get the parameter gradients with backpropagation</span>
 <span class="n">activations</span> <span class="o">=</span> <span class="n">forward_step</span><span class="p">(</span><span class="n">X_temp</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>
 <span class="n">param_grads</span> <span class="o">=</span> <span class="n">backward_step</span><span class="p">(</span><span class="n">activations</span><span class="p">,</span> <span class="n">T_temp</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>
 
-<span class="c"># Set the small change to compute the numerical gradient</span>
+<span class="c1"># Set the small change to compute the numerical gradient</span>
 <span class="n">eps</span> <span class="o">=</span> <span class="mf">0.0001</span>
-<span class="c"># Compute the numerical gradients of the parameters in all layers.</span>
+<span class="c1"># Compute the numerical gradients of the parameters in all layers.</span>
 <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">layers</span><span class="p">)):</span>
     <span class="n">layer</span> <span class="o">=</span> <span class="n">layers</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
     <span class="n">layer_backprop_grads</span> <span class="o">=</span> <span class="n">param_grads</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-    <span class="c"># Compute the numerical gradient for each parameter in the layer</span>
+    <span class="c1"># Compute the numerical gradient for each parameter in the layer</span>
     <span class="k">for</span> <span class="n">p_idx</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">layer</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">()):</span>
         <span class="n">grad_backprop</span> <span class="o">=</span> <span class="n">layer_backprop_grads</span><span class="p">[</span><span class="n">p_idx</span><span class="p">]</span>
-        <span class="c"># + eps</span>
+        <span class="c1"># + eps</span>
         <span class="n">param</span> <span class="o">+=</span> <span class="n">eps</span>
         <span class="n">plus_cost</span> <span class="o">=</span> <span class="n">layers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">get_cost</span><span class="p">(</span><span class="n">forward_step</span><span class="p">(</span><span class="n">X_temp</span><span class="p">,</span> <span class="n">layers</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">T_temp</span><span class="p">)</span>
-        <span class="c"># - eps</span>
+        <span class="c1"># - eps</span>
         <span class="n">param</span> <span class="o">-=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">eps</span>
         <span class="n">min_cost</span> <span class="o">=</span> <span class="n">layers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">get_cost</span><span class="p">(</span><span class="n">forward_step</span><span class="p">(</span><span class="n">X_temp</span><span class="p">,</span> <span class="n">layers</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">T_temp</span><span class="p">)</span>
-        <span class="c"># reset param value</span>
+        <span class="c1"># reset param value</span>
         <span class="n">param</span> <span class="o">+=</span> <span class="n">eps</span>
-        <span class="c"># calculate numerical gradient</span>
+        <span class="c1"># calculate numerical gradient</span>
         <span class="n">grad_num</span> <span class="o">=</span> <span class="p">(</span><span class="n">plus_cost</span> <span class="o">-</span> <span class="n">min_cost</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">eps</span><span class="p">)</span>
-        <span class="c"># Raise error if the numerical grade is not close to the backprop gradient</span>
+        <span class="c1"># Raise error if the numerical grade is not close to the backprop gradient</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">grad_num</span><span class="p">,</span> <span class="n">grad_backprop</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">'Numerical gradient of {:.6f} is not close to the backpropagation gradient of {:.6f}!'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">grad_num</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">grad_backprop</span><span class="p">)))</span>
-<span class="k">print</span><span class="p">(</span><span class="s">'No gradient errors found'</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">'Numerical gradient of {:.6f} is not close to the backpropagation gradient of {:.6f}!'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">grad_num</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">grad_backprop</span><span class="p">)))</span>
+<span class="k">print</span><span class="p">(</span><span class="s1">'No gradient errors found'</span><span class="p">)</span>
 </pre>
     </div>
    </div>
@@ -860,13 +855,13 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Create the minibatches</span>
-<span class="n">batch_size</span> <span class="o">=</span> <span class="mi">25</span>  <span class="c"># Approximately 25 samples per batch</span>
-<span class="n">nb_of_batches</span> <span class="o">=</span> <span class="n">X_train</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="n">batch_size</span>  <span class="c"># Number of batches</span>
-<span class="c"># Create batches (X,Y) from the training set</span>
+     <pre><span></span><span class="c1"># Create the minibatches</span>
+<span class="n">batch_size</span> <span class="o">=</span> <span class="mi">25</span>  <span class="c1"># Approximately 25 samples per batch</span>
+<span class="n">nb_of_batches</span> <span class="o">=</span> <span class="n">X_train</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="n">batch_size</span>  <span class="c1"># Number of batches</span>
+<span class="c1"># Create batches (X,Y) from the training set</span>
 <span class="n">XT_batches</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span>
-    <span class="n">np</span><span class="o">.</span><span class="n">array_split</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">nb_of_batches</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>  <span class="c"># X samples</span>
-    <span class="n">np</span><span class="o">.</span><span class="n">array_split</span><span class="p">(</span><span class="n">T_train</span><span class="p">,</span> <span class="n">nb_of_batches</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>  <span class="c"># Y targets</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array_split</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">nb_of_batches</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>  <span class="c1"># X samples</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array_split</span><span class="p">(</span><span class="n">T_train</span><span class="p">,</span> <span class="n">nb_of_batches</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>  <span class="c1"># Y targets</span>
 </pre>
     </div>
    </div>
@@ -915,7 +910,7 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define a method to update the parameters</span>
+     <pre><span></span><span class="c1"># Define a method to update the parameters</span>
 <span class="k">def</span> <span class="nf">update_params</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">param_grads</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">):</span>
     <span class="sd">"""</span>
 <span class="sd">    Function to update the parameters of the given layers with the given gradients</span>
@@ -923,9 +918,9 @@ Each layer has the option to
 <span class="sd">    """</span>
     <span class="k">for</span> <span class="n">layer</span><span class="p">,</span> <span class="n">layer_backprop_grads</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">param_grads</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">grad</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">izip</span><span class="p">(</span><span class="n">layer</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">(),</span> <span class="n">layer_backprop_grads</span><span class="p">):</span>
-            <span class="c"># The parameter returned by the iterator point to the memory space of</span>
-            <span class="c">#  the original layer and can thus be modified inplace.</span>
-            <span class="n">param</span> <span class="o">-=</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">grad</span>  <span class="c"># Update each parameter</span>
+            <span class="c1"># The parameter returned by the iterator point to the memory space of</span>
+            <span class="c1">#  the original layer and can thus be modified inplace.</span>
+            <span class="n">param</span> <span class="o">-=</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">grad</span>  <span class="c1"># Update each parameter</span>
 </pre>
     </div>
    </div>
@@ -942,38 +937,38 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Perform backpropagation</span>
-<span class="c"># initalize some lists to store the cost for future analysis        </span>
+     <pre><span></span><span class="c1"># Perform backpropagation</span>
+<span class="c1"># initalize some lists to store the cost for future analysis        </span>
 <span class="n">minibatch_costs</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="n">training_costs</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="n">validation_costs</span> <span class="o">=</span> <span class="p">[]</span>
 
-<span class="n">max_nb_of_iterations</span> <span class="o">=</span> <span class="mi">300</span>  <span class="c"># Train for a maximum of 300 iterations</span>
-<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.1</span>  <span class="c"># Gradient descent learning rate</span>
+<span class="n">max_nb_of_iterations</span> <span class="o">=</span> <span class="mi">300</span>  <span class="c1"># Train for a maximum of 300 iterations</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.1</span>  <span class="c1"># Gradient descent learning rate</span>
 
-<span class="c"># Train for the maximum number of iterations</span>
+<span class="c1"># Train for the maximum number of iterations</span>
 <span class="k">for</span> <span class="n">iteration</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_nb_of_iterations</span><span class="p">):</span>
-    <span class="k">for</span> <span class="n">X</span><span class="p">,</span> <span class="n">T</span> <span class="ow">in</span> <span class="n">XT_batches</span><span class="p">:</span>  <span class="c"># For each minibatch sub-iteration</span>
-        <span class="n">activations</span> <span class="o">=</span> <span class="n">forward_step</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>  <span class="c"># Get the activations</span>
-        <span class="n">minibatch_cost</span> <span class="o">=</span> <span class="n">layers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">get_cost</span><span class="p">(</span><span class="n">activations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">T</span><span class="p">)</span>  <span class="c"># Get cost</span>
+    <span class="k">for</span> <span class="n">X</span><span class="p">,</span> <span class="n">T</span> <span class="ow">in</span> <span class="n">XT_batches</span><span class="p">:</span>  <span class="c1"># For each minibatch sub-iteration</span>
+        <span class="n">activations</span> <span class="o">=</span> <span class="n">forward_step</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>  <span class="c1"># Get the activations</span>
+        <span class="n">minibatch_cost</span> <span class="o">=</span> <span class="n">layers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">get_cost</span><span class="p">(</span><span class="n">activations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">T</span><span class="p">)</span>  <span class="c1"># Get cost</span>
         <span class="n">minibatch_costs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">minibatch_cost</span><span class="p">)</span>
-        <span class="n">param_grads</span> <span class="o">=</span> <span class="n">backward_step</span><span class="p">(</span><span class="n">activations</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>  <span class="c"># Get the gradients</span>
-        <span class="n">update_params</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">param_grads</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c"># Update the parameters</span>
-    <span class="c"># Get full training cost for future analysis (plots)</span>
+        <span class="n">param_grads</span> <span class="o">=</span> <span class="n">backward_step</span><span class="p">(</span><span class="n">activations</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>  <span class="c1"># Get the gradients</span>
+        <span class="n">update_params</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">param_grads</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c1"># Update the parameters</span>
+    <span class="c1"># Get full training cost for future analysis (plots)</span>
     <span class="n">activations</span> <span class="o">=</span> <span class="n">forward_step</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>
     <span class="n">train_cost</span> <span class="o">=</span> <span class="n">layers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">get_cost</span><span class="p">(</span><span class="n">activations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">T_train</span><span class="p">)</span>
     <span class="n">training_costs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">train_cost</span><span class="p">)</span>
-    <span class="c"># Get full validation cost</span>
+    <span class="c1"># Get full validation cost</span>
     <span class="n">activations</span> <span class="o">=</span> <span class="n">forward_step</span><span class="p">(</span><span class="n">X_validation</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>
     <span class="n">validation_cost</span> <span class="o">=</span> <span class="n">layers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">get_cost</span><span class="p">(</span><span class="n">activations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">T_validation</span><span class="p">)</span>
     <span class="n">validation_costs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">validation_cost</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">validation_costs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">:</span>
-        <span class="c"># Stop training if the cost on the validation set doesn't decrease</span>
-        <span class="c">#  for 3 iterations</span>
+        <span class="c1"># Stop training if the cost on the validation set doesn't decrease</span>
+        <span class="c1">#  for 3 iterations</span>
         <span class="k">if</span> <span class="n">validation_costs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">validation_costs</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">validation_costs</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">]:</span>
             <span class="k">break</span>
-
-<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="n">iteration</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c"># The number of iterations that have been executed</span>
+    
+<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="n">iteration</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># The number of iterations that have been executed</span>
 </pre>
     </div>
    </div>
@@ -1004,17 +999,17 @@ Each layer has the option to
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the minibatch, full training set, and validation costs</span>
+     <pre><span></span><span class="c1"># Plot the minibatch, full training set, and validation costs</span>
 <span class="n">minibatch_x_inds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">nb_of_iterations</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_iterations</span><span class="o">*</span><span class="n">nb_of_batches</span><span class="p">)</span>
 <span class="n">iteration_x_inds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">nb_of_iterations</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_iterations</span><span class="p">)</span>
-<span class="c"># Plot the cost over the iterations</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">minibatch_x_inds</span><span class="p">,</span> <span class="n">minibatch_costs</span><span class="p">,</span> <span class="s">'k-'</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'cost minibatches'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">iteration_x_inds</span><span class="p">,</span> <span class="n">training_costs</span><span class="p">,</span> <span class="s">'r-'</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'cost full training set'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">iteration_x_inds</span><span class="p">,</span> <span class="n">validation_costs</span><span class="p">,</span> <span class="s">'b-'</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'cost validation set'</span><span class="p">)</span>
-<span class="c"># Add labels to the plot</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'iteration'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'Decrease of cost over backprop iteration'</span><span class="p">)</span>
+<span class="c1"># Plot the cost over the iterations</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">minibatch_x_inds</span><span class="p">,</span> <span class="n">minibatch_costs</span><span class="p">,</span> <span class="s1">'k-'</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'cost minibatches'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">iteration_x_inds</span><span class="p">,</span> <span class="n">training_costs</span><span class="p">,</span> <span class="s1">'r-'</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'cost full training set'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">iteration_x_inds</span><span class="p">,</span> <span class="n">validation_costs</span><span class="p">,</span> <span class="s1">'b-'</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'cost validation set'</span><span class="p">)</span>
+<span class="c1"># Add labels to the plot</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'iteration'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Decrease of cost over backprop iteration'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
 <span class="n">x1</span><span class="p">,</span><span class="n">x2</span><span class="p">,</span><span class="n">y1</span><span class="p">,</span><span class="n">y2</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span><span class="n">nb_of_iterations</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mf">2.5</span><span class="p">))</span>
@@ -1511,12 +1506,12 @@ A/R/EMbHCZbvAAAAAElFTkSuQmCC
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Get results of test data</span>
-<span class="n">y_true</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">T_test</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c"># Get the target outputs</span>
-<span class="n">activations</span> <span class="o">=</span> <span class="n">forward_step</span><span class="p">(</span><span class="n">X_test</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>  <span class="c"># Get activation of test samples</span>
-<span class="n">y_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">activations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c"># Get the predictions made by the network</span>
-<span class="n">test_accuracy</span> <span class="o">=</span> <span class="n">metrics</span><span class="o">.</span><span class="n">accuracy_score</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">)</span>  <span class="c"># Test set accuracy</span>
-<span class="k">print</span><span class="p">(</span><span class="s">'The accuracy on the test set is {:.2f}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">test_accuracy</span><span class="p">))</span>
+     <pre><span></span><span class="c1"># Get results of test data</span>
+<span class="n">y_true</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">T_test</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Get the target outputs</span>
+<span class="n">activations</span> <span class="o">=</span> <span class="n">forward_step</span><span class="p">(</span><span class="n">X_test</span><span class="p">,</span> <span class="n">layers</span><span class="p">)</span>  <span class="c1"># Get activation of test samples</span>
+<span class="n">y_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">activations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Get the predictions made by the network</span>
+<span class="n">test_accuracy</span> <span class="o">=</span> <span class="n">metrics</span><span class="o">.</span><span class="n">accuracy_score</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">)</span>  <span class="c1"># Test set accuracy</span>
+<span class="k">print</span><span class="p">(</span><span class="s1">'The accuracy on the test set is {:.2f}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">test_accuracy</span><span class="p">))</span>
 </pre>
     </div>
    </div>
@@ -1545,13 +1540,13 @@ A/R/EMbHCZbvAAAAAElFTkSuQmCC
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Show confusion table</span>
-<span class="n">conf_matrix</span> <span class="o">=</span> <span class="n">metrics</span><span class="o">.</span><span class="n">confusion_matrix</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>  <span class="c"># Get confustion matrix</span>
-<span class="c"># Plot the confusion table</span>
-<span class="n">class_names</span> <span class="o">=</span> <span class="p">[</span><span class="s">'${:d}$'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)]</span>  <span class="c"># Digit class names</span>
+     <pre><span></span><span class="c1"># Show confusion table</span>
+<span class="n">conf_matrix</span> <span class="o">=</span> <span class="n">metrics</span><span class="o">.</span><span class="n">confusion_matrix</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>  <span class="c1"># Get confustion matrix</span>
+<span class="c1"># Plot the confusion table</span>
+<span class="n">class_names</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'${:d}$'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)]</span>  <span class="c1"># Digit class names</span>
 <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
 <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">111</span><span class="p">)</span>
-<span class="c"># Show class labels on each axis</span>
+<span class="c1"># Show class labels on each axis</span>
 <span class="n">ax</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">tick_top</span><span class="p">()</span>
 <span class="n">major_ticks</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">10</span><span class="p">)</span>
 <span class="n">minor_ticks</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)]</span>
@@ -1561,20 +1556,20 @@ A/R/EMbHCZbvAAAAAElFTkSuQmCC
 <span class="n">ax</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_ticks</span><span class="p">(</span><span class="n">minor_ticks</span><span class="p">,</span> <span class="n">minor</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
 <span class="n">ax</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">set_ticklabels</span><span class="p">(</span><span class="n">class_names</span><span class="p">,</span> <span class="n">minor</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
 <span class="n">ax</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_ticklabels</span><span class="p">(</span><span class="n">class_names</span><span class="p">,</span> <span class="n">minor</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="c"># Set plot labels</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_label_position</span><span class="p">(</span><span class="s">"right"</span><span class="p">)</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s">'Predicted label'</span><span class="p">)</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s">'True label'</span><span class="p">)</span>
-<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s">'Confusion table'</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">1.03</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="c"># Show a grid to seperate digits</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">b</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s">u'minor'</span><span class="p">)</span>
-<span class="c"># Color each grid cell according to the number classes predicted</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">conf_matrix</span><span class="p">,</span> <span class="n">interpolation</span><span class="o">=</span><span class="s">'nearest'</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s">'binary'</span><span class="p">)</span>
-<span class="c"># Show the number of samples in each cell</span>
+<span class="c1"># Set plot labels</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_label_position</span><span class="p">(</span><span class="s2">"right"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'Predicted label'</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'True label'</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">'Confusion table'</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">1.03</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="c1"># Show a grid to seperate digits</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">b</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">u'minor'</span><span class="p">)</span>
+<span class="c1"># Color each grid cell according to the number classes predicted</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">conf_matrix</span><span class="p">,</span> <span class="n">interpolation</span><span class="o">=</span><span class="s1">'nearest'</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">'binary'</span><span class="p">)</span>
+<span class="c1"># Show the number of samples in each cell</span>
 <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">conf_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
     <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">conf_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
-        <span class="n">color</span> <span class="o">=</span> <span class="s">'w'</span> <span class="k">if</span> <span class="n">x</span> <span class="o">==</span> <span class="n">y</span> <span class="k">else</span> <span class="s">'k'</span>
-        <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">conf_matrix</span><span class="p">[</span><span class="n">y</span><span class="p">,</span><span class="n">x</span><span class="p">],</span> <span class="n">ha</span><span class="o">=</span><span class="s">"center"</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s">"center"</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">)</span>
+        <span class="n">color</span> <span class="o">=</span> <span class="s1">'w'</span> <span class="k">if</span> <span class="n">x</span> <span class="o">==</span> <span class="n">y</span> <span class="k">else</span> <span class="s1">'k'</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">conf_matrix</span><span class="p">[</span><span class="n">y</span><span class="p">,</span><span class="n">x</span><span class="p">],</span> <span class="n">ha</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">)</span>       
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
     </div>

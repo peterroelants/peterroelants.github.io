@@ -4,441 +4,440 @@ title: How to implement a recurrent neural network Part 2
 ---
 
 
-<html>
- <body>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Binary-addition-with-a-non-linear-RNN">
-      Binary addition with a non-linear RNN
-      <a class="anchor-link" href="#Binary-addition-with-a-non-linear-RNN">
-       ¶
-      </a>
-     </h2>
-     <p>
-      This part will cover:
-     </p>
-     <ul>
-      <li>
-       Store data in
-       <a href="http://peterroelants.github.io/posts/rnn_implementation_part02/#Dataset">
-        tensor
-       </a>
-      </li>
-      <li>
-       Optimization with
-       <a href="http://peterroelants.github.io/posts/rnn_implementation_part02/#Rmsprop-with-momentum-optimisation">
-        Rmsprop and Nesterov momentum
-       </a>
-      </li>
-     </ul>
-     <p>
-      While the
-      <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/">
-       first part
-      </a>
-      of this tutorial described a simple linear recurrent network, this tutorial will describe an RNN with non-linear transfer functions that is able to learn how to perform
-      <a href="https://en.wikipedia.org/wiki/Binary_number#Addition">
-       binary addition
-      </a>
-      from examples.
-     </p>
-     <p>
-      First we import the libraries we need and define the dataset.
-     </p>
-    </div>
-   </div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Binary-addition-with-a-non-linear-RNN">
+    Binary addition with a non-linear RNN
+    <a class="anchor-link" href="#Binary-addition-with-a-non-linear-RNN">
+     ¶
+    </a>
+   </h2>
+   <p>
+    This part will cover:
+   </p>
+   <ul>
+    <li>
+     Store data in
+     <a href="http://peterroelants.github.io/posts/rnn_implementation_part02/#Dataset">
+      tensor
+     </a>
+    </li>
+    <li>
+     Optimization with
+     <a href="http://peterroelants.github.io/posts/rnn_implementation_part02/#Rmsprop-with-momentum-optimisation">
+      Rmsprop and Nesterov momentum
+     </a>
+    </li>
+   </ul>
+   <p>
+    While the
+    <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/">
+     first part
+    </a>
+    of this tutorial described a simple linear recurrent network, this tutorial will describe an RNN with non-linear transfer functions that is able to learn how to perform
+    <a href="https://en.wikipedia.org/wiki/Binary_number#Addition">
+     binary addition
+    </a>
+    from examples.
+   </p>
+   <p>
+    First we import the libraries we need and define the dataset.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [1]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [1]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Python imports</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Python imports</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c"># Matrix and vector computation package</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c1"># Matrix and vector computation package</span>
 <span class="kn">import</span> <span class="nn">matplotlib</span>
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
-<span class="c"># Allow matplotlib to plot inside this notebook</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="c1"># Allow matplotlib to plot inside this notebook</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
-<span class="c"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
+<span class="c1"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
 <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Dataset">
-      Dataset
-      <a class="anchor-link" href="#Dataset">
-       ¶
-      </a>
-     </h2>
-     <p>
-      This tutorial uses a dataset of 2000 training samples to train the RNN that can be created with the
-      <code>
-       create_dataset
-      </code>
-      method defined below. Each sample consists of two 6-bit input numbers ($x_{i1}$, $x_{i2}$) padded with a 0 to make it 7 characters long, and a 7-bit target number ($t_{i}$) so that $t_{i} = x_{i1} + x_{i2}$ ($i$ is the sample index). The numbers are represented as
-      <a href="https://en.wikipedia.org/wiki/Binary_number">
-       binary numbers
-      </a>
-      with the
-      <a href="https://en.wikipedia.org/wiki/Most_significant_bit">
-       most significant bit
-      </a>
-      on the right (least significant bit first). This is so that our RNN can perform the addition form left to right.
-     </p>
-     <p>
-      The input and target vectors are stored in a 3th-order tensor. A
-      <a href="https://en.wikipedia.org/wiki/Tensor">
-       tensor
-      </a>
-      is a generalisation of vectors and matrices, a vector is a 1st-order tensor, a matrix is a 2nd-order tensor. The order of a tensor is the dimensionality of the array data structure needed to represent it.
-      <br/>
-      The dimensions of our training data (
-      <code>
-       X_train
-      </code>
-      ,
-      <code>
-       T_train
-      </code>
-      ) are printed after the creation of the dataset below. The first order of our data tensors goes over all the samples (2000 samples), the second order goes over the variables per unit of time (7 timesteps), and the third order goes over the variables for each timestep and sample (e.g. input variables $x_{ik1}$, $x_{ik2}$ with $i$ the sample index and $k$ the timestep). The input tensor
-      <code>
-       X_train
-      </code>
-      is visualised in the following figure:
-     </p>
-     <p>
-      <img alt="Visualisation of input tensor X" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/SimpleRNN02_Tensor.png"/>
-     </p>
-     <p>
-      The following code block initialises the dataset.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Dataset">
+    Dataset
+    <a class="anchor-link" href="#Dataset">
+     ¶
+    </a>
+   </h2>
+   <p>
+    This tutorial uses a dataset of 2000 training samples to train the RNN that can be created with the
+    <code>
+     create_dataset
+    </code>
+    method defined below. Each sample consists of two 6-bit input numbers ($x_{i1}$, $x_{i2}$) padded with a 0 to make it 7 characters long, and a 7-bit target number ($t_{i}$) so that $t_{i} = x_{i1} + x_{i2}$ ($i$ is the sample index). The numbers are represented as
+    <a href="https://en.wikipedia.org/wiki/Binary_number">
+     binary numbers
+    </a>
+    with the
+    <a href="https://en.wikipedia.org/wiki/Most_significant_bit">
+     most significant bit
+    </a>
+    on the right (least significant bit first). This is so that our RNN can perform the addition form left to right.
+   </p>
+   <p>
+    The input and target vectors are stored in a 3th-order tensor. A
+    <a href="https://en.wikipedia.org/wiki/Tensor">
+     tensor
+    </a>
+    is a generalisation of vectors and matrices, a vector is a 1st-order tensor, a matrix is a 2nd-order tensor. The order of a tensor is the dimensionality of the array data structure needed to represent it.
+    <br>
+     The dimensions of our training data (
+     <code>
+      X_train
+     </code>
+     ,
+     <code>
+      T_train
+     </code>
+     ) are printed after the creation of the dataset below. The first order of our data tensors goes over all the samples (2000 samples), the second order goes over the variables per unit of time (7 timesteps), and the third order goes over the variables for each timestep and sample (e.g. input variables $x_{ik1}$, $x_{ik2}$ with $i$ the sample index and $k$ the timestep). The input tensor
+     <code>
+      X_train
+     </code>
+     is visualised in the following figure:
+    </br>
+   </p>
+   <p>
+    <img alt="Visualisation of input tensor X" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/SimpleRNN02_Tensor.png"/>
+   </p>
+   <p>
+    The following code block initialises the dataset.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [2]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [2]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Create dataset</span>
-<span class="n">nb_train</span> <span class="o">=</span> <span class="mi">2000</span>  <span class="c"># Number of training samples</span>
-<span class="c"># Addition of 2 n-bit numbers can result in a n+1 bit number</span>
-<span class="n">sequence_len</span> <span class="o">=</span> <span class="mi">7</span>  <span class="c"># Length of the binary sequence</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Create dataset</span>
+<span class="n">nb_train</span> <span class="o">=</span> <span class="mi">2000</span>  <span class="c1"># Number of training samples</span>
+<span class="c1"># Addition of 2 n-bit numbers can result in a n+1 bit number</span>
+<span class="n">sequence_len</span> <span class="o">=</span> <span class="mi">7</span>  <span class="c1"># Length of the binary sequence</span>
 
 <span class="k">def</span> <span class="nf">create_dataset</span><span class="p">(</span><span class="n">nb_samples</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">):</span>
     <span class="sd">"""Create a dataset for binary addition and return as input, targets."""</span>
-    <span class="n">max_int</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="p">(</span><span class="n">sequence_len</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="c"># Maximum integer that can be added</span>
-    <span class="n">format_str</span> <span class="o">=</span> <span class="s">'{:0'</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">sequence_len</span><span class="p">)</span> <span class="o">+</span> <span class="s">'b}'</span> <span class="c"># Transform integer in binary format</span>
-    <span class="n">nb_inputs</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c"># Add 2 binary numbers</span>
-    <span class="n">nb_outputs</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c"># Result is 1 binary number</span>
-    <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_samples</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">,</span> <span class="n">nb_inputs</span><span class="p">))</span>  <span class="c"># Input samples</span>
-    <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_samples</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">,</span> <span class="n">nb_outputs</span><span class="p">))</span>  <span class="c"># Target samples</span>
-    <span class="c"># Fill up the input and target matrix</span>
+    <span class="n">max_int</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="p">(</span><span class="n">sequence_len</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># Maximum integer that can be added</span>
+    <span class="n">format_str</span> <span class="o">=</span> <span class="s1">'{:0'</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">sequence_len</span><span class="p">)</span> <span class="o">+</span> <span class="s1">'b}'</span> <span class="c1"># Transform integer in binary format</span>
+    <span class="n">nb_inputs</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># Add 2 binary numbers</span>
+    <span class="n">nb_outputs</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># Result is 1 binary number</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_samples</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">,</span> <span class="n">nb_inputs</span><span class="p">))</span>  <span class="c1"># Input samples</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_samples</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">,</span> <span class="n">nb_outputs</span><span class="p">))</span>  <span class="c1"># Target samples</span>
+    <span class="c1"># Fill up the input and target matrix</span>
     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nb_samples</span><span class="p">):</span>
-        <span class="c"># Generate random numbers to add</span>
+        <span class="c1"># Generate random numbers to add</span>
         <span class="n">nb1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_int</span><span class="p">)</span>
         <span class="n">nb2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_int</span><span class="p">)</span>
-        <span class="c"># Fill current input and target row.</span>
-        <span class="c"># Note that binary numbers are added from right to left, but our RNN reads </span>
-        <span class="c">#  from left to right, so reverse the sequence.</span>
+        <span class="c1"># Fill current input and target row.</span>
+        <span class="c1"># Note that binary numbers are added from right to left, but our RNN reads </span>
+        <span class="c1">#  from left to right, so reverse the sequence.</span>
         <span class="n">X</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">reversed</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">format_str</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nb1</span><span class="p">)]))</span>
         <span class="n">X</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">reversed</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">format_str</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nb2</span><span class="p">)]))</span>
         <span class="n">T</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">reversed</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">format_str</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nb1</span><span class="o">+</span><span class="n">nb2</span><span class="p">)]))</span>
     <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">T</span>
 
-<span class="c"># Create training samples</span>
+<span class="c1"># Create training samples</span>
 <span class="n">X_train</span><span class="p">,</span> <span class="n">T_train</span> <span class="o">=</span> <span class="n">create_dataset</span><span class="p">(</span><span class="n">nb_train</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>
-<span class="k">print</span><span class="p">(</span><span class="s">'X_train shape: {0}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">X_train</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
-<span class="k">print</span><span class="p">(</span><span class="s">'T_train shape: {0}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">T_train</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+<span class="k">print</span><span class="p">(</span><span class="s1">'X_train shape: {0}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">X_train</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+<span class="k">print</span><span class="p">(</span><span class="s1">'T_train shape: {0}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">T_train</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>X_train shape: (2000, 7, 2)
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>X_train shape: (2000, 7, 2)
 T_train shape: (2000, 7, 1)
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Binary-addition">
-      Binary addition
-      <a class="anchor-link" href="#Binary-addition">
-       ¶
-      </a>
-     </h3>
-     <p>
-      Performing binary addition is a good
-      <a href="https://www.cs.toronto.edu/~hinton/csc2535/notes/lec10new.pdf">
-       toy problem
-      </a>
-      to illustrate how recurrent neural networks process input streams into output streams. The network needs to learn how to carry a bit to the next state (memory) and when to output a 0 or 1 dependent on the input and state.
-     </p>
-     <p>
-      The following code prints a visualisation of the inputs and target output we want our network to produce.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Binary-addition">
+    Binary addition
+    <a class="anchor-link" href="#Binary-addition">
+     ¶
+    </a>
+   </h3>
+   <p>
+    Performing binary addition is a good
+    <a href="https://www.cs.toronto.edu/~hinton/csc2535/notes/lec10new.pdf">
+     toy problem
+    </a>
+    to illustrate how recurrent neural networks process input streams into output streams. The network needs to learn how to carry a bit to the next state (memory) and when to output a 0 or 1 dependent on the input and state.
+   </p>
+   <p>
+    The following code prints a visualisation of the inputs and target output we want our network to produce.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [3]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [3]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Show an example input and target</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Show an example input and target</span>
 <span class="k">def</span> <span class="nf">printSample</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
     <span class="sd">"""Print a sample in a more visual way."""</span>
-    <span class="n">x1</span> <span class="o">=</span> <span class="s">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">x1</span><span class="p">])</span>
-    <span class="n">x2</span> <span class="o">=</span> <span class="s">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">x2</span><span class="p">])</span>
-    <span class="n">t</span> <span class="o">=</span> <span class="s">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">t</span><span class="p">])</span>
+    <span class="n">x1</span> <span class="o">=</span> <span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">x1</span><span class="p">])</span>
+    <span class="n">x2</span> <span class="o">=</span> <span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">x2</span><span class="p">])</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">t</span><span class="p">])</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">y</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
-        <span class="n">y</span> <span class="o">=</span> <span class="s">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">y</span><span class="p">])</span>
-    <span class="k">print</span><span class="p">(</span><span class="s">'x1:   {:s}   {:2d}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="s">''</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">x1</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)))</span>
-    <span class="k">print</span><span class="p">(</span><span class="s">'x2: + {:s}   {:2d} '</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x2</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="s">''</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">x2</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)))</span>
-    <span class="k">print</span><span class="p">(</span><span class="s">'      -------   --'</span><span class="p">)</span>
-    <span class="k">print</span><span class="p">(</span><span class="s">'t:  = {:s}   {:2d}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="s">''</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">t</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)))</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">y</span><span class="p">])</span>
+    <span class="k">print</span><span class="p">(</span><span class="s1">'x1:   {:s}   {:2d}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">x1</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)))</span>
+    <span class="k">print</span><span class="p">(</span><span class="s1">'x2: + {:s}   {:2d} '</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x2</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">x2</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)))</span>
+    <span class="k">print</span><span class="p">(</span><span class="s1">'      -------   --'</span><span class="p">)</span>
+    <span class="k">print</span><span class="p">(</span><span class="s1">'t:  = {:s}   {:2d}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">t</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)))</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">y</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
-        <span class="k">print</span><span class="p">(</span><span class="s">'y:  = {:s}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">t</span><span class="p">))</span>
+        <span class="k">print</span><span class="p">(</span><span class="s1">'y:  = {:s}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">t</span><span class="p">))</span>
     
-<span class="c"># Print the first sample</span>
+<span class="c1"># Print the first sample</span>
 <span class="n">printSample</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:])</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>x1:   1010010   37
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>x1:   1010010   37
 x2: + 1101010   43 
       -------   --
 t:  = 0000101   80
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Recurrent-neural-network-architecture">
-      Recurrent neural network architecture
-      <a class="anchor-link" href="#Recurrent-neural-network-architecture">
-       ¶
-      </a>
-     </h2>
-     <p>
-      Our recurrent network will take 2 input variables for each sample for each timepoint, transform them to states, and output a single probability that the current output is $1$ (instead of $0$). The input is transformed into the states of the RNN where it can hold information so the network knows what to output the next timestep.
-     </p>
-     <p>
-      There are many ways to visualise the RNN we are going to build. We can visualise the network as in the
-      <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/">
-       previous part
-      </a>
-      of our tutorial and unfold the processing of each input, state-update and output of a single timestep separately from the other timesteps.
-     </p>
-     <p>
-      <img alt="Structure of the RNN" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/SimpleRNN02_1.png"/>
-     </p>
-     <p>
-      Or we can view the processing of the full input, state-updates, and full output seperately from each other. The full input tensor can be
-      <a href="https://en.wikipedia.org/wiki/Map_%28higher-order_function%29">
-       mapped
-      </a>
-      in parallel to be used directly in the RNN state updates. And also the RNN states can be mapped in parallel to the output of each timestep.
-     </p>
-     <p>
-      <img alt="Structure of the RNN tensor processing" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/SimpleRNN02_2.png"/>
-     </p>
-     <p>
-      The steps are abstracted in different classes below. Each class has a
-      <code>
-       forward
-      </code>
-      method that performs the
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/#1.-Forward-step">
-       forward steps
-      </a>
-      of backpropagation, and a
-      <code>
-       backward
-      </code>
-      method that perform the
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/#2.-Backward-step">
-       backward
-      </a>
-      steps of backpropagation.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Recurrent-neural-network-architecture">
+    Recurrent neural network architecture
+    <a class="anchor-link" href="#Recurrent-neural-network-architecture">
+     ¶
+    </a>
+   </h2>
+   <p>
+    Our recurrent network will take 2 input variables for each sample for each timepoint, transform them to states, and output a single probability that the current output is $1$ (instead of $0$). The input is transformed into the states of the RNN where it can hold information so the network knows what to output the next timestep.
+   </p>
+   <p>
+    There are many ways to visualise the RNN we are going to build. We can visualise the network as in the
+    <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/">
+     previous part
+    </a>
+    of our tutorial and unfold the processing of each input, state-update and output of a single timestep separately from the other timesteps.
+   </p>
+   <p>
+    <img alt="Structure of the RNN" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/SimpleRNN02_1.png"/>
+   </p>
+   <p>
+    Or we can view the processing of the full input, state-updates, and full output seperately from each other. The full input tensor can be
+    <a href="https://en.wikipedia.org/wiki/Map_%28higher-order_function%29">
+     mapped
+    </a>
+    in parallel to be used directly in the RNN state updates. And also the RNN states can be mapped in parallel to the output of each timestep.
+   </p>
+   <p>
+    <img alt="Structure of the RNN tensor processing" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/SimpleRNN02_2.png"/>
+   </p>
+   <p>
+    The steps are abstracted in different classes below. Each class has a
+    <code>
+     forward
+    </code>
+    method that performs the
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/#1.-Forward-step">
+     forward steps
+    </a>
+    of backpropagation, and a
+    <code>
+     backward
+    </code>
+    method that perform the
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/#2.-Backward-step">
+     backward
+    </a>
+    steps of backpropagation.
+   </p>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Processing-of-input-and-output-tensors">
-      Processing of input and output tensors
-      <a class="anchor-link" href="#Processing-of-input-and-output-tensors">
-       ¶
-      </a>
-     </h3>
-     <h4 id="Linear-transformation">
-      Linear transformation
-      <a class="anchor-link" href="#Linear-transformation">
-       ¶
-      </a>
-     </h4>
-     <p>
-      Neural networks typically transform input vectors by matrix multiplication and vector addition followed by a non-linear transfer function. The 2-dimensional input vectors to our network ($x_{ik1}$, $x_{ik2}$) are transformed by a $2 \times 3$ weight matrix and a bias vector of size 3. Before they can be added to the states of the RNN. The 3-dimensional state vectors are transformed to a 1-dimensional output vector by a $3 \times 1$ weight matrix and a bias vector of size 1 to give the output probabilities.
-     </p>
-     <p>
-      Since we want to process all inputs for each sample and each timestep in one computation we can use the numpy
-      <a href="http://docs.scipy.org/doc/numpy/reference/generated/numpy.tensordot.html">
-       <code>
-        tensordot
-       </code>
-      </a>
-      function to perform the dot products. This function takes 2 tensors and the axes that need to be aggregated by summation between the elements and a product of the result. For example the transformation of input X ($2000 \times 7 \times 2$) to the states S ($2000 \times 7 \times 3$) with the help of matrix W ($2 \times 3$) can be done by
-      <code>
-       S = tensordot(X, W, axes=((-1),(0)))
-      </code>
-      . This method will sum the elements of the last order (-1) of X with the elements of the first order (0) of W and multiply them together. This is the same as doing the matrix dot product for each [$x_{ik1}$, $x_{ik2}$] vector with W.
-      <code>
-       tensordot
-      </code>
-      can then make sure that the underlying computations can be done efficiently and in parallel.
-     </p>
-     <p>
-      These linear tensor transformations are used to transform the input X to the states S, and from the states S to the output Y. This linear transformation, together with its gradient is implemented in the
-      <code>
-       TensorLinear
-      </code>
-      class below. Note that the weights are initialized by sampling uniformly between $\pm \sqrt{6.0 / (n_{in} + n_{out})}$
-      <a href="http://jmlr.org/proceedings/papers/v9/glorot10a/glorot10a.pdf">
-       as suggested by X. Glorot
-      </a>
-      .
-     </p>
-     <h4 id="Logistic-classification">
-      Logistic classification
-      <a class="anchor-link" href="#Logistic-classification">
-       ¶
-      </a>
-     </h4>
-     <p>
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_intermezzo01/">
-       Logistic classification
-      </a>
-      is used to output the probability that the output at current time step k is 1. This function together with its cost and gradient is implemented in the
-      <code>
-       LogisticClassifier
-      </code>
-      class below.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Processing-of-input-and-output-tensors">
+    Processing of input and output tensors
+    <a class="anchor-link" href="#Processing-of-input-and-output-tensors">
+     ¶
+    </a>
+   </h3>
+   <h4 id="Linear-transformation">
+    Linear transformation
+    <a class="anchor-link" href="#Linear-transformation">
+     ¶
+    </a>
+   </h4>
+   <p>
+    Neural networks typically transform input vectors by matrix multiplication and vector addition followed by a non-linear transfer function. The 2-dimensional input vectors to our network ($x_{ik1}$, $x_{ik2}$) are transformed by a $2 \times 3$ weight matrix and a bias vector of size 3. Before they can be added to the states of the RNN. The 3-dimensional state vectors are transformed to a 1-dimensional output vector by a $3 \times 1$ weight matrix and a bias vector of size 1 to give the output probabilities.
+   </p>
+   <p>
+    Since we want to process all inputs for each sample and each timestep in one computation we can use the numpy
+    <a href="http://docs.scipy.org/doc/numpy/reference/generated/numpy.tensordot.html">
+     <code>
+      tensordot
+     </code>
+    </a>
+    function to perform the dot products. This function takes 2 tensors and the axes that need to be aggregated by summation between the elements and a product of the result. For example the transformation of input X ($2000 \times 7 \times 2$) to the states S ($2000 \times 7 \times 3$) with the help of matrix W ($2 \times 3$) can be done by
+    <code>
+     S = tensordot(X, W, axes=((-1),(0)))
+    </code>
+    . This method will sum the elements of the last order (-1) of X with the elements of the first order (0) of W and multiply them together. This is the same as doing the matrix dot product for each [$x_{ik1}$, $x_{ik2}$] vector with W.
+    <code>
+     tensordot
+    </code>
+    can then make sure that the underlying computations can be done efficiently and in parallel.
+   </p>
+   <p>
+    These linear tensor transformations are used to transform the input X to the states S, and from the states S to the output Y. This linear transformation, together with its gradient is implemented in the
+    <code>
+     TensorLinear
+    </code>
+    class below. Note that the weights are initialized by sampling uniformly between $\pm \sqrt{6.0 / (n_{in} + n_{out})}$
+    <a href="http://jmlr.org/proceedings/papers/v9/glorot10a/glorot10a.pdf">
+     as suggested by X. Glorot
+    </a>
+    .
+   </p>
+   <h4 id="Logistic-classification">
+    Logistic classification
+    <a class="anchor-link" href="#Logistic-classification">
+     ¶
+    </a>
+   </h4>
+   <p>
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_intermezzo01/">
+     Logistic classification
+    </a>
+    is used to output the probability that the output at current time step k is 1. This function together with its cost and gradient is implemented in the
+    <code>
+     LogisticClassifier
+    </code>
+    class below.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [4]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [4]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the linear tensor transformation layer</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Define the linear tensor transformation layer</span>
 <span class="k">class</span> <span class="nc">TensorLinear</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">"""The linear tensor layer applies a linear tensor dot product and a bias to its input."""</span>
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_in</span><span class="p">,</span> <span class="n">n_out</span><span class="p">,</span> <span class="n">tensor_order</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">"""Initialse the weight W and bias b parameters."""</span>
         <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">6.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_in</span> <span class="o">+</span> <span class="n">n_out</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">a</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="p">(</span><span class="n">n_in</span><span class="p">,</span> <span class="n">n_out</span><span class="p">))</span> <span class="k">if</span> <span class="n">W</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">else</span> <span class="n">W</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_out</span><span class="p">))</span> <span class="k">if</span> <span class="n">b</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">else</span> <span class="n">b</span><span class="p">)</span>  <span class="c"># Bias paramters</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">bpAxes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">tensor_order</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>  <span class="c"># Axes summed over in backprop</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_out</span><span class="p">))</span> <span class="k">if</span> <span class="n">b</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">else</span> <span class="n">b</span><span class="p">)</span>  <span class="c1"># Bias paramters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bpAxes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">tensor_order</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>  <span class="c1"># Axes summed over in backprop</span>
 
     <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">"""Perform forward step transformation with the help of a tensor product."""</span>
-        <span class="c"># Same as: Y[i,j,:] = np.dot(X[i,j,:], self.W) + self.b (for i,j in X.shape[0:1])</span>
-        <span class="c"># Same as: Y = np.einsum('ijk,kl-&gt;ijl', X, self.W) + self.b</span>
+        <span class="c1"># Same as: Y[i,j,:] = np.dot(X[i,j,:], self.W) + self.b (for i,j in X.shape[0:1])</span>
+        <span class="c1"># Same as: Y = np.einsum('ijk,kl-&gt;ijl', X, self.W) + self.b</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">),(</span><span class="mi">0</span><span class="p">)))</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span>
 
     <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">gY</span><span class="p">):</span>
         <span class="sd">"""Return the gradient of the parmeters and the inputs of this layer."""</span>
-        <span class="c"># Same as: gW = np.einsum('ijk,ijl-&gt;kl', X, gY)</span>
-        <span class="c"># Same as: gW += np.dot(X[:,j,:].T, gY[:,j,:]) (for i,j in X.shape[0:1])</span>
+        <span class="c1"># Same as: gW = np.einsum('ijk,ijl-&gt;kl', X, gY)</span>
+        <span class="c1"># Same as: gW += np.dot(X[:,j,:].T, gY[:,j,:]) (for i,j in X.shape[0:1])</span>
         <span class="n">gW</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">gY</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bpAxes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bpAxes</span><span class="p">))</span>
         <span class="n">gB</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">gY</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">bpAxes</span><span class="p">)</span>
-        <span class="c"># Same as: gX = np.einsum('ijk,kl-&gt;ijl', gY, self.W.T)</span>
-        <span class="c"># Same as: gX[i,j,:] = np.dot(gY[i,j,:], self.W.T) (for i,j in gY.shape[0:1])</span>
+        <span class="c1"># Same as: gX = np.einsum('ijk,kl-&gt;ijl', gY, self.W.T)</span>
+        <span class="c1"># Same as: gX[i,j,:] = np.dot(gY[i,j,:], self.W.T) (for i,j in gY.shape[0:1])</span>
         <span class="n">gX</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">gY</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">),(</span><span class="mi">0</span><span class="p">)))</span>  
         <span class="k">return</span> <span class="n">gX</span><span class="p">,</span> <span class="n">gW</span><span class="p">,</span> <span class="n">gB</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [5]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [5]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the logistic classifier layer</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Define the logistic classifier layer</span>
 <span class="k">class</span> <span class="nc">LogisticClassifier</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">"""The logistic layer applies the logistic function to its inputs."""</span>
    
@@ -448,118 +447,118 @@ t:  = 0000101   80
     
     <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
         <span class="sd">"""Return the gradient with respect to the cost function at the inputs of this layer."""</span>
-        <span class="c"># Normalise of the number of samples and sequence length.</span>
+        <span class="c1"># Normalise of the number of samples and sequence length.</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">Y</span> <span class="o">-</span> <span class="n">T</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
     
     <span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
         <span class="sd">"""Compute the cost at the output."""</span>
-        <span class="c"># Normalise of the number of samples and sequence length.</span>
-        <span class="c"># Add a small number (1e-99) because Y can become 0 if the network learns</span>
-        <span class="c">#  to perfectly predict the output. log(0) is undefined.</span>
+        <span class="c1"># Normalise of the number of samples and sequence length.</span>
+        <span class="c1"># Add a small number (1e-99) because Y can become 0 if the network learns</span>
+        <span class="c1">#  to perfectly predict the output. log(0) is undefined.</span>
         <span class="k">return</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">Y</span><span class="o">+</span><span class="mf">1e-99</span><span class="p">))</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">((</span><span class="mi">1</span><span class="o">-</span><span class="n">T</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">Y</span><span class="o">+</span><span class="mf">1e-99</span><span class="p">)))</span> <span class="o">/</span> <span class="p">(</span><span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Unfolding-the-recurrent-states">
-      Unfolding the recurrent states
-      <a class="anchor-link" href="#Unfolding-the-recurrent-states">
-       ¶
-      </a>
-     </h3>
-     <p>
-      Just as in the
-      <a href="(http://peterroelants.github.io/posts/rnn_implementation_part01/">
-       previous part
-      </a>
-      of this tutorial the recurrent states need to be unfolded through time. This unfolding during
-      <a href="https://en.wikipedia.org/wiki/Backpropagation_through_time">
-       backpropagation through time
-      </a>
-      is done by the
-      <code>
-       RecurrentStateUnfold
-      </code>
-      class. This class holds the shared weight and bias parameters used to update each state, as well as the initial state that is also treated as a parameter and optimized during backpropagation.
-     </p>
-     <p>
-      The
-      <code>
-       forward
-      </code>
-      method of
-      <code>
-       RecurrentStateUnfold
-      </code>
-      iteratively updates the states through time and returns the resulting state tensor. The
-      <code>
-       backward
-      </code>
-      method propagates the gradients at the outputs of each state backwards through time. Note that at each time $k$ the gradient coming from the output Y needs to be added with the gradient coming from the previous state at time $k+1$. The gradients of the weight and bias parameters are summed over all timestep since they are shared parameters in each state update. The final state gradient at time $k=0$ is used to optimise the initial state $S_0$ since the gradient of the inital state is $\partial \xi / \partial S_{0}$.
-     </p>
-     <p>
-      <code>
-       RecurrentStateUnfold
-      </code>
-      makes use of the
-      <code>
-       RecurrentStateUpdate
-      </code>
-      class. The
-      <code>
-       forward
-      </code>
-      method of this class combines the transformed input and state at time $k-1$ to output state $k$. The
-      <code>
-       backward
-      </code>
-      method propagates the gradient backwards through time for one timestep and calculates the gradients of the parameters of this timestep. The non-linear transfer function used in
-      <code>
-       RecurrentStateUpdate
-      </code>
-      is the
-      <a href="https://en.wikipedia.org/wiki/Hyperbolic_function">
-       hyperbolic tangent
-      </a>
-      (tanh) function. This function, like the logistic function, is a
-      <a href="https://en.wikipedia.org/wiki/Sigmoid_function">
-       sigmoid function
-      </a>
-      that goes from $-1$ to $+1$. The
-      <a href="https://theclevermachine.wordpress.com/tag/tanh-function/">
-       tanh function
-      </a>
-      is chosen because the maximum gradient of this function is higher than the maximum gradient of the
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part02/#Logistic-function">
-       logistic function
-      </a>
-      which make vanishing gradients less likely. This tanh transfer function is implemented in the
-      <code>
-       TanH
-      </code>
-      class.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Unfolding-the-recurrent-states">
+    Unfolding the recurrent states
+    <a class="anchor-link" href="#Unfolding-the-recurrent-states">
+     ¶
+    </a>
+   </h3>
+   <p>
+    Just as in the
+    <a href="(http://peterroelants.github.io/posts/rnn_implementation_part01/">
+     previous part
+    </a>
+    of this tutorial the recurrent states need to be unfolded through time. This unfolding during
+    <a href="https://en.wikipedia.org/wiki/Backpropagation_through_time">
+     backpropagation through time
+    </a>
+    is done by the
+    <code>
+     RecurrentStateUnfold
+    </code>
+    class. This class holds the shared weight and bias parameters used to update each state, as well as the initial state that is also treated as a parameter and optimized during backpropagation.
+   </p>
+   <p>
+    The
+    <code>
+     forward
+    </code>
+    method of
+    <code>
+     RecurrentStateUnfold
+    </code>
+    iteratively updates the states through time and returns the resulting state tensor. The
+    <code>
+     backward
+    </code>
+    method propagates the gradients at the outputs of each state backwards through time. Note that at each time $k$ the gradient coming from the output Y needs to be added with the gradient coming from the previous state at time $k+1$. The gradients of the weight and bias parameters are summed over all timestep since they are shared parameters in each state update. The final state gradient at time $k=0$ is used to optimise the initial state $S_0$ since the gradient of the inital state is $\partial \xi / \partial S_{0}$.
+   </p>
+   <p>
+    <code>
+     RecurrentStateUnfold
+    </code>
+    makes use of the
+    <code>
+     RecurrentStateUpdate
+    </code>
+    class. The
+    <code>
+     forward
+    </code>
+    method of this class combines the transformed input and state at time $k-1$ to output state $k$. The
+    <code>
+     backward
+    </code>
+    method propagates the gradient backwards through time for one timestep and calculates the gradients of the parameters of this timestep. The non-linear transfer function used in
+    <code>
+     RecurrentStateUpdate
+    </code>
+    is the
+    <a href="https://en.wikipedia.org/wiki/Hyperbolic_function">
+     hyperbolic tangent
+    </a>
+    (tanh) function. This function, like the logistic function, is a
+    <a href="https://en.wikipedia.org/wiki/Sigmoid_function">
+     sigmoid function
+    </a>
+    that goes from $-1$ to $+1$. The
+    <a href="https://theclevermachine.wordpress.com/tag/tanh-function/">
+     tanh function
+    </a>
+    is chosen because the maximum gradient of this function is higher than the maximum gradient of the
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part02/#Logistic-function">
+     logistic function
+    </a>
+    which make vanishing gradients less likely. This tanh transfer function is implemented in the
+    <code>
+     TanH
+    </code>
+    class.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [6]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [6]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define tanh layer</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Define tanh layer</span>
 <span class="k">class</span> <span class="nc">TanH</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">"""TanH applies the tanh function to its inputs."""</span>
     
@@ -572,22 +571,22 @@ t:  = 0000101   80
         <span class="n">gTanh</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">power</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">gTanh</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [7]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [7]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define internal state update layer</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Define internal state update layer</span>
 <span class="k">class</span> <span class="nc">RecurrentStateUpdate</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">"""Update a given state."""</span>
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nbStates</span><span class="p">,</span> <span class="n">W</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
@@ -605,147 +604,147 @@ t:  = 0000101   80
         <span class="n">gSk0</span><span class="p">,</span> <span class="n">gW</span><span class="p">,</span> <span class="n">gB</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">Sk0</span><span class="p">,</span> <span class="n">gZ</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">gZ</span><span class="p">,</span> <span class="n">gSk0</span><span class="p">,</span> <span class="n">gW</span><span class="p">,</span> <span class="n">gB</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [8]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [8]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define layer that unfolds the states over time</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Define layer that unfolds the states over time</span>
 <span class="k">class</span> <span class="nc">RecurrentStateUnfold</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">"""Unfold the recurrent states."""</span>
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nbStates</span><span class="p">,</span> <span class="n">nbTimesteps</span><span class="p">):</span>
-        <span class="s">" Initialse the shared parameters, the inital state and state update function."</span>
+        <span class="s2">" Initialse the shared parameters, the inital state and state update function."</span>
         <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">6.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">nbStates</span> <span class="o">*</span> <span class="mi">2</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">a</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="p">(</span><span class="n">nbStates</span><span class="p">,</span> <span class="n">nbStates</span><span class="p">))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>  <span class="c"># Shared bias</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">S0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nbStates</span><span class="p">)</span>  <span class="c"># Initial state</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span> <span class="o">=</span> <span class="n">nbTimesteps</span>  <span class="c"># Timesteps to unfold</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">stateUpdate</span> <span class="o">=</span> <span class="n">RecurrentStateUpdate</span><span class="p">(</span><span class="n">nbStates</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>  <span class="c"># State update function</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>  <span class="c1"># Shared bias</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">S0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nbStates</span><span class="p">)</span>  <span class="c1"># Initial state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span> <span class="o">=</span> <span class="n">nbTimesteps</span>  <span class="c1"># Timesteps to unfold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateUpdate</span> <span class="o">=</span> <span class="n">RecurrentStateUpdate</span><span class="p">(</span><span class="n">nbStates</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>  <span class="c1"># State update function</span>
         
     <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">"""Iteratively apply forward step to all states."""</span>
-        <span class="n">S</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>  <span class="c"># State tensor</span>
-        <span class="n">S</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">S0</span>  <span class="c"># Set initial state</span>
+        <span class="n">S</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>  <span class="c1"># State tensor</span>
+        <span class="n">S</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">S0</span>  <span class="c1"># Set initial state</span>
         <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span><span class="p">):</span>
-            <span class="c"># Update the states iteratively</span>
+            <span class="c1"># Update the states iteratively</span>
             <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">,:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateUpdate</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:],</span> <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:])</span>
         <span class="k">return</span> <span class="n">S</span>
     
     <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">gY</span><span class="p">):</span>
         <span class="sd">"""Return the gradient of the parmeters and the inputs of this layer."""</span>
-        <span class="n">gSk</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">gY</span><span class="p">[:,</span><span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span><span class="o">-</span><span class="mi">1</span><span class="p">,:])</span>  <span class="c"># Initialise gradient of state outputs</span>
-        <span class="n">gZ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>  <span class="c"># Initialse gradient tensor for state inputs</span>
-        <span class="n">gWSum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">)</span>  <span class="c"># Initialise weight gradients</span>
-        <span class="n">gBSum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>  <span class="c"># Initialse bias gradients</span>
-        <span class="c"># Propagate the gradients iteratively</span>
+        <span class="n">gSk</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">gY</span><span class="p">[:,</span><span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span><span class="o">-</span><span class="mi">1</span><span class="p">,:])</span>  <span class="c1"># Initialise gradient of state outputs</span>
+        <span class="n">gZ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>  <span class="c1"># Initialse gradient tensor for state inputs</span>
+        <span class="n">gWSum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">)</span>  <span class="c1"># Initialise weight gradients</span>
+        <span class="n">gBSum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>  <span class="c1"># Initialse bias gradients</span>
+        <span class="c1"># Propagate the gradients iteratively</span>
         <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
-            <span class="c"># Gradient at state output is gradient from previous state plus gradient from output</span>
+            <span class="c1"># Gradient at state output is gradient from previous state plus gradient from output</span>
             <span class="n">gSk</span> <span class="o">+=</span> <span class="n">gY</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:]</span>
-            <span class="c"># Propgate the gradient back through one state</span>
+            <span class="c1"># Propgate the gradient back through one state</span>
             <span class="n">gZ</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:],</span> <span class="n">gSk</span><span class="p">,</span> <span class="n">gW</span><span class="p">,</span> <span class="n">gB</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateUpdate</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:],</span> <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">,:],</span> <span class="n">gSk</span><span class="p">)</span>
-            <span class="n">gWSum</span> <span class="o">+=</span> <span class="n">gW</span>  <span class="c"># Update total weight gradient</span>
-            <span class="n">gBSum</span> <span class="o">+=</span> <span class="n">gB</span>  <span class="c"># Update total bias gradient</span>
-        <span class="n">gS0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">gSk</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c"># Get gradient of initial state over all samples</span>
+            <span class="n">gWSum</span> <span class="o">+=</span> <span class="n">gW</span>  <span class="c1"># Update total weight gradient</span>
+            <span class="n">gBSum</span> <span class="o">+=</span> <span class="n">gB</span>  <span class="c1"># Update total bias gradient</span>
+        <span class="n">gS0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">gSk</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Get gradient of initial state over all samples</span>
         <span class="k">return</span> <span class="n">gZ</span><span class="p">,</span> <span class="n">gWSum</span><span class="p">,</span> <span class="n">gBSum</span><span class="p">,</span> <span class="n">gS0</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="The-full-network">
-      The full network
-      <a class="anchor-link" href="#The-full-network">
-       ¶
-      </a>
-     </h3>
-     <p>
-      The full network that will be trained to perform binary addition of two number is defined in the
-      <code>
-       RnnBinaryAdder
-      </code>
-      class below. It initialises all the layers upon creation. The
-      <code>
-       forward
-      </code>
-      method performs the full backpropagation forward step through all layers and timesteps and returns the intermediary outputs. The
-      <code>
-       backward
-      </code>
-      method performs the backward step through all layers and timesteps and returns the gradients of all the parameters. The
-      <code>
-       getParamGrads
-      </code>
-      method performs both steps and returns the gradients of the parameters in a list. The order of this list corresponds to the order of the iterator returned by
-      <code>
-       get_params_iter
-      </code>
-      . The parameters returned in the iterator of that last method are the same as the parameters of the network and can be used to change the parameters of the network manually.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="The-full-network">
+    The full network
+    <a class="anchor-link" href="#The-full-network">
+     ¶
+    </a>
+   </h3>
+   <p>
+    The full network that will be trained to perform binary addition of two number is defined in the
+    <code>
+     RnnBinaryAdder
+    </code>
+    class below. It initialises all the layers upon creation. The
+    <code>
+     forward
+    </code>
+    method performs the full backpropagation forward step through all layers and timesteps and returns the intermediary outputs. The
+    <code>
+     backward
+    </code>
+    method performs the backward step through all layers and timesteps and returns the gradients of all the parameters. The
+    <code>
+     getParamGrads
+    </code>
+    method performs both steps and returns the gradients of the parameters in a list. The order of this list corresponds to the order of the iterator returned by
+    <code>
+     get_params_iter
+    </code>
+    . The parameters returned in the iterator of that last method are the same as the parameters of the network and can be used to change the parameters of the network manually.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [9]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [9]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the full network</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Define the full network</span>
 <span class="k">class</span> <span class="nc">RnnBinaryAdder</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">"""RNN to perform binary addition of 2 numbers."""</span>
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nb_of_inputs</span><span class="p">,</span> <span class="n">nb_of_outputs</span><span class="p">,</span> <span class="n">nb_of_states</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">):</span>
         <span class="sd">"""Initialse the network layers."""</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span> <span class="o">=</span> <span class="n">TensorLinear</span><span class="p">(</span><span class="n">nb_of_inputs</span><span class="p">,</span> <span class="n">nb_of_states</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c"># Input layer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span> <span class="o">=</span> <span class="n">RecurrentStateUnfold</span><span class="p">(</span><span class="n">nb_of_states</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>  <span class="c"># Recurrent layer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span> <span class="o">=</span> <span class="n">TensorLinear</span><span class="p">(</span><span class="n">nb_of_states</span><span class="p">,</span> <span class="n">nb_of_outputs</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c"># Linear output transform</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="n">LogisticClassifier</span><span class="p">()</span>  <span class="c"># Classification output</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span> <span class="o">=</span> <span class="n">TensorLinear</span><span class="p">(</span><span class="n">nb_of_inputs</span><span class="p">,</span> <span class="n">nb_of_states</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># Input layer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span> <span class="o">=</span> <span class="n">RecurrentStateUnfold</span><span class="p">(</span><span class="n">nb_of_states</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>  <span class="c1"># Recurrent layer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span> <span class="o">=</span> <span class="n">TensorLinear</span><span class="p">(</span><span class="n">nb_of_states</span><span class="p">,</span> <span class="n">nb_of_outputs</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># Linear output transform</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="n">LogisticClassifier</span><span class="p">()</span>  <span class="c1"># Classification output</span>
         
     <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">"""Perform the forward propagation of input X through all layers."""</span>
-        <span class="n">recIn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>  <span class="c"># Linear input transformation</span>
-        <span class="c"># Forward propagate through time and return states</span>
+        <span class="n">recIn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>  <span class="c1"># Linear input transformation</span>
+        <span class="c1"># Forward propagate through time and return states</span>
         <span class="n">S</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">recIn</span><span class="p">)</span>
-        <span class="n">Z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">S</span><span class="p">[:,</span><span class="mi">1</span><span class="p">:</span><span class="n">sequence_len</span><span class="o">+</span><span class="mi">1</span><span class="p">,:])</span>  <span class="c"># Linear output transformation</span>
-        <span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">Z</span><span class="p">)</span>  <span class="c"># Get classification probabilities</span>
-        <span class="c"># Return: input to recurrent layer, states, input to classifier, output</span>
+        <span class="n">Z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">S</span><span class="p">[:,</span><span class="mi">1</span><span class="p">:</span><span class="n">sequence_len</span><span class="o">+</span><span class="mi">1</span><span class="p">,:])</span>  <span class="c1"># Linear output transformation</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">Z</span><span class="p">)</span>  <span class="c1"># Get classification probabilities</span>
+        <span class="c1"># Return: input to recurrent layer, states, input to classifier, output</span>
         <span class="k">return</span> <span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span>
     
     <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
         <span class="sd">"""Perform the backward propagation through all layers.</span>
 <span class="sd">        Input: input samples, network output, intput to recurrent layer, states, targets."""</span>
-        <span class="n">gZ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>  <span class="c"># Get output gradient</span>
+        <span class="n">gZ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>  <span class="c1"># Get output gradient</span>
         <span class="n">gRecOut</span><span class="p">,</span> <span class="n">gWout</span><span class="p">,</span> <span class="n">gBout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">S</span><span class="p">[:,</span><span class="mi">1</span><span class="p">:</span><span class="n">sequence_len</span><span class="o">+</span><span class="mi">1</span><span class="p">,:],</span> <span class="n">gZ</span><span class="p">)</span>
-        <span class="c"># Propagate gradient backwards through time</span>
+        <span class="c1"># Propagate gradient backwards through time</span>
         <span class="n">gRnnIn</span><span class="p">,</span> <span class="n">gWrec</span><span class="p">,</span> <span class="n">gBrec</span><span class="p">,</span> <span class="n">gS0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">gRecOut</span><span class="p">)</span>
         <span class="n">gX</span><span class="p">,</span> <span class="n">gWin</span><span class="p">,</span> <span class="n">gBin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">gRnnIn</span><span class="p">)</span>
-        <span class="c"># Return the parameter gradients of: linear output weights, linear output bias,</span>
-        <span class="c">#  recursive weights, recursive bias, linear input weights, linear input bias, initial state.</span>
+        <span class="c1"># Return the parameter gradients of: linear output weights, linear output bias,</span>
+        <span class="c1">#  recursive weights, recursive bias, linear input weights, linear input bias, initial state.</span>
         <span class="k">return</span> <span class="n">gWout</span><span class="p">,</span> <span class="n">gBout</span><span class="p">,</span> <span class="n">gWrec</span><span class="p">,</span> <span class="n">gBrec</span><span class="p">,</span> <span class="n">gWin</span><span class="p">,</span> <span class="n">gBin</span><span class="p">,</span> <span class="n">gS0</span>
     
     <span class="k">def</span> <span class="nf">getOutput</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">"""Get the output probabilities of input X."""</span>
         <span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">Y</span>  <span class="c"># Only return the output.</span>
+        <span class="k">return</span> <span class="n">Y</span>  <span class="c1"># Only return the output.</span>
     
     <span class="k">def</span> <span class="nf">getBinaryOutput</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">"""Get the binary output of input X."""</span>
@@ -774,272 +773,272 @@ t:  = 0000101   80
 <span class="sd">        The iterator has the same order as get_params_grad.</span>
 <span class="sd">        The elements returned by the iterator are editable in-place."""</span>
         <span class="k">return</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">S0</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s">'readwrite'</span><span class="p">]),</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s">'readwrite'</span><span class="p">]),</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s">'readwrite'</span><span class="p">]),</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s">'readwrite'</span><span class="p">]),</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s">'readwrite'</span><span class="p">]),</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s">'readwrite'</span><span class="p">]),</span> 
-            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s">'readwrite'</span><span class="p">]))</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">S0</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span> 
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]))</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Gradient-Checking">
-      Gradient Checking
-      <a class="anchor-link" href="#Gradient-Checking">
-       ¶
-      </a>
-     </h2>
-     <p>
-      As in
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Gradient-checking">
-       part 4 of our previous tutorial on feedforward nets
-      </a>
-      the gradient computed by backpropagation is compared with the
-      <a href="https://en.wikipedia.org/wiki/Numerical_differentiation">
-       numerical gradient
-      </a>
-      to assert that there are no bugs in the code to compute the gradients. This is done by the code below.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Gradient-Checking">
+    Gradient Checking
+    <a class="anchor-link" href="#Gradient-Checking">
+     ¶
+    </a>
+   </h2>
+   <p>
+    As in
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Gradient-checking">
+     part 4 of our previous tutorial on feedforward nets
+    </a>
+    the gradient computed by backpropagation is compared with the
+    <a href="https://en.wikipedia.org/wiki/Numerical_differentiation">
+     numerical gradient
+    </a>
+    to assert that there are no bugs in the code to compute the gradients. This is done by the code below.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [10]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [10]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Do gradient checking</span>
-<span class="c"># Define an RNN to test</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Do gradient checking</span>
+<span class="c1"># Define an RNN to test</span>
 <span class="n">RNN</span> <span class="o">=</span> <span class="n">RnnBinaryAdder</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>
-<span class="c"># Get the gradients of the parameters from a subset of the data</span>
+<span class="c1"># Get the gradients of the parameters from a subset of the data</span>
 <span class="n">backprop_grads</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">getParamGrads</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:],</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:])</span>
 
-<span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-7</span>  <span class="c"># Set the small change to compute the numerical gradient</span>
-<span class="c"># Compute the numerical gradients of the parameters in all layers.</span>
+<span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-7</span>  <span class="c1"># Set the small change to compute the numerical gradient</span>
+<span class="c1"># Compute the numerical gradients of the parameters in all layers.</span>
 <span class="k">for</span> <span class="n">p_idx</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">()):</span>
     <span class="n">grad_backprop</span> <span class="o">=</span> <span class="n">backprop_grads</span><span class="p">[</span><span class="n">p_idx</span><span class="p">]</span>
-    <span class="c"># + eps</span>
+    <span class="c1"># + eps</span>
     <span class="n">param</span> <span class="o">+=</span> <span class="n">eps</span>
     <span class="n">plus_cost</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">cost</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:]),</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:])</span>
-    <span class="c"># - eps</span>
+    <span class="c1"># - eps</span>
     <span class="n">param</span> <span class="o">-=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">eps</span>
     <span class="n">min_cost</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">cost</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:]),</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:])</span>
-    <span class="c"># reset param value</span>
+    <span class="c1"># reset param value</span>
     <span class="n">param</span> <span class="o">+=</span> <span class="n">eps</span>
-    <span class="c"># calculate numerical gradient</span>
+    <span class="c1"># calculate numerical gradient</span>
     <span class="n">grad_num</span> <span class="o">=</span> <span class="p">(</span><span class="n">plus_cost</span> <span class="o">-</span> <span class="n">min_cost</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">eps</span><span class="p">)</span>
-    <span class="c"># Raise error if the numerical grade is not close to the backprop gradient</span>
+    <span class="c1"># Raise error if the numerical grade is not close to the backprop gradient</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">grad_num</span><span class="p">,</span> <span class="n">grad_backprop</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">'Numerical gradient of {:.6f} is not close to the backpropagation gradient of {:.6f}!'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">grad_num</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">grad_backprop</span><span class="p">)))</span>
-<span class="k">print</span><span class="p">(</span><span class="s">'No gradient errors found'</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">'Numerical gradient of {:.6f} is not close to the backpropagation gradient of {:.6f}!'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">grad_num</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">grad_backprop</span><span class="p">)))</span>
+<span class="k">print</span><span class="p">(</span><span class="s1">'No gradient errors found'</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
-    </div>
-   </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>No gradient errors found
-</pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>No gradient errors found
+</pre>
+    </div>
    </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Rmsprop-with-momentum-optimisation">
-      Rmsprop with momentum optimisation
-      <a class="anchor-link" href="#Rmsprop-with-momentum-optimisation">
-       ¶
-      </a>
-     </h2>
-     <p>
-      While the
-      <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/">
-       first part
-      </a>
-      of this tutorial used
-      <a href="https://en.wikipedia.org/wiki/Rprop">
-       Rprop
-      </a>
-      to optimise the network, this part will use the
-      <a href="http://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf">
-       Rmsprop
-      </a>
-      algorithm with
-      <a href="http://www.cs.toronto.edu/~fritz/absps/momentum.pdf">
-       Nesterov's accelerated gradient
-      </a>
-      to perform the optimisation. We replaced the Rprop algorithm because Rprop doesn't work well with
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part05/#Stochastic-gradient-descent-backpropagation">
-       minibatches
-      </a>
-      due to the stochastic nature of the error surface that can result in sign changes of the gradient.
-     </p>
-     <p>
-      The Rmsprop algorithm was inspired by the Rprop algorithm. It keeps a
-      <a href="https://en.wikipedia.org/wiki/Moving_average">
-       moving average
-      </a>
-      (MA) of the squared gradient for each parameter $\theta$ ($MA = \lambda * MA + (1-\lambda) * (\partial \xi / \partial \theta)^2$, with $\lambda$ the moving average hyperparameter). The gradient is then normalised by dividing by the square root of this moving average (
-      <code>
-       maSquare
-      </code>
-      = $(\partial \xi / \partial \theta)/\sqrt{MA}$). This normalised gradient is then used to update the parameters. Note that if $\lambda=0$ the gradient is reduced to its sign.
-     </p>
-     <p>
-      This transformed gradient is not used directly to update the parameters, but it is used to update a velocity parameter (
-      <code>
-       Vs
-      </code>
-      ) for each parameter of the network. This parameter is similar to the velocity parameter from our
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Backpropagation-updates-with-momentum">
-       previous tutorial
-      </a>
-      but it is used in a slightly different way. Nesterov's accelerated gradient is different from regular momentum in that it applies updates in a different way. While the regular momentum algorithm calculates the gradient at the beginning of the iteration, updates the velocity and moves the parameters according to this velocity, Nesterov's accelerated gradient moves the parameters according to the reduced velocity, then calculates the gradients, updates the velocity, and then moves again according to the local gradient. This has as benefit that the gradient is more informative to do the local update, and can correct for a bad velocity update. The Nesterov updates can be described as:
-     </p>
-     $$\begin{split}
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Rmsprop-with-momentum-optimisation">
+    Rmsprop with momentum optimisation
+    <a class="anchor-link" href="#Rmsprop-with-momentum-optimisation">
+     ¶
+    </a>
+   </h2>
+   <p>
+    While the
+    <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/">
+     first part
+    </a>
+    of this tutorial used
+    <a href="https://en.wikipedia.org/wiki/Rprop">
+     Rprop
+    </a>
+    to optimise the network, this part will use the
+    <a href="http://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf">
+     Rmsprop
+    </a>
+    algorithm with
+    <a href="http://www.cs.toronto.edu/~fritz/absps/momentum.pdf">
+     Nesterov's accelerated gradient
+    </a>
+    to perform the optimisation. We replaced the Rprop algorithm because Rprop doesn't work well with
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part05/#Stochastic-gradient-descent-backpropagation">
+     minibatches
+    </a>
+    due to the stochastic nature of the error surface that can result in sign changes of the gradient.
+   </p>
+   <p>
+    The Rmsprop algorithm was inspired by the Rprop algorithm. It keeps a
+    <a href="https://en.wikipedia.org/wiki/Moving_average">
+     moving average
+    </a>
+    (MA) of the squared gradient for each parameter $\theta$ ($MA = \lambda * MA + (1-\lambda) * (\partial \xi / \partial \theta)^2$, with $\lambda$ the moving average hyperparameter). The gradient is then normalised by dividing by the square root of this moving average (
+    <code>
+     maSquare
+    </code>
+    = $(\partial \xi / \partial \theta)/\sqrt{MA}$). This normalised gradient is then used to update the parameters. Note that if $\lambda=0$ the gradient is reduced to its sign.
+   </p>
+   <p>
+    This transformed gradient is not used directly to update the parameters, but it is used to update a velocity parameter (
+    <code>
+     Vs
+    </code>
+    ) for each parameter of the network. This parameter is similar to the velocity parameter from our
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Backpropagation-updates-with-momentum">
+     previous tutorial
+    </a>
+    but it is used in a slightly different way. Nesterov's accelerated gradient is different from regular momentum in that it applies updates in a different way. While the regular momentum algorithm calculates the gradient at the beginning of the iteration, updates the velocity and moves the parameters according to this velocity, Nesterov's accelerated gradient moves the parameters according to the reduced velocity, then calculates the gradients, updates the velocity, and then moves again according to the local gradient. This has as benefit that the gradient is more informative to do the local update, and can correct for a bad velocity update. The Nesterov updates can be described as:
+   </p>
+   $$\begin{split}
 V_{i+1} &amp; = \lambda V_i - \mu \nabla(\theta_i + \lambda V_i) \\
 \theta_{i+1} &amp; = \theta_i + V_{i+1} \\
 \end{split}$$
-     <p>
-      With $\nabla(\theta)$ the local gradient at position $\theta$ in the parameter space. And $i$ the iteration number. This formula can be visualised as in the following illustration (See
-      <a href="http://www.cs.toronto.edu/~fritz/absps/momentum.pdf">
-       Sutskever I.
-      </a>
-      ):
-     </p>
-     <p>
-      <img alt="Illustration of Nesterov Momentum updates" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/NesterovMomentum.png"/>
-     </p>
-     <p>
-      Note that the training converges to a cost of 0. This convergence is actually not guaranteed. If the parameters of the network start out in a bad position the network might convert to a local minimum that is far from the global minimum. The training is also sensitive to the meta parameters
-      <code>
-       lmbd
-      </code>
-      ,
-      <code>
-       learning_rate
-      </code>
-      ,
-      <code>
-       momentum_term
-      </code>
-      ,
-      <code>
-       eps
-      </code>
-      . Try rerunning this yourself to see how many times it actually converges.
-     </p>
-    </div>
-   </div>
+   <p>
+    With $\nabla(\theta)$ the local gradient at position $\theta$ in the parameter space. And $i$ the iteration number. This formula can be visualised as in the following illustration (See
+    <a href="http://www.cs.toronto.edu/~fritz/absps/momentum.pdf">
+     Sutskever I.
+    </a>
+    ):
+   </p>
+   <p>
+    <img alt="Illustration of Nesterov Momentum updates" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/NesterovMomentum.png"/>
+   </p>
+   <p>
+    Note that the training converges to a cost of 0. This convergence is actually not guaranteed. If the parameters of the network start out in a bad position the network might convert to a local minimum that is far from the global minimum. The training is also sensitive to the meta parameters
+    <code>
+     lmbd
+    </code>
+    ,
+    <code>
+     learning_rate
+    </code>
+    ,
+    <code>
+     momentum_term
+    </code>
+    ,
+    <code>
+     eps
+    </code>
+    . Try rerunning this yourself to see how many times it actually converges.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [11]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [11]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Set hyper-parameters</span>
-<span class="n">lmbd</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c"># Rmsprop lambda</span>
-<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.05</span>  <span class="c"># Learning rate</span>
-<span class="n">momentum_term</span> <span class="o">=</span> <span class="mf">0.80</span>  <span class="c"># Momentum term</span>
-<span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-6</span>  <span class="c"># Numerical stability term to prevent division by zero</span>
-<span class="n">mb_size</span> <span class="o">=</span> <span class="mi">100</span>  <span class="c"># Size of the minibatches (number of samples)</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Set hyper-parameters</span>
+<span class="n">lmbd</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># Rmsprop lambda</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.05</span>  <span class="c1"># Learning rate</span>
+<span class="n">momentum_term</span> <span class="o">=</span> <span class="mf">0.80</span>  <span class="c1"># Momentum term</span>
+<span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-6</span>  <span class="c1"># Numerical stability term to prevent division by zero</span>
+<span class="n">mb_size</span> <span class="o">=</span> <span class="mi">100</span>  <span class="c1"># Size of the minibatches (number of samples)</span>
 
-<span class="c"># Create the network</span>
-<span class="n">nb_of_states</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c"># Number of states in the recurrent layer</span>
+<span class="c1"># Create the network</span>
+<span class="n">nb_of_states</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Number of states in the recurrent layer</span>
 <span class="n">RNN</span> <span class="o">=</span> <span class="n">RnnBinaryAdder</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">nb_of_states</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>
-<span class="c"># Set the initial parameters</span>
-<span class="n">nbParameters</span> <span class="o">=</span>  <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">RNN</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">())</span>  <span class="c"># Number of parameters in the network</span>
-<span class="n">maSquare</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nbParameters</span><span class="p">)]</span>  <span class="c"># Rmsprop moving average</span>
-<span class="n">Vs</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nbParameters</span><span class="p">)]</span>  <span class="c"># Velocity</span>
+<span class="c1"># Set the initial parameters</span>
+<span class="n">nbParameters</span> <span class="o">=</span>  <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">RNN</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">())</span>  <span class="c1"># Number of parameters in the network</span>
+<span class="n">maSquare</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nbParameters</span><span class="p">)]</span>  <span class="c1"># Rmsprop moving average</span>
+<span class="n">Vs</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nbParameters</span><span class="p">)]</span>  <span class="c1"># Velocity</span>
 
-<span class="c"># Create a list of minibatch costs to be plotted</span>
+<span class="c1"># Create a list of minibatch costs to be plotted</span>
 <span class="n">ls_of_costs</span> <span class="o">=</span> <span class="p">[</span><span class="n">RNN</span><span class="o">.</span><span class="n">cost</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:]),</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:])]</span>
-<span class="c"># Iterate over some iterations</span>
+<span class="c1"># Iterate over some iterations</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
-    <span class="c"># Iterate over all the minibatches</span>
+    <span class="c1"># Iterate over all the minibatches</span>
     <span class="k">for</span> <span class="n">mb</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_train</span><span class="o">/</span><span class="n">mb_size</span><span class="p">):</span>
-        <span class="n">X_mb</span> <span class="o">=</span> <span class="n">X_train</span><span class="p">[</span><span class="n">mb</span><span class="p">:</span><span class="n">mb</span><span class="o">+</span><span class="n">mb_size</span><span class="p">,:,:]</span>  <span class="c"># Input minibatch</span>
-        <span class="n">T_mb</span> <span class="o">=</span> <span class="n">T_train</span><span class="p">[</span><span class="n">mb</span><span class="p">:</span><span class="n">mb</span><span class="o">+</span><span class="n">mb_size</span><span class="p">,:,:]</span>  <span class="c"># Target minibatch</span>
+        <span class="n">X_mb</span> <span class="o">=</span> <span class="n">X_train</span><span class="p">[</span><span class="n">mb</span><span class="p">:</span><span class="n">mb</span><span class="o">+</span><span class="n">mb_size</span><span class="p">,:,:]</span>  <span class="c1"># Input minibatch</span>
+        <span class="n">T_mb</span> <span class="o">=</span> <span class="n">T_train</span><span class="p">[</span><span class="n">mb</span><span class="p">:</span><span class="n">mb</span><span class="o">+</span><span class="n">mb_size</span><span class="p">,:,:]</span>  <span class="c1"># Target minibatch</span>
         <span class="n">V_tmp</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span> <span class="o">*</span> <span class="n">momentum_term</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">Vs</span><span class="p">]</span>
-        <span class="c"># Update each parameters according to previous gradient</span>
+        <span class="c1"># Update each parameters according to previous gradient</span>
         <span class="k">for</span> <span class="n">pIdx</span><span class="p">,</span> <span class="n">P</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">()):</span>
             <span class="n">P</span> <span class="o">+=</span> <span class="n">V_tmp</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span>
-        <span class="c"># Get gradients after following old velocity</span>
-        <span class="n">backprop_grads</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">getParamGrads</span><span class="p">(</span><span class="n">X_mb</span><span class="p">,</span> <span class="n">T_mb</span><span class="p">)</span>  <span class="c"># Get the parameter gradients    </span>
-        <span class="c"># Update each parameter seperately</span>
+        <span class="c1"># Get gradients after following old velocity</span>
+        <span class="n">backprop_grads</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">getParamGrads</span><span class="p">(</span><span class="n">X_mb</span><span class="p">,</span> <span class="n">T_mb</span><span class="p">)</span>  <span class="c1"># Get the parameter gradients    </span>
+        <span class="c1"># Update each parameter seperately</span>
         <span class="k">for</span> <span class="n">pIdx</span><span class="p">,</span> <span class="n">P</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">()):</span>
-            <span class="c"># Update the Rmsprop moving averages</span>
+            <span class="c1"># Update the Rmsprop moving averages</span>
             <span class="n">maSquare</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">=</span> <span class="n">lmbd</span> <span class="o">*</span> <span class="n">maSquare</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">lmbd</span><span class="p">)</span> <span class="o">*</span> <span class="n">backprop_grads</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span>
-            <span class="c"># Calculate the Rmsprop normalised gradient</span>
+            <span class="c1"># Calculate the Rmsprop normalised gradient</span>
             <span class="n">pGradNorm</span> <span class="o">=</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">backprop_grads</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">maSquare</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
-            <span class="c"># Update the momentum velocity</span>
+            <span class="c1"># Update the momentum velocity</span>
             <span class="n">Vs</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">=</span> <span class="n">V_tmp</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">-</span> <span class="n">pGradNorm</span>     
-            <span class="n">P</span> <span class="o">-=</span> <span class="n">pGradNorm</span>   <span class="c"># Update the parameter</span>
-        <span class="n">ls_of_costs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">cost</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X_mb</span><span class="p">),</span> <span class="n">T_mb</span><span class="p">))</span>  <span class="c"># Add cost to list to plot</span>
+            <span class="n">P</span> <span class="o">-=</span> <span class="n">pGradNorm</span>   <span class="c1"># Update the parameter</span>
+        <span class="n">ls_of_costs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">cost</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X_mb</span><span class="p">),</span> <span class="n">T_mb</span><span class="p">))</span>  <span class="c1"># Add cost to list to plot</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [12]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [12]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the cost over the iterations</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ls_of_costs</span><span class="p">,</span> <span class="s">'b-'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'minibatch iteration'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'Decrease of cost over backprop iteration'</span><span class="p">)</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Plot the cost over the iterations</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ls_of_costs</span><span class="p">,</span> <span class="s1">'b-'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'minibatch iteration'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Decrease of cost over backprop iteration'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAY8AAAEZCAYAAABvpam5AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAY8AAAEZCAYAAABvpam5AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzt3XmcVXX9x/HXhwFEURiNckFwUlBxJc19m5BwNBXJEjH7
 iaTSomVZIm1g5taqv9TCUtEsUXP/FaEZY+5iMq6AoKICLrkguDPy+f3x/Q7ncLszzAx37rnL+/l4
 nAf3LHPO537u5Xzu+X7PYu6OiIhIR3TLOgARESk/Kh4iItJhKh4iItJhKh4iItJhKh4iItJhKh4i
@@ -1258,62 +1257,63 @@ Pg7sT7gTc2cKnFQx/bKQcpF7BpPneZ37ZLQ1vXbCjvMGwsNv/ujuj5jZE8BXzewpQp/G/am/vRR4
 zMz+7e5fNrOzgbvM7CPCLb/HrWHb+d7Do8BHsfnpCuB/CU1Gj8TnULwKjMrz/v7e3jhb/s7dbzKz
 veI2Hfieu79qZkPyxKlbbkurdEt2ERHpMDVbiYhIh6l4iIhIh6l4iIhIh6l4iIhIh6l4iIhIh6l4
 iIhIh6l4iIhIh6l4iIhIh/0/3zrCEX9a5lEAAAAASUVORK5CYII=
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Test-examples">
-      Test examples
-      <a class="anchor-link" href="#Test-examples">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The figure above shows that the training converged to a cost of 0. We expect the network to have learned how to perfectly do binary addition for our training examples. If we put some independent test cases through the network and print them out we can see that the network also outputs the correct output for these test cases.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Test-examples">
+    Test examples
+    <a class="anchor-link" href="#Test-examples">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The figure above shows that the training converged to a cost of 0. We expect the network to have learned how to perfectly do binary addition for our training examples. If we put some independent test cases through the network and print them out we can see that the network also outputs the correct output for these test cases.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [13]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [13]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Create test samples</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Create test samples</span>
 <span class="n">nb_test</span> <span class="o">=</span> <span class="mi">5</span>
 <span class="n">Xtest</span><span class="p">,</span> <span class="n">Ttest</span> <span class="o">=</span> <span class="n">create_dataset</span><span class="p">(</span><span class="n">nb_test</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>
-<span class="c"># Push test data through network</span>
+<span class="c1"># Push test data through network</span>
 <span class="n">Y</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">getBinaryOutput</span><span class="p">(</span><span class="n">Xtest</span><span class="p">)</span>
 <span class="n">Yf</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">Xtest</span><span class="p">)</span>
 
-<span class="c"># Print out all test examples</span>
+<span class="c1"># Print out all test examples</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">Xtest</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
     <span class="n">printSample</span><span class="p">(</span><span class="n">Xtest</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">Xtest</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">Ttest</span><span class="p">[</span><span class="n">i</span><span class="p">,:,:],</span> <span class="n">Y</span><span class="p">[</span><span class="n">i</span><span class="p">,:,:])</span>
-    <span class="k">print</span> <span class="s">''</span>
+    <span class="k">print</span> <span class="s1">''</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>x1:   0100010   34
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>x1:   0100010   34
 x2: + 1100100   19 
       -------   --
 t:  = 1010110   53
@@ -1344,28 +1344,26 @@ t:  = 0101010   42
 y:  = 0101010
 
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <p>
-      This post at
-      <a href="http://peterroelants.github.io/posts/rnn_implementation_part02/">
-       peterroelants.github.io
-      </a>
-      is generated from an IPython notebook file.
-      <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/RNN_implementation/rnn_implementation_part02.ipynb">
-       Link to the full IPython notebook file
-      </a>
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post at
+    <a href="http://peterroelants.github.io/posts/rnn_implementation_part02/">
+     peterroelants.github.io
+    </a>
+    is generated from an IPython notebook file.
+    <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/RNN_implementation/rnn_implementation_part02.ipynb">
+     Link to the full IPython notebook file
+    </a>
+   </p>
   </div>
- </body>
-</html>
+ </div>
+</div>

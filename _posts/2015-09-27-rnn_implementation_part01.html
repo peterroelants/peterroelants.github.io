@@ -1,289 +1,288 @@
----
+--- 
 layout: notebook_simple_rnn_post 
-title: How to implement a recurrent neural network Part 1
+title: How to implement a recurrent neural network Part 1 
 ---
 
 
-<html>
- <body>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <p>
-      This tutorial on implementing recurrent neural networks will build on
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part01/">
-       my previous tutorial on how to implement a feedforward neural network
-      </a>
-      . Please check out this previous tutorial if you are unfamiliar with neural network basics such as backpropagation.
-     </p>
-     <p>
-      These tutorials are generated from Python 2
-      <a href="http://ipython.org/notebook.html">
-       IPython Notebook
-      </a>
-      files, which will be linked to at the end of each chapter so that you can adapt and run the examples yourself. The neural networks themselves are implemented using the Python
-      <a href="http://www.numpy.org/">
-       NumPy
-      </a>
-      library which offers efficient implementations of linear algebra functions such as vector and matrix multiplications. Illustrative plots are generated using
-      <a href="http://matplotlib.org/">
-       Matplotlib
-      </a>
-      . If you want to run these examples yourself and don't have Python with the necessary libraries installed I recommend to download and install
-      <a href="https://store.continuum.io/cshop/anaconda/">
-       Anaconda Python
-      </a>
-      , which is a free Python distribution that contains all the libraries you need to run these tutorials, and is used to create these tutorials.
-     </p>
-     <p>
-      The code input cells in this blog can be collapsed or expanded by clicking on the button in the top right of each cell.
-     </p>
-    </div>
-   </div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This tutorial on implementing recurrent neural networks will build on
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part01/">
+     my previous tutorial on how to implement a feedforward neural network
+    </a>
+    . Please check out this previous tutorial if you are unfamiliar with neural network basics such as backpropagation.
+   </p>
+   <p>
+    These tutorials are generated from Python 2
+    <a href="http://ipython.org/notebook.html">
+     IPython Notebook
+    </a>
+    files, which will be linked to at the end of each chapter so that you can adapt and run the examples yourself. The neural networks themselves are implemented using the Python
+    <a href="http://www.numpy.org/">
+     NumPy
+    </a>
+    library which offers efficient implementations of linear algebra functions such as vector and matrix multiplications. Illustrative plots are generated using
+    <a href="http://matplotlib.org/">
+     Matplotlib
+    </a>
+    . If you want to run these examples yourself and don't have Python with the necessary libraries installed I recommend to download and install
+    <a href="https://store.continuum.io/cshop/anaconda/">
+     Anaconda Python
+    </a>
+    , which is a free Python distribution that contains all the libraries you need to run these tutorials, and is used to create these tutorials.
+   </p>
+   <p>
+    The code input cells in this blog can be collapsed or expanded by clicking on the button in the top right of each cell.
+   </p>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Recurrent-neural-networks">
-      Recurrent neural networks
-      <a class="anchor-link" href="#Recurrent-neural-networks">
-       ¶
-      </a>
-     </h2>
-     <p>
-      This first part will cover:
-     </p>
-     <ul>
-      <li>
-       A
-       <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/#Linear-recurrent-neural-network">
-        simple RNN
-       </a>
-      </li>
-      <li>
-       <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/#Training-with-backpropagation-through-time">
-        Backpropagation through time
-       </a>
-      </li>
-      <li>
-       <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/#Rprop-optimisation">
-        Rprop
-       </a>
-       optimisation
-      </li>
-     </ul>
-     <p>
-      <a href="https://en.wikipedia.org/wiki/Recurrent_neural_network">
-       Recurrent neural networks
-      </a>
-      (RNNs) are neural nets that can deal with sequences of variable length (unlike feedforward nets). They are able to this by defining a
-      <a href="https://en.wikipedia.org/wiki/Recurrence_relation">
-       recurrence relation
-      </a>
-      over timesteps which is typically the following formula:
-     </p>
-     $$ S_{k} = f(S_{k-1} * W_{rec} + X_k * W_x) $$
-     <p>
-      Where $S_k$ is the state at time $k$, $X_k$ an exogenous input at time $k$, $W_{rec}$ and $W_x$ are parameters like the weights parameters in feedforward nets. Note that the RNN can be viewed as a state model with a
-      <a href="https://en.wikipedia.org/wiki/Feedback">
-       feedback loop
-      </a>
-      . The state evolves over time due to the recurrence relation, and the feedback is fed back into the state with a delay of one timestep. This delayed feedback loop gives the model memory because it can remember information between timesteps in the states.
-      <br/>
-      The final output of the network $Y_k$ at a certain timestep $k$ is typically computed from one or more states $S_{k-i} .. S_{k+j}$.
-     </p>
-     <p>
-      Note that we can either compute the current state $S_{k}$ from the current input $X_k$ and previous state $S_{k-1}$, or predict the next state from $S_{k+1}$ from the current state $S_k$ and current input $X_k$. The difference of notation has not much effect on our model and depends on the task at hand.
-     </p>
-     <p>
-      This tutorial will illustrate that recurrent nets are not much different from feedforward nets, but there are some difficulties in training them as will be explained later.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Recurrent-neural-networks">
+    Recurrent neural networks
+    <a class="anchor-link" href="#Recurrent-neural-networks">
+     ¶
+    </a>
+   </h2>
+   <p>
+    This first part will cover:
+   </p>
+   <ul>
+    <li>
+     A
+     <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/#Linear-recurrent-neural-network">
+      simple RNN
+     </a>
+    </li>
+    <li>
+     <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/#Training-with-backpropagation-through-time">
+      Backpropagation through time
+     </a>
+    </li>
+    <li>
+     <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/#Rprop-optimisation">
+      Rprop
+     </a>
+     optimisation
+    </li>
+   </ul>
+   <p>
+    <a href="https://en.wikipedia.org/wiki/Recurrent_neural_network">
+     Recurrent neural networks
+    </a>
+    (RNNs) are neural nets that can deal with sequences of variable length (unlike feedforward nets). They are able to this by defining a
+    <a href="https://en.wikipedia.org/wiki/Recurrence_relation">
+     recurrence relation
+    </a>
+    over timesteps which is typically the following formula:
+   </p>
+   $$ S_{k} = f(S_{k-1} * W_{rec} + X_k * W_x) $$
+   <p>
+    Where $S_k$ is the state at time $k$, $X_k$ an exogenous input at time $k$, $W_{rec}$ and $W_x$ are parameters like the weights parameters in feedforward nets. Note that the RNN can be viewed as a state model with a
+    <a href="https://en.wikipedia.org/wiki/Feedback">
+     feedback loop
+    </a>
+    . The state evolves over time due to the recurrence relation, and the feedback is fed back into the state with a delay of one timestep. This delayed feedback loop gives the model memory because it can remember information between timesteps in the states.
+    <br>
+     The final output of the network $Y_k$ at a certain timestep $k$ is typically computed from one or more states $S_{k-i} .. S_{k+j}$.
+    </br>
+   </p>
+   <p>
+    Note that we can either compute the current state $S_{k}$ from the current input $X_k$ and previous state $S_{k-1}$, or predict the next state from $S_{k+1}$ from the current state $S_k$ and current input $X_k$. The difference of notation has not much effect on our model and depends on the task at hand.
+   </p>
+   <p>
+    This tutorial will illustrate that recurrent nets are not much different from feedforward nets, but there are some difficulties in training them as will be explained later.
+   </p>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Linear-recurrent-neural-network">
-      Linear recurrent neural network
-      <a class="anchor-link" href="#Linear-recurrent-neural-network">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The first part of this tutorial describes a simple RNN that is trained to count how many 1's it sees on a binary input stream, and output the total count at the end of the sequence.
-     </p>
-     <p>
-      The RNN model used here has one state, takes one input element from the binary stream each timestep, and outputs its last state at the end of the sequence. This model is shown in the figure below. The left part is a graphical illustration of the recurrence relation it describes ($ s_{k} = s_{k-1} * w_{rec} + x_k * w_x $). The right part illustrates how the network is unfolded through time over a sequence of length n. Notice that the unfolded network can be viewed as an (n+1)-layer neural network with the same shared parameters $w_{rec}$ and $w_x$ in each layer.
-     </p>
-     <p>
-      <img alt="Structure of the linear RNN" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/SimpleRNN01.png"/>
-     </p>
-     <p>
-      We can easiliy see that the optimal parameters for this task would be $w_{rec} = w_x = 1$. Nevertheles the training and implementation of this neural net will be interesting. First import the libraries we need and define the dataset.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Linear-recurrent-neural-network">
+    Linear recurrent neural network
+    <a class="anchor-link" href="#Linear-recurrent-neural-network">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The first part of this tutorial describes a simple RNN that is trained to count how many 1's it sees on a binary input stream, and output the total count at the end of the sequence.
+   </p>
+   <p>
+    The RNN model used here has one state, takes one input element from the binary stream each timestep, and outputs its last state at the end of the sequence. This model is shown in the figure below. The left part is a graphical illustration of the recurrence relation it describes ($ s_{k} = s_{k-1} * w_{rec} + x_k * w_x $). The right part illustrates how the network is unfolded through time over a sequence of length n. Notice that the unfolded network can be viewed as an (n+1)-layer neural network with the same shared parameters $w_{rec}$ and $w_x$ in each layer.
+   </p>
+   <p>
+    <img alt="Structure of the linear RNN" src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/SimpleRNN01.png"/>
+   </p>
+   <p>
+    We can easiliy see that the optimal parameters for this task would be $w_{rec} = w_x = 1$. Nevertheles the training and implementation of this neural net will be interesting. First import the libraries we need and define the dataset.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [1]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [1]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Python imports</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c"># Matrix and vector computation package</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Python imports</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c1"># Matrix and vector computation package</span>
 <span class="kn">import</span> <span class="nn">matplotlib</span>
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
-<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">cm</span>  <span class="c"># Colormaps</span>
-<span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">LogNorm</span>  <span class="c"># Log colormaps</span>
-<span class="c"># Allow matplotlib to plot inside this notebook</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">cm</span>  <span class="c1"># Colormaps</span>
+<span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">LogNorm</span>  <span class="c1"># Log colormaps</span>
+<span class="c1"># Allow matplotlib to plot inside this notebook</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
-<span class="c"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
+<span class="c1"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
 <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Define-the-dataset">
-      Define the dataset
-      <a class="anchor-link" href="#Define-the-dataset">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The input data $X$ used in this example consists of 20 binary sequences of 10 timesteps each. Each input sequence is generated from a uniform random distribution which is rounded to 0 or 1.
-     </p>
-     <p>
-      The output targets $t$ are the number of times '1' occurs in the sequence, which is equal to the sum of that sequence since the sequence is binary.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Define-the-dataset">
+    Define the dataset
+    <a class="anchor-link" href="#Define-the-dataset">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The input data $X$ used in this example consists of 20 binary sequences of 10 timesteps each. Each input sequence is generated from a uniform random distribution which is rounded to 0 or 1.
+   </p>
+   <p>
+    The output targets $t$ are the number of times '1' occurs in the sequence, which is equal to the sum of that sequence since the sequence is binary.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [2]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [2]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Create dataset</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Create dataset</span>
 <span class="n">nb_of_samples</span> <span class="o">=</span> <span class="mi">20</span>
 <span class="n">sequence_len</span> <span class="o">=</span> <span class="mi">10</span>
-<span class="c"># Create the sequences</span>
+<span class="c1"># Create the sequences</span>
 <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">))</span>
 <span class="k">for</span> <span class="n">row_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_samples</span><span class="p">):</span>
     <span class="n">X</span><span class="p">[</span><span class="n">row_idx</span><span class="p">,:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">around</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">sequence_len</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
-<span class="c"># Create the targets for each sequence</span>
+<span class="c1"># Create the targets for each sequence</span>
 <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Training-with-backpropagation-through-time">
-      Training with backpropagation through time
-      <a class="anchor-link" href="#Training-with-backpropagation-through-time">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The typical algorithm to train recurrent nets is the
-      <a href="https://en.wikipedia.org/wiki/Backpropagation_through_time">
-       backpropagation through time
-      </a>
-      algorithm. The name already implies that it is based on the backpropagation algorithm we discussed in the
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/">
-       previous tutorial on feedforward nets
-      </a>
-      .
-     </p>
-     <p>
-      If you understand regular
-      <a href="https://en.wikipedia.org/wiki/Backpropagation">
-       backpropagation
-      </a>
-      than backpropagation through time is not much more difficult to understand. The only main difference is that the recurrent net needs to be unfolded through time for a certain amount of timesteps. This unfolding was already illustrated in the figure at the beginning of this tutorial. After unfolding, we end up with a model quite similar to a regular multilayer feedforward network. The only differences are that each layer has multiple inputs (The previous state and the current input) and that the parameters (here: $w_{rec}$ and $w_x$) are shared between each layer.
-     </p>
-     <h3 id="Compute-the-output-with-the-forward-step">
-      Compute the output with the forward step
-      <a class="anchor-link" href="#Compute-the-output-with-the-forward-step">
-       ¶
-      </a>
-     </h3>
-     <p>
-      The forward step will unroll the network, and compute the forward activations just as in regular backpropagation. The final output will be used to compute the cost function from which the error signal used for training will be derived.
-     </p>
-     <p>
-      When unfolding a recurrent net over multiple timesteps each layer computes the same recurrence relation on different timesteps. This recurrence relation for our model is defined in the
-      <code>
-       update_state
-      </code>
-      method.
-     </p>
-     <p>
-      The
-      <code>
-       forward_states
-      </code>
-      method computes the states over increasing timesteps by applying the
-      <code>
-       update_state
-      </code>
-      method in a for-loop. Note that the forward steps for multiple sequences can be computed in parallel by use of vectorisation, as was illustrated in the
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/">
-       previous tutorial on feedforward nets
-      </a>
-      .
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Training-with-backpropagation-through-time">
+    Training with backpropagation through time
+    <a class="anchor-link" href="#Training-with-backpropagation-through-time">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The typical algorithm to train recurrent nets is the
+    <a href="https://en.wikipedia.org/wiki/Backpropagation_through_time">
+     backpropagation through time
+    </a>
+    algorithm. The name already implies that it is based on the backpropagation algorithm we discussed in the
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part03/">
+     previous tutorial on feedforward nets
+    </a>
+    .
+   </p>
+   <p>
+    If you understand regular
+    <a href="https://en.wikipedia.org/wiki/Backpropagation">
+     backpropagation
+    </a>
+    than backpropagation through time is not much more difficult to understand. The only main difference is that the recurrent net needs to be unfolded through time for a certain amount of timesteps. This unfolding was already illustrated in the figure at the beginning of this tutorial. After unfolding, we end up with a model quite similar to a regular multilayer feedforward network. The only differences are that each layer has multiple inputs (The previous state and the current input) and that the parameters (here: $w_{rec}$ and $w_x$) are shared between each layer.
+   </p>
+   <h3 id="Compute-the-output-with-the-forward-step">
+    Compute the output with the forward step
+    <a class="anchor-link" href="#Compute-the-output-with-the-forward-step">
+     ¶
+    </a>
+   </h3>
+   <p>
+    The forward step will unroll the network, and compute the forward activations just as in regular backpropagation. The final output will be used to compute the cost function from which the error signal used for training will be derived.
+   </p>
+   <p>
+    When unfolding a recurrent net over multiple timesteps each layer computes the same recurrence relation on different timesteps. This recurrence relation for our model is defined in the
+    <code>
+     update_state
+    </code>
+    method.
+   </p>
+   <p>
+    The
+    <code>
+     forward_states
+    </code>
+    method computes the states over increasing timesteps by applying the
+    <code>
+     update_state
+    </code>
+    method in a for-loop. Note that the forward steps for multiple sequences can be computed in parallel by use of vectorisation, as was illustrated in the
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/">
+     previous tutorial on feedforward nets
+    </a>
+    .
 Since the network begins without seeing anything of the sequence, an initial state needs to be provided. In this example, this initial state is set to 0 (it is possible to treat it as another parameter).
-     </p>
-     <p>
-      Finally, the cost $\xi$ (
-      <code>
-       cost
-      </code>
-      ) at the output is computed in this example via the mean squared error function (MSE) over all sequences in the input data.
-     </p>
-    </div>
-   </div>
+   </p>
+   <p>
+    Finally, the cost $\xi$ (
+    <code>
+     cost
+    </code>
+    ) at the output is computed in this example via the mean squared error function (MSE) over all sequences in the input data.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [3]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [3]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define the forward step functions</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Define the forward step functions</span>
 <span class="k">def</span> <span class="nf">update_state</span><span class="p">(</span><span class="n">xk</span><span class="p">,</span> <span class="n">sk</span><span class="p">,</span> <span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">):</span>
     <span class="sd">"""</span>
 <span class="sd">    Compute state k from the previous state (sk) and current input (xk),</span>
@@ -298,81 +297,81 @@ Since the network begins without seeing anything of the sequence, an initial sta
 <span class="sd">    Return the state activations in a matrix, the last column S[:,-1] contains the</span>
 <span class="sd">    final activations.</span>
 <span class="sd">    """</span>
-    <span class="c"># Initialise the matrix that holds all states for all input sequences.</span>
-    <span class="c"># The initial state s0 is set to 0.</span>
+    <span class="c1"># Initialise the matrix that holds all states for all input sequences.</span>
+    <span class="c1"># The initial state s0 is set to 0.</span>
     <span class="n">S</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span>
-    <span class="c"># Use the recurrence relation defined by update_state to update the </span>
-    <span class="c">#  states trough time.</span>
+    <span class="c1"># Use the recurrence relation defined by update_state to update the </span>
+    <span class="c1">#  states trough time.</span>
     <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
-        <span class="c"># S[k] = S[k-1] * wRec + X[k] * wx</span>
+        <span class="c1"># S[k] = S[k-1] * wRec + X[k] * wx</span>
         <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">update_state</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span><span class="n">k</span><span class="p">],</span> <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="p">],</span> <span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">S</span>
 
-<span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span> 
     <span class="sd">"""</span>
 <span class="sd">    Return the MSE between the targets t and the outputs y.</span>
 <span class="sd">    """</span>
     <span class="k">return</span> <span class="p">((</span><span class="n">t</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">nb_of_samples</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Compute-the-gradients-with-the-backward-step">
-      Compute the gradients with the backward step
-      <a class="anchor-link" href="#Compute-the-gradients-with-the-backward-step">
-       ¶
-      </a>
-     </h3>
-     <p>
-      The backward step will begin with computing the gradient of the cost with respect to the output of the network $\partial \xi / \partial y$ by the
-      <code>
-       output_gradient
-      </code>
-      method. This gradient will then be propagated backwards through time (layer by layer) from output to input to update the parameters by the
-      <code>
-       backward_gradient
-      </code>
-      method. The recurrence relation to propagate this gradient through the network can be written as:
-     </p>
-     $$\frac{\partial \xi}{\partial S_{k-1}}
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Compute-the-gradients-with-the-backward-step">
+    Compute the gradients with the backward step
+    <a class="anchor-link" href="#Compute-the-gradients-with-the-backward-step">
+     ¶
+    </a>
+   </h3>
+   <p>
+    The backward step will begin with computing the gradient of the cost with respect to the output of the network $\partial \xi / \partial y$ by the
+    <code>
+     output_gradient
+    </code>
+    method. This gradient will then be propagated backwards through time (layer by layer) from output to input to update the parameters by the
+    <code>
+     backward_gradient
+    </code>
+    method. The recurrence relation to propagate this gradient through the network can be written as:
+   </p>
+   $$\frac{\partial \xi}{\partial S_{k-1}} 
 = \frac{\partial \xi}{\partial S_{k}} \frac{\partial S_{k}}{\partial S_{k-1}}
 = \frac{\partial \xi}{\partial S_{k}} w_{rec}$$
-     <p>
-      and starts at:
-     </p>
-     $$\frac{\partial \xi}{\partial y} = \frac{\partial \xi}{\partial S_{n}}$$
-     <p>
-      With $n$ the number of timesteps the network is unfolded. Note that only the recursive parameter that connects states $w_{rec}$ plays a role in propagating the error down the network.
-     </p>
-     <p>
-      The gradients of the cost function with respect to the parameters can then be found by summing the parameter gradients in each layer (or accumulating them while propagating the error). The update rules for the weights are:
-     </p>
-     $$\frac{\partial \xi}{\partial w_x}
+   <p>
+    and starts at:
+   </p>
+   $$\frac{\partial \xi}{\partial y} = \frac{\partial \xi}{\partial S_{n}}$$
+   <p>
+    With $n$ the number of timesteps the network is unfolded. Note that only the recursive parameter that connects states $w_{rec}$ plays a role in propagating the error down the network.
+   </p>
+   <p>
+    The gradients of the cost function with respect to the parameters can then be found by summing the parameter gradients in each layer (or accumulating them while propagating the error). The update rules for the weights are:
+   </p>
+   $$\frac{\partial \xi}{\partial w_x} 
 = \sum_{k=0}^{n} \frac{\partial \xi}{\partial S_{k}} x_k
 \\
-\frac{\partial \xi}{\partial w_{rec}}
+\frac{\partial \xi}{\partial w_{rec}} 
 = \sum_{k=1}^{n} \frac{\partial \xi}{\partial S_{k}} S_{k-1}$$
-    </div>
-   </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [4]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [4]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="k">def</span> <span class="nf">output_gradient</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="k">def</span> <span class="nf">output_gradient</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
     <span class="sd">"""</span>
 <span class="sd">    Compute the gradient of the MSE cost function with respect to the output y.</span>
 <span class="sd">    """</span>
@@ -384,180 +383,180 @@ Since the network begins without seeing anything of the sequence, an initial sta
 <span class="sd">    Accumulate the parameter gradients for wX and wRec by for each layer by addition.</span>
 <span class="sd">    Return the parameter gradients as a tuple, and the gradients at the output of each layer.</span>
 <span class="sd">    """</span>
-    <span class="c"># Initialise the array that stores the gradients of the cost with respect to the states.</span>
+    <span class="c1"># Initialise the array that stores the gradients of the cost with respect to the states.</span>
     <span class="n">grad_over_time</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span>
     <span class="n">grad_over_time</span><span class="p">[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">grad_out</span>
-    <span class="c"># Set the gradient accumulations to 0</span>
+    <span class="c1"># Set the gradient accumulations to 0</span>
     <span class="n">wx_grad</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">wRec_grad</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
-        <span class="c"># Compute the parameter gradients and accumulate the results.</span>
+        <span class="c1"># Compute the parameter gradients and accumulate the results.</span>
         <span class="n">wx_grad</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">grad_over_time</span><span class="p">[:,</span><span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">X</span><span class="p">[:,</span><span class="n">k</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
         <span class="n">wRec_grad</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">grad_over_time</span><span class="p">[:,</span><span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-        <span class="c"># Compute the gradient at the output of the previous layer</span>
+        <span class="c1"># Compute the gradient at the output of the previous layer</span>
         <span class="n">grad_over_time</span><span class="p">[:,</span><span class="n">k</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">grad_over_time</span><span class="p">[:,</span><span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">wRec</span>
     <span class="k">return</span> <span class="p">(</span><span class="n">wx_grad</span><span class="p">,</span> <span class="n">wRec_grad</span><span class="p">),</span> <span class="n">grad_over_time</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Gradient-Checking">
-      Gradient Checking
-      <a class="anchor-link" href="#Gradient-Checking">
-       ¶
-      </a>
-     </h3>
-     <p>
-      We can again perform gradient checking, like we did in
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Gradient-checking">
-       part 4
-      </a>
-      of the tutorial on feedforward nets, to assert that we didn't make any mistakes while computing the gradients. Gradient checking asserts that the gradient computed by backpropagation is close to the
-      <a href="https://en.wikipedia.org/wiki/Numerical_differentiation">
-       numerical gradient
-      </a>
-      .
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Gradient-Checking">
+    Gradient Checking
+    <a class="anchor-link" href="#Gradient-Checking">
+     ¶
+    </a>
+   </h3>
+   <p>
+    We can again perform gradient checking, like we did in
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Gradient-checking">
+     part 4
+    </a>
+    of the tutorial on feedforward nets, to assert that we didn't make any mistakes while computing the gradients. Gradient checking asserts that the gradient computed by backpropagation is close to the
+    <a href="https://en.wikipedia.org/wiki/Numerical_differentiation">
+     numerical gradient
+    </a>
+    .
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [5]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [5]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Perform gradient checking</span>
-<span class="c"># Set the weight parameters used during gradient checking</span>
-<span class="n">params</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1.2</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">]</span>  <span class="c"># [wx, wRec]</span>
-<span class="c"># Set the small change to compute the numerical gradient</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Perform gradient checking</span>
+<span class="c1"># Set the weight parameters used during gradient checking</span>
+<span class="n">params</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1.2</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">]</span>  <span class="c1"># [wx, wRec]</span>
+<span class="c1"># Set the small change to compute the numerical gradient</span>
 <span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-7</span>
-<span class="c"># Compute the backprop gradients</span>
+<span class="c1"># Compute the backprop gradients</span>
 <span class="n">S</span> <span class="o">=</span> <span class="n">forward_states</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
 <span class="n">grad_out</span> <span class="o">=</span> <span class="n">output_gradient</span><span class="p">(</span><span class="n">S</span><span class="p">[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">t</span><span class="p">)</span>
 <span class="n">backprop_grads</span><span class="p">,</span> <span class="n">grad_over_time</span> <span class="o">=</span> <span class="n">backward_gradient</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">grad_out</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-<span class="c"># Compute the numerical gradient for each parameter in the layer</span>
+<span class="c1"># Compute the numerical gradient for each parameter in the layer</span>
 <span class="k">for</span> <span class="n">p_idx</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
     <span class="n">grad_backprop</span> <span class="o">=</span> <span class="n">backprop_grads</span><span class="p">[</span><span class="n">p_idx</span><span class="p">]</span>
-    <span class="c"># + eps</span>
+    <span class="c1"># + eps</span>
     <span class="n">params</span><span class="p">[</span><span class="n">p_idx</span><span class="p">]</span> <span class="o">+=</span> <span class="n">eps</span>
     <span class="n">plus_cost</span> <span class="o">=</span> <span class="n">cost</span><span class="p">(</span><span class="n">forward_states</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">])[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">t</span><span class="p">)</span>
-    <span class="c"># - eps</span>
+    <span class="c1"># - eps</span>
     <span class="n">params</span><span class="p">[</span><span class="n">p_idx</span><span class="p">]</span> <span class="o">-=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">eps</span>
     <span class="n">min_cost</span> <span class="o">=</span> <span class="n">cost</span><span class="p">(</span><span class="n">forward_states</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">])[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">t</span><span class="p">)</span>
-    <span class="c"># reset param value</span>
+    <span class="c1"># reset param value</span>
     <span class="n">params</span><span class="p">[</span><span class="n">p_idx</span><span class="p">]</span> <span class="o">+=</span> <span class="n">eps</span>
-    <span class="c"># calculate numerical gradient</span>
+    <span class="c1"># calculate numerical gradient</span>
     <span class="n">grad_num</span> <span class="o">=</span> <span class="p">(</span><span class="n">plus_cost</span> <span class="o">-</span> <span class="n">min_cost</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">eps</span><span class="p">)</span>
-    <span class="c"># Raise error if the numerical grade is not close to the backprop gradient</span>
+    <span class="c1"># Raise error if the numerical grade is not close to the backprop gradient</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">grad_num</span><span class="p">,</span> <span class="n">grad_backprop</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">'Numerical gradient of {:.6f} is not close to the backpropagation gradient of {:.6f}!'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">grad_num</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">grad_backprop</span><span class="p">)))</span>
-<span class="k">print</span><span class="p">(</span><span class="s">'No gradient errors found'</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">'Numerical gradient of {:.6f} is not close to the backpropagation gradient of {:.6f}!'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">grad_num</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">grad_backprop</span><span class="p">)))</span>
+<span class="k">print</span><span class="p">(</span><span class="s1">'No gradient errors found'</span><span class="p">)</span>
 </pre>
-      </div>
-     </div>
-    </div>
-   </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>No gradient errors found
-</pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>No gradient errors found
+</pre>
+    </div>
    </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Updating-the-parameters">
-      Updating the parameters
-      <a class="anchor-link" href="#Updating-the-parameters">
-       ¶
-      </a>
-     </h3>
-     <p>
-      Recurrent nets are notoriously difficult to train due to
-      <a href="http://neuralnetworksanddeeplearning.com/chap5.html">
-       unstable gradients
-      </a>
-      which make it difficult for simple gradient based optimization methods, such as gradient descent, to find a good local minimum.
-     </p>
-     <p>
-      This instability is illustrated in the following figures. The top 2 figures show parts of the cost surface between certain values for $w_x$ and $w_{rec}$. The colored markers are places where we sampled the evolution of the gradient during backpropagating through time, which is illustrated in the bottom figure. Note that the color of the cost surface is logarithmic. The cost surface is near 0 in a small valley around $w_x=w_{rec}=1$, and grows very fast near the edges of the plot (especially for $|w_{rec}|&gt;1$).
-     </p>
-     <p>
-      The source of the gradient instabilities in our simple linear model is shown in the bottom figure. The instabilities arise from the fact that the recurrence relation to propagate the gradient backwards through time forms a
-      <a href="https://en.wikipedia.org/wiki/Geometric_progression">
-       geometric sequence
-      </a>
-      (as was noted above):
-     </p>
-     $$\frac{\partial \xi}{\partial S_{k-1}}
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Updating-the-parameters">
+    Updating the parameters
+    <a class="anchor-link" href="#Updating-the-parameters">
+     ¶
+    </a>
+   </h3>
+   <p>
+    Recurrent nets are notoriously difficult to train due to
+    <a href="http://neuralnetworksanddeeplearning.com/chap5.html">
+     unstable gradients
+    </a>
+    which make it difficult for simple gradient based optimization methods, such as gradient descent, to find a good local minimum.
+   </p>
+   <p>
+    This instability is illustrated in the following figures. The top 2 figures show parts of the cost surface between certain values for $w_x$ and $w_{rec}$. The colored markers are places where we sampled the evolution of the gradient during backpropagating through time, which is illustrated in the bottom figure. Note that the color of the cost surface is logarithmic. The cost surface is near 0 in a small valley around $w_x=w_{rec}=1$, and grows very fast near the edges of the plot (especially for $|w_{rec}|&gt;1$).
+   </p>
+   <p>
+    The source of the gradient instabilities in our simple linear model is shown in the bottom figure. The instabilities arise from the fact that the recurrence relation to propagate the gradient backwards through time forms a
+    <a href="https://en.wikipedia.org/wiki/Geometric_progression">
+     geometric sequence
+    </a>
+    (as was noted above):
+   </p>
+   $$\frac{\partial \xi}{\partial S_{k-1}} 
 = \frac{\partial \xi}{\partial S_{k}} \frac{\partial S_{k}}{\partial S_{k-1}}
 = \frac{\partial \xi}{\partial S_{k}} w_{rec}$$
-     <p>
-      The gradient of a state $S_k$ between a state $m$ timesteps back ($S_{k-m}$) can then be written as:
-     </p>
-     $$\frac{\partial S_{k}}{\partial S_{k-m}}
+   <p>
+    The gradient of a state $S_k$ between a state $m$ timesteps back ($S_{k-m}$) can then be written as:
+   </p>
+   $$\frac{\partial S_{k}}{\partial S_{k-m}} 
 = \frac{\partial S_{k}}{\partial S_{k-1}} * \cdots * \frac{\partial S_{k-m+1}}{\partial S_{k-1}} = w_{rec}^m$$
-     <p>
-      Note that in our simple linear model the gradient grows exponentially if $|w_{rec}|&gt;1$ (known as exploding gradient). And that the gradient shrinks exponentially if $|w_{rec}|
-     </p>
-     <p>
-      This exploding gradient is illustrated in the point sampled at $w_x\!=\!1, w_{rec}\!=\!2$, in which the gradient grows exponentially during backpropagation (y-axis is log scale). The $w_x\!=\!1, w_{rec}\!=\!-2$ point illustrates a different kind of alternating gradient explosion due to $w_{rec}$ being negative. This exploding gradient means that training can be highly sensitive to changes in the $w_{rec}$ parameter.
-     </p>
-     <p>
-      The vanishing gradient is illustrated in the points sampled at $w_x\!=\!1, w_{rec}\!=\!0.5$ and $w_x\!=\!1, w_{rec}\!=\!-0.5$, in which both the gradients decrease exponentially. This vanishing gradient means that the network is not able to learn long-term dependencies because the gradient vanishes over time.
-     </p>
-     <p>
-      Note that if $w_{rec}\!=\!0$ the gradient immediatly goes to $0$, and that if $w_{rec}\!=\!1$ the gradient stays constant over time.
-     </p>
-     <p>
-      The next section will illustrate how we can optimize this unstable error function.
-     </p>
-    </div>
-   </div>
+   <p>
+    Note that in our simple linear model the gradient grows exponentially if $|w_{rec}|&gt;1$ (known as exploding gradient). And that the gradient shrinks exponentially if $|w_{rec}|&lt;1$ (known as vanishing gradient).
+   </p>
+   <p>
+    This exploding gradient is illustrated in the point sampled at $w_x\!=\!1, w_{rec}\!=\!2$, in which the gradient grows exponentially during backpropagation (y-axis is log scale). The $w_x\!=\!1, w_{rec}\!=\!-2$ point illustrates a different kind of alternating gradient explosion due to $w_{rec}$ being negative. This exploding gradient means that training can be highly sensitive to changes in the $w_{rec}$ parameter.
+   </p>
+   <p>
+    The vanishing gradient is illustrated in the points sampled at $w_x\!=\!1, w_{rec}\!=\!0.5$ and $w_x\!=\!1, w_{rec}\!=\!-0.5$, in which both the gradients decrease exponentially. This vanishing gradient means that the network is not able to learn long-term dependencies because the gradient vanishes over time.
+   </p>
+   <p>
+    Note that if $w_{rec}\!=\!0$ the gradient immediatly goes to $0$, and that if $w_{rec}\!=\!1$ the gradient stays constant over time.
+   </p>
+   <p>
+    The next section will illustrate how we can optimize this unstable error function.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [6]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [6]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define plotting functions</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Define plotting functions</span>
 
-<span class="c"># Define points to annotate (wx, wRec, color)</span>
-<span class="n">points</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="s">'r'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="s">'b'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span><span class="s">'g'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="s">'c'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mf">0.5</span><span class="p">,</span><span class="s">'m'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span><span class="s">'y'</span><span class="p">)]</span>
+<span class="c1"># Define points to annotate (wx, wRec, color)</span>
+<span class="n">points</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="s1">'r'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="s1">'b'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span><span class="s1">'g'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="s1">'c'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mf">0.5</span><span class="p">,</span><span class="s1">'m'</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span><span class="s1">'y'</span><span class="p">)]</span>
 
 <span class="k">def</span> <span class="nf">get_cost_surface</span><span class="p">(</span><span class="n">w1_low</span><span class="p">,</span> <span class="n">w1_high</span><span class="p">,</span> <span class="n">w2_low</span><span class="p">,</span> <span class="n">w2_high</span><span class="p">,</span> <span class="n">nb_of_ws</span><span class="p">,</span> <span class="n">cost_func</span><span class="p">):</span>
     <span class="sd">"""Define a vector of weights for which we want to plot the cost."""</span>
-    <span class="n">w1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">w1_low</span><span class="p">,</span> <span class="n">w1_high</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span>  <span class="c"># Weight 1</span>
-    <span class="n">w2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">w2_low</span><span class="p">,</span> <span class="n">w2_high</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span>  <span class="c"># Weight 2</span>
-    <span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">)</span>  <span class="c"># Generate grid</span>
-    <span class="n">cost_ws</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_ws</span><span class="p">,</span> <span class="n">nb_of_ws</span><span class="p">))</span>  <span class="c"># Initialize cost matrix</span>
-    <span class="c"># Fill the cost matrix for each combination of weights</span>
+    <span class="n">w1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">w1_low</span><span class="p">,</span> <span class="n">w1_high</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span>  <span class="c1"># Weight 1</span>
+    <span class="n">w2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">w2_low</span><span class="p">,</span> <span class="n">w2_high</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span>  <span class="c1"># Weight 2</span>
+    <span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">)</span>  <span class="c1"># Generate grid</span>
+    <span class="n">cost_ws</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_ws</span><span class="p">,</span> <span class="n">nb_of_ws</span><span class="p">))</span>  <span class="c1"># Initialize cost matrix</span>
+    <span class="c1"># Fill the cost matrix for each combination of weights</span>
     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
             <span class="n">cost_ws</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">cost_func</span><span class="p">(</span><span class="n">ws1</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">ws2</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">])</span>
@@ -566,64 +565,64 @@ Since the network begins without seeing anything of the sequence, an initial sta
 <span class="k">def</span> <span class="nf">plot_surface</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span><span class="p">,</span> <span class="n">cost_ws</span><span class="p">):</span>
     <span class="sd">"""Plot the cost in function of the weights."""</span>
     <span class="n">surf</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span><span class="p">,</span> <span class="n">cost_ws</span><span class="p">,</span> <span class="n">levels</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">30</span><span class="p">),</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">pink</span><span class="p">,</span> <span class="n">norm</span><span class="o">=</span><span class="n">LogNorm</span><span class="p">())</span>
-    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s">'$w_{in}$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s">'$w_{rec}$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$w_{in}$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$w_{rec}$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">surf</span>
 
 <span class="k">def</span> <span class="nf">plot_points</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">points</span><span class="p">):</span>
     <span class="sd">"""Plot the annotation points on the given axis."""</span>
     <span class="k">for</span> <span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">points</span><span class="p">:</span>
-        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">,</span> <span class="n">c</span><span class="o">+</span><span class="s">'o'</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">,</span> <span class="n">c</span><span class="o">+</span><span class="s1">'o'</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 
 <span class="k">def</span> <span class="nf">get_cost_surface_figure</span><span class="p">(</span><span class="n">cost_func</span><span class="p">,</span> <span class="n">points</span><span class="p">):</span>
     <span class="sd">"""Plot the cost surfaces together with the annotated points."""</span>
-    <span class="c"># Plot figures</span>
-    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
-    <span class="c"># Plot overview of cost function</span>
+    <span class="c1"># Plot figures</span>
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>   
+    <span class="c1"># Plot overview of cost function</span>
     <span class="n">ax_1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
     <span class="n">ws1_1</span><span class="p">,</span> <span class="n">ws2_1</span><span class="p">,</span> <span class="n">cost_ws_1</span> <span class="o">=</span> <span class="n">get_cost_surface</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="n">cost_func</span><span class="p">)</span>
     <span class="n">surf_1</span> <span class="o">=</span> <span class="n">plot_surface</span><span class="p">(</span><span class="n">ax_1</span><span class="p">,</span> <span class="n">ws1_1</span><span class="p">,</span> <span class="n">ws2_1</span><span class="p">,</span> <span class="n">cost_ws_1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">plot_points</span><span class="p">(</span><span class="n">ax_1</span><span class="p">,</span> <span class="n">points</span><span class="p">)</span>
     <span class="n">ax_1</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
     <span class="n">ax_1</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-    <span class="c"># Plot zoom of cost function</span>
+    <span class="c1"># Plot zoom of cost function</span>
     <span class="n">ax_2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
     <span class="n">ws1_2</span><span class="p">,</span> <span class="n">ws2_2</span><span class="p">,</span> <span class="n">cost_ws_2</span> <span class="o">=</span> <span class="n">get_cost_surface</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="n">cost_func</span><span class="p">)</span>
     <span class="n">surf_2</span> <span class="o">=</span> <span class="n">plot_surface</span><span class="p">(</span><span class="n">ax_2</span><span class="p">,</span> <span class="n">ws1_2</span><span class="p">,</span> <span class="n">ws2_2</span><span class="p">,</span> <span class="n">cost_ws_2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">plot_points</span><span class="p">(</span><span class="n">ax_2</span><span class="p">,</span> <span class="n">points</span><span class="p">)</span>
     <span class="n">ax_2</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
     <span class="n">ax_2</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-    <span class="c"># Show the colorbar</span>
+    <span class="c1"># Show the colorbar</span>
     <span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">right</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
     <span class="n">cax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_axes</span><span class="p">([</span><span class="mf">0.85</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.78</span><span class="p">])</span>
     <span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">surf_1</span><span class="p">,</span> <span class="n">ticks</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span> <span class="n">cax</span><span class="o">=</span><span class="n">cax</span><span class="p">)</span>
-    <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">labelpad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
-    <span class="n">cbar</span><span class="o">.</span><span class="n">set_ticklabels</span><span class="p">([</span><span class="s">'{:.0e}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">)])</span>
-    <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s">'Cost surface'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">labelpad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">set_ticklabels</span><span class="p">([</span><span class="s1">'{:.0e}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">)])</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">'Cost surface'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">fig</span>
 
 <span class="k">def</span> <span class="nf">plot_gradient_over_time</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">get_grad_over_time</span><span class="p">):</span>
     <span class="sd">"""Plot the gradients of the annotated point and how the evolve over time."""</span>
-    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">6.5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">6.5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>  
     <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">111</span><span class="p">)</span>
-    <span class="c"># Plot points</span>
+    <span class="c1"># Plot points</span>
     <span class="k">for</span> <span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">points</span><span class="p">:</span>
         <span class="n">grad_over_time</span> <span class="o">=</span> <span class="n">get_grad_over_time</span><span class="p">(</span><span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">)</span>
         <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="n">grad_over_time</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">grad_over_time</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">c</span><span class="o">+</span><span class="s">'-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'({0}, {1})'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">),</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">grad_over_time</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">c</span><span class="o">+</span><span class="s1">'-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'({0}, {1})'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">),</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="n">grad_over_time</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
-    <span class="c"># Set up plot axis</span>
+    <span class="c1"># Set up plot axis</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">yscale</span><span class="p">(</span><span class="s">'symlog'</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">yscale</span><span class="p">(</span><span class="s1">'symlog'</span><span class="p">)</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">yticks</span><span class="p">([</span><span class="mi">10</span><span class="o">**</span><span class="mi">8</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">6</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">4</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">10</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">10</span><span class="o">**</span><span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">10</span><span class="o">**</span><span class="mi">6</span><span class="p">,</span> <span class="o">-</span><span class="mi">10</span><span class="o">**</span><span class="mi">8</span><span class="p">])</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'timestep k'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">frac{</span><span class="se">\\</span><span class="s">partial </span><span class="se">\\</span><span class="s">xi}{</span><span class="se">\\</span><span class="s">partial S_{k}}$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'timestep k'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">frac{</span><span class="se">\\</span><span class="s1">partial </span><span class="se">\\</span><span class="s1">xi}{</span><span class="se">\\</span><span class="s1">partial S_{k}}$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'Unstability of gradient in backward propagation.</span><span class="se">\n</span><span class="s">(backpropagate from left to right)'</span><span class="p">)</span>
-    <span class="c"># Set legend</span>
-    <span class="n">leg</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s">'center left'</span><span class="p">,</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span> <span class="n">frameon</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">numpoints</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">leg</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s">'$(w_x, w_{rec})$'</span><span class="p">,</span> <span class="n">prop</span><span class="o">=</span><span class="p">{</span><span class="s">'size'</span><span class="p">:</span><span class="mi">15</span><span class="p">})</span>
-
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Unstability of gradient in backward propagation.</span><span class="se">\n</span><span class="s1">(backpropagate from left to right)'</span><span class="p">)</span>
+    <span class="c1"># Set legend</span>
+    <span class="n">leg</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">'center left'</span><span class="p">,</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span> <span class="n">frameon</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">numpoints</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">leg</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'$(w_x, w_{rec})$'</span><span class="p">,</span> <span class="n">prop</span><span class="o">=</span><span class="p">{</span><span class="s1">'size'</span><span class="p">:</span><span class="mi">15</span><span class="p">})</span>
+    
 <span class="k">def</span> <span class="nf">get_grad_over_time</span><span class="p">(</span><span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">):</span>
     <span class="sd">"""Helper func to only get the gradient over time from wx and wRec."""</span>
     <span class="n">S</span> <span class="o">=</span> <span class="n">forward_states</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">wx</span><span class="p">,</span> <span class="n">wRec</span><span class="p">)</span>
@@ -631,42 +630,42 @@ Since the network begins without seeing anything of the sequence, an initial sta
     <span class="n">_</span><span class="p">,</span> <span class="n">grad_over_time</span> <span class="o">=</span> <span class="n">backward_gradient</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">grad_out</span><span class="p">,</span> <span class="n">wRec</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">grad_over_time</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [7]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [7]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot cost surface and gradients</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Plot cost surface and gradients</span>
 
-<span class="c"># Get and plot the cost surface figure with markers</span>
+<span class="c1"># Get and plot the cost surface figure with markers</span>
 <span class="n">fig</span> <span class="o">=</span> <span class="n">get_cost_surface_figure</span><span class="p">(</span><span class="k">lambda</span> <span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">:</span> <span class="n">cost</span><span class="p">(</span><span class="n">forward_states</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">)[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="p">,</span> <span class="n">t</span><span class="p">),</span> <span class="n">points</span><span class="p">)</span>
 
-<span class="c"># Get the plots of the gradients changing by backpropagating.</span>
+<span class="c1"># Get the plots of the gradients changing by backpropagating.</span>
 <span class="n">plot_gradient_over_time</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">get_grad_over_time</span><span class="p">)</span>
-<span class="c"># Show figures</span>
+<span class="c1"># Show figures</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAo8AAAEmCAYAAAADa3rAAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAo8AAAEmCAYAAAADa3rAAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzsvXu4JUV5qP9+7Lkw46hkwojcAgiORoMJEgXUAF6IoDkm
 RnKMwRPESDTRH0aPxiR6EALHJMefaFQgchSUaCAREzUJiCgQwXhBVDCiEAQGZkSdOAzMMNe9+c4f
 vWrt3r37Ut1dfVvre59nntmru7qq1q3rXV/dRFUxDMMwDMMwDB/26LoChmEYhmEYxnAweTQMwzAM
@@ -1126,14 +1125,15 @@ XA68JyKeaKF+M5sv7yPMFohbHq0OdwHflLQD2AG8FbhK0juB0yNiD3A28N8cb2E4CTgEKCL+Dnga
 dSbwPEmbJW0ATsu/FM4Dvg5c1GqRZtYa7yPM+sPh0ZqyBOwHXhARTwPnALvz+0TWPeUxuGYnLu8j
 zHrC3dZmZmZmlswtj2ZmZmaWzOHRzMzMzJI5PJqZmZlZModHMzMzM0vm8GhmZmZmyRwezczMzCyZ
 w6OZmZmZJXN4NDMzM7NkDo9mZmZmluz/AdYMiwpJ9xA0AAAAAElFTkSuQmCC
-"/>
-      </div>
-     </div>
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgMAAAErCAYAAABDzICRAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+">
+     </img>
+    </div>
+   </div>
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgMAAAErCAYAAABDzICRAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzsnXl4VdXV/z8rCRAgQJgzkYEZZQhEARFKFFDqUGtba622
 au2rr0Orv86DrWitbdW2+nbQzlpr1daKVVRQkSgSwIACKjOBEBJCCEMIQ+b1++OcG25u7pTknntu
 wv48z3mSM+39Pfuee/e09lqiqhgMBoPBYDhziXNbgMFgMBgMBncxjQGDwWAwGM5wTGPAYDAYDIYz
@@ -1826,138 +1826,144 @@ VJpv6S+U/Y8q200Dlkt6DZgOnFZ+bykwB3hG0r8l7QV8H5gH/EHSappOi5P7Pe8DwDLgXuAa2/cO
 8BpbM08HVgJ3StpugO0jYiujDt47JSI6QNJ44BlghO31ddNExHCQKwMRERE9LsVAxNYpl/wiYqOl
 mSAiIqLH5cpAREREj0sxEBER0eNSDERERPS4FAMRERE9LsVAREREj0sxEBER0eP+CwIvRkv9BN6g
 AAAAAElFTkSuQmCC
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h3 id="Rprop-optimisation">
-      Rprop optimisation
-      <a class="anchor-link" href="#Rprop-optimisation">
-       ¶
-      </a>
-     </h3>
-     <p>
-      The previous section illustrated that the gradient can be highly unstable. Entering an area of unstable gradients could result in a huge jump on the cost surface, where the optimizer might end up far from the original point. This is illustrated in the following figure (from
-      <a href="http://www.jmlr.org/proceedings/papers/v28/pascanu13.pdf">
-       Pascanu et al.
-      </a>
-      ):
-     </p>
-     <p>
-      <img alt='Illustration exploding gradient from "On the difficulty of training Recurrent Neural Networks", Razvan Pascanu' src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/ExplodingGradient_Razvan.png"/>
-     </p>
-     <p>
-      Remember from our
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part01/">
-       previous tutorial on feedforward nets
-      </a>
-      that our gradient descent update rule was:
-     </p>
-     $$W(i+1) = W(i) - \mu \frac{\partial \xi}{\partial W(i)}$$
-     <p>
-      With $W(i)$ the value of $W$ at iteration $i$ during the gradient descent, and $\mu$ the learning rate.
-     </p>
-     <p>
-      If during training we would end up in the blue point in the surface plot above above ($w_x\!=\!1, w_{rec}\!=\!2$) the gradient would be in the order of $10^7$. Even with a small learning rate of 0.000001 ($10^{-6}$) the parameters $W$ would be updated a distance 10 units from its current position, which would be catastrophic in our example. One way do deal with this is to lower the learning rate even more, but if then the optimisation enters a low gradient area the updates wouldn't move at all.
-     </p>
-     <p>
-      Researchers have found many ways to do gradient based training in this unstable environment. Some examples are:
-      <a href="http://arxiv.org/pdf/1211.5063v2.pdf">
-       Gradient clipping
-      </a>
-      ,
-      <a href="http://www.icml-2011.org/papers/532_icmlpaper.pdf">
-       Hessian-Free Optimization
-      </a>
-      ,
-      <a href="http://www.cs.utoronto.ca/~ilya/pubs/ilya_sutskever_phd_thesis.pdf">
-       Momentum
-      </a>
-      , etc.
-     </p>
-     <p>
-      We can handle the unstable gradients by making the optimisation updates less sensitive to the gradients. One way to do this is by using a technique called
-      <a href="https://en.wikipedia.org/wiki/Rprop">
-       resilient backpropagation
-      </a>
-      (
-      <a href="http://deeplearning.cs.cmu.edu/pdfs/Rprop.pdf">
-       Rprop
-      </a>
-      ). Rprop is similar to the momentum method we described in a
-      <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Backpropagation-updates">
-       previous tutorial
-      </a>
-      but uses only the sign of the gradient to update the parameters. The Rprop algorithm can be summarised as follows:
-     </p>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Rprop-optimisation">
+    Rprop optimisation
+    <a class="anchor-link" href="#Rprop-optimisation">
+     ¶
+    </a>
+   </h3>
+   <p>
+    The previous section illustrated that the gradient can be highly unstable. Entering an area of unstable gradients could result in a huge jump on the cost surface, where the optimizer might end up far from the original point. This is illustrated in the following figure (from
+    <a href="http://www.jmlr.org/proceedings/papers/v28/pascanu13.pdf">
+     Pascanu et al.
+    </a>
+    ):
+   </p>
+   <p>
+    <img alt='Illustration exploding gradient from "On the difficulty of training Recurrent Neural Networks", Razvan Pascanu' src="https://raw.githubusercontent.com/peterroelants/peterroelants.github.io/master/notebooks/RNN_implementation/img/ExplodingGradient_Razvan.png"/>
+   </p>
+   <p>
+    Remember from our
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part01/">
+     previous tutorial on feedforward nets
+    </a>
+    that our gradient descent update rule was:
+   </p>
+   $$W(i+1) = W(i) - \mu \frac{\partial \xi}{\partial W(i)}$$
+   <p>
+    With $W(i)$ the value of $W$ at iteration $i$ during the gradient descent, and $\mu$ the learning rate.
+   </p>
+   <p>
+    If during training we would end up in the blue point in the surface plot above above ($w_x\!=\!1, w_{rec}\!=\!2$) the gradient would be in the order of $10^7$. Even with a small learning rate of 0.000001 ($10^{-6}$) the parameters $W$ would be updated a distance 10 units from its current position, which would be catastrophic in our example. One way do deal with this is to lower the learning rate even more, but if then the optimisation enters a low gradient area the updates wouldn't move at all.
+   </p>
+   <p>
+    Researchers have found many ways to do gradient based training in this unstable environment. Some examples are:
+    <a href="http://arxiv.org/pdf/1211.5063v2.pdf">
+     Gradient clipping
+    </a>
+    ,
+    <a href="http://www.icml-2011.org/papers/532_icmlpaper.pdf">
+     Hessian-Free Optimization
+    </a>
+    ,
+    <a href="http://www.cs.utoronto.ca/~ilya/pubs/ilya_sutskever_phd_thesis.pdf">
+     Momentum
+    </a>
+    , etc.
+   </p>
+   <p>
+    We can handle the unstable gradients by making the optimisation updates less sensitive to the gradients. One way to do this is by using a technique called
+    <a href="https://en.wikipedia.org/wiki/Rprop">
+     resilient backpropagation
+    </a>
+    (
+    <a href="http://deeplearning.cs.cmu.edu/pdfs/Rprop.pdf">
+     Rprop
+    </a>
+    ). Rprop is similar to the momentum method we described in a
+    <a href="http://peterroelants.github.io/posts/neural_network_implementation_part04/#Backpropagation-updates">
+     previous tutorial
+    </a>
+    but uses only the sign of the gradient to update the parameters. The Rprop algorithm can be summarised as follows:
+   </p>
+   <ul>
+    <li>
+     Set initial weight update value $\Delta$ to a nonzero value.
+    </li>
+    <li>
+     For each parameter $w$:
      <ul>
       <li>
-       Set initial weight update value $\Delta$ to a nonzero value.
+       If the sign of the weight's gradient changes compared to the previous iteration:
+       <br>
+        $sign(\partial \xi /\partial w(i)) \neq sign(\partial \xi /\partial w(i-1))$
+        <ul>
+         <li>
+          Multiply the weight update value $\Delta$ by $\eta^-$, with $\eta^- &lt; 1$.
+          <br>
+           $\Delta(i) = \Delta(i) * \eta^-$
+          </br>
+         </li>
+        </ul>
+       </br>
       </li>
       <li>
-       For each parameter $w$:
-       <ul>
-        <li>
-         If the sign of the weight's gradient changes compared to the previous iteration:
-         <br/>
-         $sign(\partial \xi /\partial w(i)) \neq sign(\partial \xi /\partial w(i-1))$
-         <ul>
-          <li>
-           Multiply the weight update value $\Delta$ by $\eta^-$, with $\eta^-
-$\Delta(i) = \Delta(i) * \eta^-$
-          </li>
-         </ul>
-        </li>
-        <li>
-         Else if the sign of the gradient stays the same:
-         <br/>
-         $sign(\partial \xi /\partial w(i)) = sign(\partial \xi /\partial w(i-1))$
-         <ul>
-          <li>
-           Multiply the weight update value $\Delta$ by $\eta^+$, with $\eta^+ &gt; 1$.
-           <br/>
+       Else if the sign of the gradient stays the same:
+       <br>
+        $sign(\partial \xi /\partial w(i)) = sign(\partial \xi /\partial w(i-1))$
+        <ul>
+         <li>
+          Multiply the weight update value $\Delta$ by $\eta^+$, with $\eta^+ &gt; 1$.
+          <br>
            $\Delta(i) = \Delta(i) * \eta^+$
-          </li>
-         </ul>
-        </li>
-        <li>
-         Update the weight with its weight update value $\Delta$ in the oposite direction of its gradient.
+          </br>
+         </li>
+        </ul>
+       </br>
+      </li>
+      <li>
+       Update the weight with its weight update value $\Delta$ in the oposite direction of its gradient.
 $w(i+1) = w(i) - sign(\partial \xi /\partial w(i))* \Delta(i)$
-        </li>
-       </ul>
       </li>
      </ul>
-     <p>
-      The hyperparameters are
-      <a href="http://deeplearning.cs.cmu.edu/pdfs/Rprop.pdf">
-       usually
-      </a>
-      set as $\eta^+ = 1.2$ and $\eta^- = 0.5$. If we compare this with the momentum method then this means that if the sign of the gradient doesn't change that we increase the weight update value with 20%. And if the sign of the gradient changes (update passes through a minima) then we decrease the weight update value by half. Note that the weight update value $\Delta$ is similar to the momentum's velocity parameter, the difference is that the weight update value only reflects the size of the velocity for each parameter. The direction is determined by the sign of the current gradient.
-     </p>
-     <p>
-      We optimised our simple model with Rprop for 500 iterations. The updates are plotted on the cost surface below as blue dots. Note that even though the weight parameters start out in a high cost and high gradient position that Rprop can still approximate the (1, 1) minimum at the end of our iterations.
-     </p>
-    </div>
-   </div>
+    </li>
+   </ul>
+   <p>
+    The hyperparameters are
+    <a href="http://deeplearning.cs.cmu.edu/pdfs/Rprop.pdf">
+     usually
+    </a>
+    set as $\eta^+ = 1.2$ and $\eta^- = 0.5$. If we compare this with the momentum method then this means that if the sign of the gradient doesn't change that we increase the weight update value with 20%. And if the sign of the gradient changes (update passes through a minima) then we decrease the weight update value by half. Note that the weight update value $\Delta$ is similar to the momentum's velocity parameter, the difference is that the weight update value only reflects the size of the velocity for each parameter. The direction is determined by the sign of the current gradient.
+   </p>
+   <p>
+    We optimised our simple model with Rprop for 500 iterations. The updates are plotted on the cost surface below as blue dots. Note that even though the weight parameters start out in a high cost and high gradient position that Rprop can still approximate the (1, 1) minimum at the end of our iterations.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [8]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [8]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Define Rprop optimisation function</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Define Rprop optimisation function</span>
 <span class="k">def</span> <span class="nf">update_rprop</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">W</span><span class="p">,</span> <span class="n">W_prev_sign</span><span class="p">,</span> <span class="n">W_delta</span><span class="p">,</span> <span class="n">eta_p</span><span class="p">,</span> <span class="n">eta_n</span><span class="p">):</span>
     <span class="sd">"""</span>
 <span class="sd">    Update Rprop values in one iteration.</span>
@@ -1968,12 +1974,12 @@ $w(i+1) = w(i) - sign(\partial \xi /\partial w(i))* \Delta(i)$
 <span class="sd">    W_delta: Rprop update values (Delta).</span>
 <span class="sd">    eta_p, eta_n: Rprop hyperparameters.</span>
 <span class="sd">    """</span>
-    <span class="c"># Perform forward and backward pass to get the gradients</span>
+    <span class="c1"># Perform forward and backward pass to get the gradients</span>
     <span class="n">S</span> <span class="o">=</span> <span class="n">forward_states</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
     <span class="n">grad_out</span> <span class="o">=</span> <span class="n">output_gradient</span><span class="p">(</span><span class="n">S</span><span class="p">[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">t</span><span class="p">)</span>
     <span class="n">W_grads</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">backward_gradient</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">grad_out</span><span class="p">,</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-    <span class="n">W_sign</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">W_grads</span><span class="p">)</span>  <span class="c"># Sign of new gradient</span>
-    <span class="c"># Update the Delta (update value) for each weight parameter seperately</span>
+    <span class="n">W_sign</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">W_grads</span><span class="p">)</span>  <span class="c1"># Sign of new gradient</span>
+    <span class="c1"># Update the Delta (update value) for each weight parameter seperately</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">W</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">W_sign</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">W_prev_sign</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span>
             <span class="n">W_delta</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*=</span> <span class="n">eta_p</span>
@@ -1981,118 +1987,118 @@ $w(i+1) = w(i) - sign(\partial \xi /\partial w(i))* \Delta(i)$
             <span class="n">W_delta</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*=</span> <span class="n">eta_n</span>
     <span class="k">return</span> <span class="n">W_delta</span><span class="p">,</span> <span class="n">W_sign</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [9]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [9]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Perform Rprop optimisation</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Perform Rprop optimisation</span>
 
-<span class="c"># Set hyperparameters</span>
+<span class="c1"># Set hyperparameters</span>
 <span class="n">eta_p</span> <span class="o">=</span> <span class="mf">1.2</span>
 <span class="n">eta_n</span> <span class="o">=</span> <span class="mf">0.5</span>
 
-<span class="c"># Set initial parameters</span>
-<span class="n">W</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>  <span class="c"># [wx, wRec]</span>
-<span class="n">W_delta</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]</span>  <span class="c"># Update values (Delta) for W</span>
-<span class="n">W_sign</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c"># Previous sign of W</span>
+<span class="c1"># Set initial parameters</span>
+<span class="n">W</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>  <span class="c1"># [wx, wRec]</span>
+<span class="n">W_delta</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]</span>  <span class="c1"># Update values (Delta) for W</span>
+<span class="n">W_sign</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c1"># Previous sign of W</span>
 
-<span class="n">ls_of_ws</span> <span class="o">=</span> <span class="p">[(</span><span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>  <span class="c"># List of weights to plot</span>
-<span class="c"># Iterate over 500 iterations</span>
+<span class="n">ls_of_ws</span> <span class="o">=</span> <span class="p">[(</span><span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>  <span class="c1"># List of weights to plot</span>
+<span class="c1"># Iterate over 500 iterations</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">500</span><span class="p">):</span>
-    <span class="c"># Get the update values and sign of the last gradient</span>
+    <span class="c1"># Get the update values and sign of the last gradient</span>
     <span class="n">W_delta</span><span class="p">,</span> <span class="n">W_sign</span> <span class="o">=</span> <span class="n">update_rprop</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">W</span><span class="p">,</span> <span class="n">W_sign</span><span class="p">,</span> <span class="n">W_delta</span><span class="p">,</span> <span class="n">eta_p</span><span class="p">,</span> <span class="n">eta_n</span><span class="p">)</span>
-    <span class="c"># Update each weight parameter seperately</span>
+    <span class="c1"># Update each weight parameter seperately</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">W</span><span class="p">):</span>
         <span class="n">W</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-=</span> <span class="n">W_sign</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="n">W_delta</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-    <span class="n">ls_of_ws</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>  <span class="c"># Add weights to list to plot</span>
+    <span class="n">ls_of_ws</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>  <span class="c1"># Add weights to list to plot</span>
 
-<span class="k">print</span><span class="p">(</span><span class="s">'Final weights are: wx = {0},  wRec = {1}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<span class="k">print</span><span class="p">(</span><span class="s1">'Final weights are: wx = {0},  wRec = {1}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
 </pre>
-      </div>
-     </div>
-    </div>
-   </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>Final weights are: wx = 1.00135554721,  wRec = 0.999674473785
-</pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [10]:
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
     </div>
-    <div class="inner_cell">
-     <div class="input_area collapsed">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="c"># Plot the cost surface with the weights over the iterations.</span>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>Final weights are: wx = 1.00135554721,  wRec = 0.999674473785
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [10]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="c1"># Plot the cost surface with the weights over the iterations.</span>
 
-<span class="c"># Define plot function</span>
+<span class="c1"># Define plot function</span>
 <span class="k">def</span> <span class="nf">plot_optimisation</span><span class="p">(</span><span class="n">ls_of_ws</span><span class="p">,</span> <span class="n">cost_func</span><span class="p">):</span>
     <span class="sd">"""Plot the optimisation iterations on the cost surface."""</span>
     <span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">ls_of_ws</span><span class="p">)</span>
-    <span class="c"># Plot figures</span>
+    <span class="c1"># Plot figures</span>
     <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
-    <span class="c"># Plot overview of cost function</span>
+    <span class="c1"># Plot overview of cost function</span>
     <span class="n">ax_1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
     <span class="n">ws1_1</span><span class="p">,</span> <span class="n">ws2_1</span><span class="p">,</span> <span class="n">cost_ws_1</span> <span class="o">=</span> <span class="n">get_cost_surface</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="n">cost_func</span><span class="p">)</span>
     <span class="n">surf_1</span> <span class="o">=</span> <span class="n">plot_surface</span><span class="p">(</span><span class="n">ax_1</span><span class="p">,</span> <span class="n">ws1_1</span><span class="p">,</span> <span class="n">ws2_1</span><span class="p">,</span> <span class="n">cost_ws_1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="n">ax_1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span><span class="p">,</span> <span class="s">'b.'</span><span class="p">)</span>
+    <span class="n">ax_1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span><span class="p">,</span> <span class="s1">'b.'</span><span class="p">)</span>
     <span class="n">ax_1</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">([</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">])</span>
     <span class="n">ax_1</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">([</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">])</span>
-    <span class="c"># Plot zoom of cost function</span>
+    <span class="c1"># Plot zoom of cost function</span>
     <span class="n">ax_2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
     <span class="n">ws1_2</span><span class="p">,</span> <span class="n">ws2_2</span><span class="p">,</span> <span class="n">cost_ws_2</span> <span class="o">=</span> <span class="n">get_cost_surface</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="n">cost_func</span><span class="p">)</span>
     <span class="n">surf_2</span> <span class="o">=</span> <span class="n">plot_surface</span><span class="p">(</span><span class="n">ax_2</span><span class="p">,</span> <span class="n">ws1_2</span><span class="p">,</span> <span class="n">ws2_2</span><span class="p">,</span> <span class="n">cost_ws_2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">ax_2</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span>
     <span class="n">ax_2</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span>
     <span class="n">surf_2</span> <span class="o">=</span> <span class="n">plot_surface</span><span class="p">(</span><span class="n">ax_2</span><span class="p">,</span> <span class="n">ws1_2</span><span class="p">,</span> <span class="n">ws2_2</span><span class="p">,</span> <span class="n">cost_ws_2</span><span class="p">)</span>
-    <span class="n">ax_2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span><span class="p">,</span> <span class="s">'b.'</span><span class="p">)</span>
-    <span class="c"># Show the colorbar</span>
+    <span class="n">ax_2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span><span class="p">,</span> <span class="s1">'b.'</span><span class="p">)</span>
+    <span class="c1"># Show the colorbar</span>
     <span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">right</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
     <span class="n">cax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_axes</span><span class="p">([</span><span class="mf">0.85</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.78</span><span class="p">])</span>
     <span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">surf_1</span><span class="p">,</span> <span class="n">ticks</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span> <span class="n">cax</span><span class="o">=</span><span class="n">cax</span><span class="p">)</span>
-    <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-    <span class="n">cbar</span><span class="o">.</span><span class="n">set_ticklabels</span><span class="p">([</span><span class="s">'{:.0e}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">)])</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s">'Cost surface'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">set_ticklabels</span><span class="p">([</span><span class="s1">'{:.0e}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">)])</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">'Cost surface'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
-
-<span class="c"># Plot the optimisation</span>
+    
+<span class="c1"># Plot the optimisation</span>
 <span class="n">plot_optimisation</span><span class="p">(</span><span class="n">ls_of_ws</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">:</span> <span class="n">cost</span><span class="p">(</span><span class="n">forward_states</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">)[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="p">,</span> <span class="n">t</span><span class="p">))</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
-      </div>
-     </div>
     </div>
    </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_png output_subarea ">
-       <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAo0AAAEmCAYAAAAHnqr9AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_png output_subarea ">
+     <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAo0AAAEmCAYAAAAHnqr9AAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAALEgAACxIB0t1+/AAAIABJREFUeJzsnXmYHVWZuN8vvSQdsmBMJCFEg4AoigqIgCgggmzuMjqI
 iqCOOCqj/kB0FARhwBUcUVDGAUUURHDDQXZQQEV2UBBF9gABEkKWTtJLvt8fVXW7bt1aTu11b5/3
 efKkb9WpU+d2367z9vedRVQVi8VisVgsFosljil1N8BisVgsFovF0nysNFosFovFYrFYErHSaLFY
@@ -2596,77 +2602,76 @@ HOvuT/capBCiN/SOEGLYKNMoOiGqknoW8EwzW2NmK4DdosLgucDPgEN7DVII0Rt6RwgxfCSNoivm
 gM3AXu6+FdgX2BRtMybVUGpjK8TyRe8IIQaOqqeFEEIIIUQhyjQKIYQQQohCJI1CCCGEEKIQSaMQ
 QgghhChE0iiEEEIIIQqRNAohhBBCiEIkjUIIIYQQohBJoxBCCCGEKETSKIQQQgghCpE0CiGEEEKI
 Qv4fXHuQzxSMdgsAAAAASUVORK5CYII=
-"/>
-      </div>
-     </div>
+">
+     </img>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <h2 id="Final-model">
-      Final model
-      <a class="anchor-link" href="#Final-model">
-       ¶
-      </a>
-     </h2>
-     <p>
-      The final model is tested on a test sequence below. Note that the output is very close to the target output and that if we round the output to the nearest integer that the output would be perfect.
-     </p>
-    </div>
-   </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Final-model">
+    Final model
+    <a class="anchor-link" href="#Final-model">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The final model is tested on a test sequence below. Note that the output is very close to the target output and that if we round the output to the nearest integer that the output would be perfect.
+   </p>
   </div>
-  <div class="cell border-box-sizing code_cell rendered">
-   <div class="input">
-    <div class="prompt input_prompt">
-     In [11]:
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [11]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
-    <div class="inner_cell">
-     <div class="input_area">
-      <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
-      </div>
-      <div class=" highlight hl-ipython2">
-       <pre><span class="n">test_inpt</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asmatrix</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
+    <div class=" highlight hl-ipython2">
+     <pre><span></span><span class="n">test_inpt</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asmatrix</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
 <span class="n">test_outpt</span> <span class="o">=</span> <span class="n">forward_states</span><span class="p">(</span><span class="n">test_inpt</span><span class="p">,</span> <span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">])[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-<span class="k">print</span> <span class="s">'Target output: {:d} vs Model output: {:.2f}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">test_inpt</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">test_outpt</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="k">print</span> <span class="s1">'Target output: {:d} vs Model output: {:.2f}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">test_inpt</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">test_outpt</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 </pre>
-      </div>
-     </div>
-    </div>
-   </div>
-   <div class="output_wrapper">
-    <div class="output">
-     <div class="output_area">
-      <div class="prompt">
-      </div>
-      <div class="output_subarea output_stream output_stdout output_text">
-       <pre>Target output: 5 vs Model output: 5.00
-</pre>
-      </div>
-     </div>
     </div>
    </div>
   </div>
-  <div class="cell border-box-sizing text_cell rendered">
-   <div class="prompt input_prompt">
-   </div>
-   <div class="inner_cell">
-    <div class="text_cell_render border-box-sizing rendered_html">
-     <p>
-      This post at
-      <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/">
-       peterroelants.github.io
-      </a>
-      is generated from an IPython notebook file.
-      <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/RNN_implementation/rnn_implementation_part01.ipynb">
-       Link to the full IPython notebook file
-      </a>
-     </p>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>Target output: 5 vs Model output: 5.00
+</pre>
     </div>
    </div>
   </div>
- </body>
-</html>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post at
+    <a href="http://peterroelants.github.io/posts/rnn_implementation_part01/">
+     peterroelants.github.io
+    </a>
+    is generated from an IPython notebook file.
+    <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/RNN_implementation/rnn_implementation_part01.ipynb">
+     Link to the full IPython notebook file
+    </a>
+   </p>
+  </div>
+ </div>
+</div>

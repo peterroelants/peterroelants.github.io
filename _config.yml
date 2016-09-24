@@ -53,7 +53,7 @@ gems: [github-pages]
 # Conversion
 ############################################################
 markdown: kramdown
-highlighter: pygments # Set by Github
+highlighter: rouge # Set by Github
 # LSI: produce an index for related posts.
 lsi: false # Set by Github
 excerpt_separator: "\n\n"
@@ -68,7 +68,7 @@ host: 127.0.0.1
 # Note - if you enable this, and attempt to view your site locally you have to use the baseurl in your local path.
 # Serve the website from the given base URL
 # Example, you must use http://localhost:4000/path/to/blog
-#baseurl: /path/to/blog 
+#baseurl: /path/to/blog
 baseurl: "" # does not include hostname
 
 

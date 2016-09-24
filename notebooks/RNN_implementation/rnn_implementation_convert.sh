@@ -1,4 +1,4 @@
-#!/bin/bash bash
+#!/usr/bin/env bash
 
 template="notebook_simple_rnn_post"
 

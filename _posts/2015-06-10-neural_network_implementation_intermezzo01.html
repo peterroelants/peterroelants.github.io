@@ -1,9 +1,4 @@
----
-layout: notebook_simple_ann_post
-title: How to implement a neural network Intermezzo 1
----
-
-
+--- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Intermezzo 1 \n---\n\n
 <div class="cell border-box-sizing text_cell rendered">
  <div class="prompt input_prompt">
  </div>
@@ -68,10 +63,10 @@ title: How to implement a neural network Intermezzo 1
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Python imports</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c"># Matrix and vector computation package</span>
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
-<span class="c"># Allow matplotlib to plot inside this notebook</span>
+     <pre><span></span><span class="c1"># Python imports</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c1"># Matrix and vector computation package</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="c1"># Allow matplotlib to plot inside this notebook</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
 </pre>
     </div>
@@ -110,7 +105,7 @@ $$ \sigma(z) = \frac{1}{1+e^{-z}} $$
    </p>
    $$\begin{split}
 P(t=1| z) &amp; = \sigma(z) = \frac{1}{1+e^{-z}} \\
-P(t=0| z) &amp; = 1 - \sigma(z) = \frac{e^{-z}}{1+e^{-z}}
+P(t=0| z) &amp; = 1 - \sigma(z) = \frac{e^{-z}}{1+e^{-z}} 
 \end{split}$$
    <p>
     Note that input $z$ to the logistic function corresponds to the log
@@ -139,8 +134,8 @@ log \frac{P(t=1|z)}{P(t=0|z)} &amp; = log \frac{\frac{1}{1+e^{-z}}}{\frac{e^{-z}
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the logistic function</span>
-<span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
+     <pre><span></span><span class="c1"># Define the logistic function</span>
+<span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> 
     <span class="k">return</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
 </pre>
     </div>
@@ -158,12 +153,12 @@ log \frac{P(t=1|z)}{P(t=0|z)} &amp; = log \frac{\frac{1}{1+e^{-z}}}{\frac{e^{-z}
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the logistic function</span>
+     <pre><span></span><span class="c1"># Plot the logistic function</span>
 <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">6</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">100</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="s">'b-'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$z$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$\sigma(z)$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'logistic function'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="s1">'b-'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$z$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$\sigma(z)$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'logistic function'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
@@ -413,7 +408,7 @@ wKgGg+0AAAAASUVORK5CYII=
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the logistic function</span>
+     <pre><span></span><span class="c1"># Define the logistic function</span>
 <span class="k">def</span> <span class="nf">logistic_derivative</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">))</span>
 </pre>
@@ -432,12 +427,12 @@ wKgGg+0AAAAASUVORK5CYII=
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the derivative of the logistic function</span>
+     <pre><span></span><span class="c1"># Plot the derivative of the logistic function</span>
 <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">6</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">100</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">logistic_derivative</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="s">'r-'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$z$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">frac{</span><span class="se">\\</span><span class="s">partial </span><span class="se">\\</span><span class="s">sigma(z)}{</span><span class="se">\\</span><span class="s">partial z}$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'derivative of the logistic function'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">logistic_derivative</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="s1">'r-'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$z$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">frac{</span><span class="se">\\</span><span class="s1">partial </span><span class="se">\\</span><span class="s1">sigma(z)}{</span><span class="se">\\</span><span class="s1">partial z}$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'derivative of the logistic function'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
@@ -724,7 +719,7 @@ jDGhsAJjjDEmFFZgjDHGhMIKjDHGmFD8P34x4+ns5+eSAAAAAElFTkSuQmCC
    </p>
    $$P(t,z|\theta) = P(t|z,\theta)P(z|\theta)$$
    <p>
-    Since we are not interested in the probability of $z$ we can reduce this to: $\mathcal{L}(\theta|t,z) = P(t|z,\theta) = \prod_{i=1}^{n} P(t_i|z_i,\theta)$.
+    Since we are not interested in the probability of $z$ we can reduce this to: $\mathcal{L}(\theta|t,z) = P(t|z,\theta) = \prod_{i=1}^{n} P(t_i|z_i,\theta)$. 
 Since $t_i$ is a
     <a href="http://en.wikipedia.org/wiki/Bernoulli_distribution">
      Bernoulli variable
@@ -755,7 +750,7 @@ P(t|z) &amp; = \prod_{i=1}^{n} P(t_i=1|z_i)^{t_i} * (1 - P(t_i=1|z_i))^{1-t_i} \
    <p>
     This function looks complicated but besides the previous derivation there are a couple of intuitions why this function is used as a cost function for logistic regression. First of all it can be rewritten as:
    </p>
-   $$ \xi(t_i,y_i) =
+   $$ \xi(t_i,y_i) = 
    \begin{cases}
    -log(y_i) &amp; \text{if } t_i = 1 \\
    -log(1-y_i) &amp; \text{if } t_i = 0

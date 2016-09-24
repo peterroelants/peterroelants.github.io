@@ -45,7 +45,7 @@ fi
 indices_to_collapse=$5
 
 # Convert to stripped down html
-ipython nbconvert --to html --template basic $nb_file
+jupyter nbconvert --to html --template basic $nb_file
 
 # Get the html filename
 filename="${nb_file/.ipynb/.html}"

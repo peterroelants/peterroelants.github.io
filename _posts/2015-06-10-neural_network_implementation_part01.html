@@ -1,9 +1,4 @@
----
-layout: notebook_simple_ann_post
-title: How to implement a neural network Part 1
----
-
-
+--- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Part 1 \n---\n\n
 <div class="cell border-box-sizing text_cell rendered">
  <div class="prompt input_prompt">
  </div>
@@ -30,6 +25,17 @@ title: How to implement a neural network Part 1
    </p>
    <p>
     The code input cells in this blog can be collapsed or expanded by clicking on the button in the top right of each cell.
+   </p>
+   <p>
+    A version of this tutorial is also
+    <a href="http://www.jianshu.com/p/0da9eb3fd06b">
+     available in Chinese
+    </a>
+    thanks to
+    <a href="http://www.jianshu.com/users/b20d6310182a/latest_articles">
+     Mingming Chen
+    </a>
+    .
    </p>
   </div>
  </div>
@@ -109,12 +115,12 @@ title: How to implement a neural network Part 1
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Python imports</span>
-<span class="kn">import</span> <span class="nn">numpy</span>  <span class="c"># Matrix and vector computation package</span>
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
-<span class="c"># Allow matplotlib to plot inside this notebook</span>
+     <pre><span></span><span class="c1"># Python imports</span>
+<span class="kn">import</span> <span class="nn">numpy</span>  <span class="c1"># Matrix and vector computation package</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="c1"># Allow matplotlib to plot inside this notebook</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
-<span class="c"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
+<span class="c1"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
 <span class="n">numpy</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre>
     </div>
@@ -157,20 +163,20 @@ Note that $\mathbf{x}$ is a vector of individual input samples $x_i$, and that $
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the vector of input samples as x, with 20 values sampled from a uniform distribution</span>
-<span class="c"># between 0 and 1</span>
+     <pre><span></span><span class="c1"># Define the vector of input samples as x, with 20 values sampled from a uniform distribution</span>
+<span class="c1"># between 0 and 1</span>
 <span class="n">x</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">20</span><span class="p">)</span>
 
-<span class="c"># Generate the target values t from x with small gaussian noise so the estimation won't</span>
-<span class="c"># be perfect.</span>
-<span class="c"># Define a function f that represents the line that generates t without noise</span>
+<span class="c1"># Generate the target values t from x with small gaussian noise so the estimation won't</span>
+<span class="c1"># be perfect.</span>
+<span class="c1"># Define a function f that represents the line that generates t without noise</span>
 <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">):</span> <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="mi">2</span>
 
-<span class="c"># Create the targets t with some gaussian noise</span>
-<span class="n">noise_variance</span> <span class="o">=</span> <span class="mf">0.2</span>  <span class="c"># Variance of the gaussian noise</span>
-<span class="c"># Gaussian noise error for each sample in x</span>
+<span class="c1"># Create the targets t with some gaussian noise</span>
+<span class="n">noise_variance</span> <span class="o">=</span> <span class="mf">0.2</span>  <span class="c1"># Variance of the gaussian noise</span>
+<span class="c1"># Gaussian noise error for each sample in x</span>
 <span class="n">noise</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="n">noise_variance</span>
-<span class="c"># Create targets t</span>
+<span class="c1"># Create targets t</span>
 <span class="n">t</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">+</span> <span class="n">noise</span>
 </pre>
     </div>
@@ -188,14 +194,14 @@ Note that $\mathbf{x}$ is a vector of individual input samples $x_i$, and that $
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the target t versus the input x</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s">'o'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'t'</span><span class="p">)</span>
-<span class="c"># Plot the initial line</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">f</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">f</span><span class="p">(</span><span class="mi">1</span><span class="p">)],</span> <span class="s">'b-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'f(x)'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$x$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$t$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+     <pre><span></span><span class="c1"># Plot the target t versus the input x</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">'o'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'t'</span><span class="p">)</span>
+<span class="c1"># Plot the initial line</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">f</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">f</span><span class="p">(</span><span class="mi">1</span><span class="p">)],</span> <span class="s1">'b-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'f(x)'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$t$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'inputs (x) vs targets (t)'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'inputs (x) vs targets (t)'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
@@ -436,10 +442,10 @@ ERGpSIlCREQqUqIQEZGKlChERKSi/w/RknmN6xbLYgAAAABJRU5ErkJggg==
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the neural network function y = x * w</span>
+     <pre><span></span><span class="c1"># Define the neural network function y = x * w</span>
 <span class="k">def</span> <span class="nf">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">):</span> <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="n">w</span>
 
-<span class="c"># Define the cost function</span>
+<span class="c1"># Define the cost function</span>
 <span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span> <span class="k">return</span> <span class="p">((</span><span class="n">t</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
 </pre>
     </div>
@@ -457,17 +463,17 @@ ERGpSIlCREQqUqIQEZGKlChERKSi/w/RknmN6xbLYgAAAABJRU5ErkJggg==
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the cost vs the given weight w</span>
+     <pre><span></span><span class="c1"># Plot the cost vs the given weight w</span>
 
-<span class="c"># Define a vector of weights for which we want to plot the cost</span>
-<span class="n">ws</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>  <span class="c"># weight values</span>
-<span class="n">cost_ws</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">vectorize</span><span class="p">(</span><span class="k">lambda</span> <span class="n">w</span><span class="p">:</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="p">,</span> <span class="n">t</span><span class="p">))(</span><span class="n">ws</span><span class="p">)</span>  <span class="c"># cost for each weight in ws</span>
+<span class="c1"># Define a vector of weights for which we want to plot the cost</span>
+<span class="n">ws</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>  <span class="c1"># weight values</span>
+<span class="n">cost_ws</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">vectorize</span><span class="p">(</span><span class="k">lambda</span> <span class="n">w</span><span class="p">:</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="p">,</span> <span class="n">t</span><span class="p">))(</span><span class="n">ws</span><span class="p">)</span>  <span class="c1"># cost for each weight in ws</span>
 
-<span class="c"># Plot</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ws</span><span class="p">,</span> <span class="n">cost_ws</span><span class="p">,</span> <span class="s">'r-'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$w$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'cost vs. weight'</span><span class="p">)</span>
+<span class="c1"># Plot</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ws</span><span class="p">,</span> <span class="n">cost_ws</span><span class="p">,</span> <span class="s1">'r-'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$w$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'cost vs. weight'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
@@ -802,30 +808,30 @@ $$w(k+1) = w(k) - \Delta w(k)$$
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># define the gradient function. Remember that y = nn(x, w) = x * w</span>
-<span class="k">def</span> <span class="nf">gradient</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+     <pre><span></span><span class="c1"># define the gradient function. Remember that y = nn(x, w) = x * w</span>
+<span class="k">def</span> <span class="nf">gradient</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span> 
     <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span>
 
-<span class="c"># define the update function delta w</span>
+<span class="c1"># define the update function delta w</span>
 <span class="k">def</span> <span class="nf">delta_w</span><span class="p">(</span><span class="n">w_k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">gradient</span><span class="p">(</span><span class="n">w_k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
 
-<span class="c"># Set the initial weight parameter</span>
+<span class="c1"># Set the initial weight parameter</span>
 <span class="n">w</span> <span class="o">=</span> <span class="mf">0.1</span>
-<span class="c"># Set the learning rate</span>
+<span class="c1"># Set the learning rate</span>
 <span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.1</span>
 
-<span class="c"># Start performing the gradient descent updates, and print the weights and cost:</span>
-<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c"># number of gradient descent updates</span>
-<span class="n">w_cost</span> <span class="o">=</span> <span class="p">[(</span><span class="n">w</span><span class="p">,</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span> <span class="n">t</span><span class="p">))]</span> <span class="c"># List to store the weight,costs values</span>
+<span class="c1"># Start performing the gradient descent updates, and print the weights and cost:</span>
+<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c1"># number of gradient descent updates</span>
+<span class="n">w_cost</span> <span class="o">=</span> <span class="p">[(</span><span class="n">w</span><span class="p">,</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span> <span class="n">t</span><span class="p">))]</span> <span class="c1"># List to store the weight,costs values</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">):</span>
-    <span class="n">dw</span> <span class="o">=</span> <span class="n">delta_w</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c"># Get the delta w update</span>
-    <span class="n">w</span> <span class="o">=</span> <span class="n">w</span> <span class="o">-</span> <span class="n">dw</span>  <span class="c"># Update the current weight parameter</span>
-    <span class="n">w_cost</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">w</span><span class="p">,</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span> <span class="n">t</span><span class="p">)))</span>  <span class="c"># Add weight,cost to list</span>
+    <span class="n">dw</span> <span class="o">=</span> <span class="n">delta_w</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c1"># Get the delta w update</span>
+    <span class="n">w</span> <span class="o">=</span> <span class="n">w</span> <span class="o">-</span> <span class="n">dw</span>  <span class="c1"># Update the current weight parameter</span>
+    <span class="n">w_cost</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">w</span><span class="p">,</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span> <span class="n">t</span><span class="p">)))</span>  <span class="c1"># Add weight,cost to list</span>
 
-<span class="c"># Print the final w, and cost</span>
+<span class="c1"># Print the final w, and cost</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">w_cost</span><span class="p">)):</span>
-    <span class="k">print</span><span class="p">(</span><span class="s">'w({}): {:.4f} </span><span class="se">\t</span><span class="s"> cost: {:.4f}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">w_cost</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="n">w_cost</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">]))</span>
+    <span class="k">print</span><span class="p">(</span><span class="s1">'w({}): {:.4f} </span><span class="se">\t</span><span class="s1"> cost: {:.4f}'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">w_cost</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="n">w_cost</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">]))</span>
 </pre>
     </div>
    </div>
@@ -869,19 +875,19 @@ w(4): 1.9399 	 cost: 0.4510
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the first 2 gradient descent updates</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ws</span><span class="p">,</span> <span class="n">cost_ws</span><span class="p">,</span> <span class="s">'r-'</span><span class="p">)</span>  <span class="c"># Plot the error curve</span>
-<span class="c"># Plot the updates</span>
+     <pre><span></span><span class="c1"># Plot the first 2 gradient descent updates</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ws</span><span class="p">,</span> <span class="n">cost_ws</span><span class="p">,</span> <span class="s1">'r-'</span><span class="p">)</span>  <span class="c1"># Plot the error curve</span>
+<span class="c1"># Plot the updates</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">w_cost</span><span class="p">)</span><span class="o">-</span><span class="mi">2</span><span class="p">):</span>
     <span class="n">w1</span><span class="p">,</span> <span class="n">c1</span> <span class="o">=</span> <span class="n">w_cost</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
     <span class="n">w2</span><span class="p">,</span> <span class="n">c2</span> <span class="o">=</span> <span class="n">w_cost</span><span class="p">[</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">c1</span><span class="p">,</span> <span class="s">'bo'</span><span class="p">)</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">],[</span><span class="n">c1</span><span class="p">,</span> <span class="n">c2</span><span class="p">],</span> <span class="s">'b-'</span><span class="p">)</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">c1</span><span class="o">+</span><span class="mf">0.5</span><span class="p">,</span> <span class="s">'$w({})$'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
-<span class="c"># Show figure</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$w$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'Gradient descent updates plotted on cost function'</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">c1</span><span class="p">,</span> <span class="s1">'bo'</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">],[</span><span class="n">c1</span><span class="p">,</span> <span class="n">c2</span><span class="p">],</span> <span class="s1">'b-'</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">c1</span><span class="o">+</span><span class="mf">0.5</span><span class="p">,</span> <span class="s1">'$w({})$'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">))</span> 
+<span class="c1"># Show figure</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$w$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Gradient descent updates plotted on cost function'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
@@ -1231,12 +1237,12 @@ MIxS+X/hpk2Ly8YNZwAAAABJRU5ErkJggg==
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="n">w</span> <span class="o">=</span> <span class="mi">0</span>
-<span class="c"># Start performing the gradient descent updates</span>
-<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">10</span>  <span class="c"># number of gradient descent updates</span>
+     <pre><span></span><span class="n">w</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="c1"># Start performing the gradient descent updates</span>
+<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">10</span>  <span class="c1"># number of gradient descent updates</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">):</span>
-    <span class="n">dw</span> <span class="o">=</span> <span class="n">delta_w</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c"># get the delta w update</span>
-    <span class="n">w</span> <span class="o">=</span> <span class="n">w</span> <span class="o">-</span> <span class="n">dw</span>  <span class="c"># update the current weight parameter</span>
+    <span class="n">dw</span> <span class="o">=</span> <span class="n">delta_w</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c1"># get the delta w update</span>
+    <span class="n">w</span> <span class="o">=</span> <span class="n">w</span> <span class="o">-</span> <span class="n">dw</span>  <span class="c1"># update the current weight parameter</span>
 </pre>
     </div>
    </div>
@@ -1253,17 +1259,17 @@ MIxS+X/hpk2Ly8YNZwAAAABJRU5ErkJggg==
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the fitted line agains the target line</span>
-<span class="c"># Plot the target t versus the input x</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s">'o'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'t'</span><span class="p">)</span>
-<span class="c"># Plot the initial line</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">f</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">f</span><span class="p">(</span><span class="mi">1</span><span class="p">)],</span> <span class="s">'b-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'f(x)'</span><span class="p">)</span>
-<span class="c"># plot the fitted line</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="o">*</span><span class="n">w</span><span class="p">,</span> <span class="mi">1</span><span class="o">*</span><span class="n">w</span><span class="p">],</span> <span class="s">'r-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'fitted line'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'input x'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'target t'</span><span class="p">)</span>
+     <pre><span></span><span class="c1"># Plot the fitted line agains the target line</span>
+<span class="c1"># Plot the target t versus the input x</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">'o'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'t'</span><span class="p">)</span>
+<span class="c1"># Plot the initial line</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">f</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">f</span><span class="p">(</span><span class="mi">1</span><span class="p">)],</span> <span class="s1">'b-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'f(x)'</span><span class="p">)</span>
+<span class="c1"># plot the fitted line</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="o">*</span><span class="n">w</span><span class="p">,</span> <span class="mi">1</span><span class="o">*</span><span class="n">w</span><span class="p">],</span> <span class="s1">'r-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'fitted line'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'input x'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'target t'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'input vs. target'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'input vs. target'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>

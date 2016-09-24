@@ -1,9 +1,4 @@
----
-layout: notebook_simple_ann_post
-title: How to implement a neural network Part 2
----
-
-
+--- \nlayout: notebook_simple_ann_post \ntitle: How to implement a neural network Part 2 \n---\n\n
 <div class="cell border-box-sizing text_cell rendered">
  <div class="prompt input_prompt">
  </div>
@@ -53,15 +48,15 @@ title: How to implement a neural network Part 2
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Python imports</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c"># Matrix and vector computation package</span>
-<span class="n">np</span><span class="o">.</span><span class="n">seterr</span><span class="p">(</span><span class="nb">all</span><span class="o">=</span><span class="s">'ignore'</span><span class="p">)</span> <span class="c"># ignore numpy warning like multiplication of inf</span>
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c"># Plotting library</span>
-<span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span> <span class="c"># some plotting functions</span>
-<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">cm</span> <span class="c"># Colormaps</span>
-<span class="c"># Allow matplotlib to plot inside this notebook</span>
+     <pre><span></span><span class="c1"># Python imports</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span> <span class="c1"># Matrix and vector computation package</span>
+<span class="n">np</span><span class="o">.</span><span class="n">seterr</span><span class="p">(</span><span class="nb">all</span><span class="o">=</span><span class="s1">'ignore'</span><span class="p">)</span> <span class="c1"># ignore numpy warning like multiplication of inf</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span> <span class="c1"># some plotting functions</span>
+<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">cm</span> <span class="c1"># Colormaps</span>
+<span class="c1"># Allow matplotlib to plot inside this notebook</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
-<span class="c"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
+<span class="c1"># Set the seed of the numpy random number generator so that the tutorial is reproducable</span>
 <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre>
     </div>
@@ -97,16 +92,16 @@ Note that $X$ is a $N \times 2$ matrix of individual input samples $\mathbf{x}_i
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define and generate the samples</span>
-<span class="n">nb_of_samples_per_class</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c"># The number of sample in each class</span>
-<span class="n">red_mean</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>  <span class="c"># The mean of the red class</span>
-<span class="n">blue_mean</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>  <span class="c"># The mean of the blue class</span>
-<span class="n">std_dev</span> <span class="o">=</span> <span class="mf">1.2</span>  <span class="c"># standard deviation of both classes</span>
-<span class="c"># Generate samples from both classes</span>
+     <pre><span></span><span class="c1"># Define and generate the samples</span>
+<span class="n">nb_of_samples_per_class</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c1"># The number of sample in each class</span>
+<span class="n">red_mean</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># The mean of the red class</span>
+<span class="n">blue_mean</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># The mean of the blue class</span>
+<span class="n">std_dev</span> <span class="o">=</span> <span class="mf">1.2</span>  <span class="c1"># standard deviation of both classes</span>
+<span class="c1"># Generate samples from both classes</span>
 <span class="n">x_red</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">std_dev</span> <span class="o">+</span> <span class="n">red_mean</span>
 <span class="n">x_blue</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">std_dev</span> <span class="o">+</span> <span class="n">blue_mean</span>
 
-<span class="c"># Merge samples in set of input variables x, and corresponding set of output variables t</span>
+<span class="c1"># Merge samples in set of input variables x, and corresponding set of output variables t</span>
 <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">x_red</span><span class="p">,</span> <span class="n">x_blue</span><span class="p">))</span>
 <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span><span class="mi">1</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span><span class="mi">1</span><span class="p">))))</span>
 </pre>
@@ -125,15 +120,15 @@ Note that $X$ is a $N \times 2$ matrix of individual input samples $\mathbf{x}_i
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot both classes on the x1, x2 plane</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_red</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_red</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'ro'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'class red'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_blue</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_blue</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'bo'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'class blue'</span><span class="p">)</span>
+     <pre><span></span><span class="c1"># Plot both classes on the x1, x2 plane</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_red</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_red</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'ro'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'class red'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_blue</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_blue</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'bo'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'class blue'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$x_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$x_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$x_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">([</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'red vs. blue classes in the input space'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'red vs. blue classes in the input space'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
     </div>
@@ -459,20 +454,20 @@ $$ \sigma(z) = \frac{1}{1+e^{-z}} $$
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Define the logistic function</span>
-<span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
+     <pre><span></span><span class="c1"># Define the logistic function</span>
+<span class="k">def</span> <span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span> 
     <span class="k">return</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
 
-<span class="c"># Define the neural network function y = 1 / (1 + numpy.exp(-x*w))</span>
-<span class="k">def</span> <span class="nf">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">):</span>
+<span class="c1"># Define the neural network function y = 1 / (1 + numpy.exp(-x*w))</span>
+<span class="k">def</span> <span class="nf">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">):</span> 
     <span class="k">return</span> <span class="n">logistic</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">T</span><span class="p">))</span>
 
-<span class="c"># Define the neural network prediction function that only returns</span>
-<span class="c">#  1 or 0 depending on the predicted class</span>
-<span class="k">def</span> <span class="nf">nn_predict</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">w</span><span class="p">):</span>
+<span class="c1"># Define the neural network prediction function that only returns</span>
+<span class="c1">#  1 or 0 depending on the predicted class</span>
+<span class="k">def</span> <span class="nf">nn_predict</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">w</span><span class="p">):</span> 
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">around</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">w</span><span class="p">))</span>
-
-<span class="c"># Define the cost function</span>
+    
+<span class="c1"># Define the cost function</span>
 <span class="k">def</span> <span class="nf">cost</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
     <span class="k">return</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">y</span><span class="p">))</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">((</span><span class="mi">1</span><span class="o">-</span><span class="n">t</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">y</span><span class="p">)))</span>
 </pre>
@@ -491,24 +486,24 @@ $$ \sigma(z) = \frac{1}{1+e^{-z}} $$
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the cost in function of the weights</span>
-<span class="c"># Define a vector of weights for which we want to plot the cost</span>
-<span class="n">nb_of_ws</span> <span class="o">=</span> <span class="mi">100</span> <span class="c"># compute the cost nb_of_ws times in each dimension</span>
-<span class="n">ws1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c"># weight 1</span>
-<span class="n">ws2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c"># weight 2</span>
-<span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span><span class="p">)</span> <span class="c"># generate grid</span>
-<span class="n">cost_ws</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_ws</span><span class="p">,</span> <span class="n">nb_of_ws</span><span class="p">))</span> <span class="c"># initialize cost matrix</span>
-<span class="c"># Fill the cost matrix for each combination of weights</span>
+     <pre><span></span><span class="c1"># Plot the cost in function of the weights</span>
+<span class="c1"># Define a vector of weights for which we want to plot the cost</span>
+<span class="n">nb_of_ws</span> <span class="o">=</span> <span class="mi">100</span> <span class="c1"># compute the cost nb_of_ws times in each dimension</span>
+<span class="n">ws1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c1"># weight 1</span>
+<span class="n">ws2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c1"># weight 2</span>
+<span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">ws1</span><span class="p">,</span> <span class="n">ws2</span><span class="p">)</span> <span class="c1"># generate grid</span>
+<span class="n">cost_ws</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_ws</span><span class="p">,</span> <span class="n">nb_of_ws</span><span class="p">))</span> <span class="c1"># initialize cost matrix</span>
+<span class="c1"># Fill the cost matrix for each combination of weights</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
         <span class="n">cost_ws</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">cost</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asmatrix</span><span class="p">([</span><span class="n">ws_x</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">ws_y</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]]))</span> <span class="p">,</span> <span class="n">t</span><span class="p">)</span>
-<span class="c"># Plot the cost function surface</span>
+<span class="c1"># Plot the cost function surface</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span><span class="p">,</span> <span class="n">cost_ws</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">pink</span><span class="p">)</span>
 <span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
-<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s">'$</span><span class="se">\\</span><span class="s">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$w_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$w_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'Cost function surface'</span><span class="p">)</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$w_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$w_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Cost function surface'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
@@ -885,12 +880,12 @@ gg==
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># define the gradient function.</span>
-<span class="k">def</span> <span class="nf">gradient</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+     <pre><span></span><span class="c1"># define the gradient function.</span>
+<span class="k">def</span> <span class="nf">gradient</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span> 
     <span class="k">return</span> <span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="o">*</span> <span class="n">x</span>
 
-<span class="c"># define the update function delta w which returns the </span>
-<span class="c">#  delta w for each weight in a vector</span>
+<span class="c1"># define the update function delta w which returns the </span>
+<span class="c1">#  delta w for each weight in a vector</span>
 <span class="k">def</span> <span class="nf">delta_w</span><span class="p">(</span><span class="n">w_k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">gradient</span><span class="p">(</span><span class="n">w_k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
 </pre>
@@ -927,18 +922,18 @@ The first 3 iterations are shown in the figure below. The blue dots represent th
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Set the initial weight parameter</span>
+     <pre><span></span><span class="c1"># Set the initial weight parameter</span>
 <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asmatrix</span><span class="p">([</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">])</span>
-<span class="c"># Set the learning rate</span>
+<span class="c1"># Set the learning rate</span>
 <span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.05</span>
 
-<span class="c"># Start the gradient descent updates and plot the iterations</span>
-<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">10</span>  <span class="c"># Number of gradient descent updates</span>
-<span class="n">w_iter</span> <span class="o">=</span> <span class="p">[</span><span class="n">w</span><span class="p">]</span>  <span class="c"># List to store the weight values over the iterations</span>
+<span class="c1"># Start the gradient descent updates and plot the iterations</span>
+<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">10</span>  <span class="c1"># Number of gradient descent updates</span>
+<span class="n">w_iter</span> <span class="o">=</span> <span class="p">[</span><span class="n">w</span><span class="p">]</span>  <span class="c1"># List to store the weight values over the iterations</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">):</span>
-    <span class="n">dw</span> <span class="o">=</span> <span class="n">delta_w</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c"># Get the delta w update</span>
-    <span class="n">w</span> <span class="o">=</span> <span class="n">w</span><span class="o">-</span><span class="n">dw</span>  <span class="c"># Update the weights</span>
-    <span class="n">w_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">w</span><span class="p">)</span>  <span class="c"># Store the weights for plotting</span>
+    <span class="n">dw</span> <span class="o">=</span> <span class="n">delta_w</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c1"># Get the delta w update</span>
+    <span class="n">w</span> <span class="o">=</span> <span class="n">w</span><span class="o">-</span><span class="n">dw</span>  <span class="c1"># Update the weights</span>
+    <span class="n">w_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">w</span><span class="p">)</span>  <span class="c1"># Store the weights for plotting</span>
 </pre>
     </div>
    </div>
@@ -955,28 +950,28 @@ The first 3 iterations are shown in the figure below. The blue dots represent th
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the first weight updates on the error surface</span>
-<span class="c"># Plot the error surface</span>
+     <pre><span></span><span class="c1"># Plot the first weight updates on the error surface</span>
+<span class="c1"># Plot the error surface</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span><span class="p">,</span> <span class="n">cost_ws</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">pink</span><span class="p">)</span>
 <span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
-<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s">'cost'</span><span class="p">)</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'cost'</span><span class="p">)</span>
 
-<span class="c"># Plot the updates</span>
-<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+<span class="c1"># Plot the updates</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span> 
     <span class="n">w1</span> <span class="o">=</span> <span class="n">w_iter</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
     <span class="n">w2</span> <span class="o">=</span> <span class="n">w_iter</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-    <span class="c"># Plot the weight-cost value and the line that represents the update</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'bo'</span><span class="p">)</span>  <span class="c"># Plot the weight cost value</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">w2</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]],</span> <span class="p">[</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">w2</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]],</span> <span class="s">'b-'</span><span class="p">)</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mf">0.4</span><span class="p">,</span> <span class="s">'$w({})$'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="n">color</span><span class="o">=</span><span class="s">'b'</span><span class="p">)</span>
-<span class="n">w1</span> <span class="o">=</span> <span class="n">w_iter</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
-<span class="c"># Plot the last weight</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'bo'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mf">0.4</span><span class="p">,</span> <span class="s">'$w({})$'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">color</span><span class="o">=</span><span class="s">'b'</span><span class="p">)</span>
-<span class="c"># Show figure</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$w_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$w_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'Gradient descent updates on cost surface'</span><span class="p">)</span>
+    <span class="c1"># Plot the weight-cost value and the line that represents the update</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'bo'</span><span class="p">)</span>  <span class="c1"># Plot the weight cost value</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">w2</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]],</span> <span class="p">[</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">w2</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]],</span> <span class="s1">'b-'</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mf">0.4</span><span class="p">,</span> <span class="s1">'$w({})$'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="n">color</span><span class="o">=</span><span class="s1">'b'</span><span class="p">)</span>
+<span class="n">w1</span> <span class="o">=</span> <span class="n">w_iter</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>  
+<span class="c1"># Plot the last weight</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'bo'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mf">0.4</span><span class="p">,</span> <span class="s1">'$w({})$'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">color</span><span class="o">=</span><span class="s1">'b'</span><span class="p">)</span> 
+<span class="c1"># Show figure</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$w_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$w_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Gradient descent updates on cost surface'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
@@ -1411,32 +1406,32 @@ ZPlLUocsf0nqkOUvSR2y/CWpQ38DZvIzv+NVeqMAAAAASUVORK5CYII=
     <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
     </div>
     <div class=" highlight hl-ipython2">
-     <pre><span class="c"># Plot the resulting decision boundary</span>
-<span class="c"># Generate a grid over the input space to plot the color of the</span>
-<span class="c">#  classification at that grid point</span>
+     <pre><span></span><span class="c1"># Plot the resulting decision boundary</span>
+<span class="c1"># Generate a grid over the input space to plot the color of the</span>
+<span class="c1">#  classification at that grid point</span>
 <span class="n">nb_of_xs</span> <span class="o">=</span> <span class="mi">200</span>
 <span class="n">xs1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_xs</span><span class="p">)</span>
 <span class="n">xs2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_xs</span><span class="p">)</span>
-<span class="n">xx</span><span class="p">,</span> <span class="n">yy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">xs1</span><span class="p">,</span> <span class="n">xs2</span><span class="p">)</span> <span class="c"># create the grid</span>
-<span class="c"># Initialize and fill the classification plane</span>
+<span class="n">xx</span><span class="p">,</span> <span class="n">yy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">xs1</span><span class="p">,</span> <span class="n">xs2</span><span class="p">)</span> <span class="c1"># create the grid</span>
+<span class="c1"># Initialize and fill the classification plane</span>
 <span class="n">classification_plane</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_xs</span><span class="p">,</span> <span class="n">nb_of_xs</span><span class="p">))</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
         <span class="n">classification_plane</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">nn_predict</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asmatrix</span><span class="p">([</span><span class="n">xx</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">yy</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]])</span> <span class="p">,</span> <span class="n">w</span><span class="p">)</span>
-<span class="c"># Create a color map to show the classification colors of each grid point</span>
+<span class="c1"># Create a color map to show the classification colors of each grid point</span>
 <span class="n">cmap</span> <span class="o">=</span> <span class="n">ListedColormap</span><span class="p">([</span>
-        <span class="n">colorConverter</span><span class="o">.</span><span class="n">to_rgba</span><span class="p">(</span><span class="s">'r'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.30</span><span class="p">),</span>
-        <span class="n">colorConverter</span><span class="o">.</span><span class="n">to_rgba</span><span class="p">(</span><span class="s">'b'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.30</span><span class="p">)])</span>
+        <span class="n">colorConverter</span><span class="o">.</span><span class="n">to_rgba</span><span class="p">(</span><span class="s1">'r'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.30</span><span class="p">),</span>
+        <span class="n">colorConverter</span><span class="o">.</span><span class="n">to_rgba</span><span class="p">(</span><span class="s1">'b'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.30</span><span class="p">)])</span>
 
-<span class="c"># Plot the classification plane with decision boundary and input samples</span>
+<span class="c1"># Plot the classification plane with decision boundary and input samples</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">xx</span><span class="p">,</span> <span class="n">yy</span><span class="p">,</span> <span class="n">classification_plane</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_red</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_red</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'ro'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'target red'</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_blue</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_blue</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s">'bo'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s">'target blue'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_red</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_red</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'ro'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'target red'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_blue</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_blue</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'bo'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'target blue'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">'$x_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">'$x_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">'red vs. blue classification boundary'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$x_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'red vs. blue classification boundary'</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre>
     </div>
