@@ -1,0 +1,15 @@
+# Install with:
+# conda env create --file ./gp_numpy_conda_env.yml && conda activate gp_numpy
+# Remove with:
+# conda deactivate && conda remove --name gp_numpy --all
+name: gp_numpy
+channels:
+  - conda-forge
+dependencies:
+  - matplotlib=3.4.2
+  - notebook=6.3.0
+  - numpy=1.20.2
+  - python=3.9.4
+  - scipy=1.6.3
+  - seaborn=0.11.1
+  - watermark=2.2.0

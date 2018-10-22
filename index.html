@@ -1,0 +1,24 @@
+---
+layout: default_container
+title: Home
+description: Posts on Machine Learning, Software Engineering, and Mathematics.
+---
+
+<h1><span class="fa fa-home" aria-hidden="true"></span> {{ page.title }}</h1>
+
+<h2>Most recent posts:</h2>
+{% for post in site.posts limit:5 %}
+<div class="card">
+	<div class="card-body">
+		<h3 class="card-title">{{ post.title }}</h3>
+		<h6 class="card-subtitle mb-2 text-muted">{{ post.date | date_to_string }}</h6>
+		<p class="card-text">{{ post.description }}</p>
+		<a href="{{ post.url }}" class="btn btn-outline-primary">Read post</a>
+	</div>
+</div>
+{% endfor %}
+
+<div style="margin-top:50px">
+<h2><i class="fa fa-tags fa-fw"></i> More posts by tag:</h2>
+{% include all_tags.html %}
+</div>
