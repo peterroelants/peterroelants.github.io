@@ -1,0 +1,104 @@
+# Use Github pages Jekyll configuration
+# Launch Github pages Jekyll with:
+# bundle exec jekyll serve
+
+# General blog information
+############################################################
+# Name of your blog (this will show up at the top of your page and in the RSS feed)
+title: Peter's Notes
+name: Peter's Notes
+# Short description (goes below the title; it will also be used in the RSS feed)
+description: Aggregation of notes and code samples.
+# Your name, as you want it to appear underneath each post and in the footer
+author: Peter
+# Your email if you want it to be linked on the contact page
+author_email: peter.roelants@gmail.com
+email: peter.roelants@gmail.com
+# The URL of your actual domain. This will be used to make absolute links in the RSS feed.
+url: http://peterroelants.github.io
+twitter_username: PeterRoelants
+github_username:  peterroelants
+
+# Where things are
+############################################################
+source: . # Set by Github
+# This is where the generated site will be placed once Jekyll is done transforming it.
+destination: ./_site
+#plugins_dir: ./_plugins
+# This folder is for the main templates your content will be inserted into. You can have different layouts for different pages or page sections.
+layouts_dir: ./_layouts
+data_dir: ./_data
+collections: null
+
+# Handling Reading
+############################################################
+# Safe: Disable custom plugins, and ignore symbolic links.
+safe: true # Set by Github
+include: [".htaccess"]
+exclude: [notebooks, jekyll_info]
+keep_files: [".git", ".svn"]
+encoding: "utf-8"
+markdown_ext: "markdown,mkdown,mkdn,mkd,md"
+
+# Filtering Content
+############################################################
+show_drafts: null
+limit_posts: 0
+future: true
+unpublished: false
+
+# Plugins
+############################################################
+whitelist: []
+plugins:
+  - github-pages
+  - jekyll-sitemap
+  - jekyll-redirect-from
+
+# Conversion
+############################################################
+markdown: kramdown
+highlighter: rouge # Set by Github
+# LSI: produce an index for related posts.
+lsi: false # Set by Github
+excerpt_separator: "\n\n"
+
+
+# Serving
+############################################################
+detach: false
+port: 4000
+host: 127.0.0.1
+# Uncomment if you are planning to run the blog in a subdirectory
+# Note - if you enable this, and attempt to view your site locally you have to use the baseurl in your local path.
+# Serve the website from the given base URL
+# Example, you must use http://localhost:4000/path/to/blog
+#baseurl: /path/to/blog
+baseurl: "" # does not include hostname
+
+
+# Outputting
+############################################################
+permalink: /posts/:title/
+paginate_path: /page:num
+# Set the time zone for site generation.
+timezone: Europe/London
+
+quiet: false
+defaults: []
+
+# Markdown Processors
+############################################################
+rdiscount:
+  extensions: []
+
+redcarpet:
+  extensions: []
+
+kramdown:
+  auto_ids:       true
+  footnote_nr:    1
+  entity_output:  as_char
+  toc_levels:     1..6
+  smart_quotes:   lsquo,rsquo,ldquo,rdquo
+  syntax_highlighter: rouge

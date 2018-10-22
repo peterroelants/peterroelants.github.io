@@ -1,0 +1,7 @@
+_site
+.sass-cache
+.jekyll-metadata
+*.ipynb_checkpoints*
+*.pyc
+.idea/*
+__pycache__
