@@ -1,0 +1,28 @@
+{% assign normalized_current = page.url | replace: '.html','' | replace: '/index','' %}
+<nav class="navbar navbar-expand-md bg-body-tertiary">
+  <div class="container">
+    <a class="navbar-brand" href="{{ '/' | relative_url }}"><span class="fa-solid fa-book fa-fw"></span> My Notes</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" aria-controls="navbarMain" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarMain">
+      <ul class="navbar-nav ms-auto align-items-center">
+        <li class="nav-item"><a href="{{ '/' | relative_url }}" class="nav-link{% if normalized_current == '/' %} active{% endif %}"{% if normalized_current == '/' %} aria-current="page"{% endif %}><span class="fa-solid fa-house fa-fw"></span> Home</a></li>
+        <li class="nav-item"><a href="{{ '/tag_index' | relative_url }}" class="nav-link{% if normalized_current == '/tag_index' or normalized_current == '/tag_index/' %} active{% endif %}"{% if normalized_current == '/tag_index' or normalized_current == '/tag_index/' %} aria-current="page"{% endif %}><span class="fa-solid fa-tags fa-fw"></span> Tags</a></li>
+        <li class="nav-item"><a href="{{ '/posts_chrono' | relative_url }}" class="nav-link{% if normalized_current == '/posts_chrono' or normalized_current == '/posts_chrono/' %} active{% endif %}"{% if normalized_current == '/posts_chrono' or normalized_current == '/posts_chrono/' %} aria-current="page"{% endif %}><span class="fa-solid fa-clock-rotate-left fa-fw"></span> Posts</a></li>
+        <li class="nav-item"><a href="{{ '/about' | relative_url }}" class="nav-link{% if normalized_current == '/about' or normalized_current == '/about/' %} active{% endif %}"{% if normalized_current == '/about' or normalized_current == '/about/' %} aria-current="page"{% endif %}><span class="fa-solid fa-info fa-fw"></span> About</a></li>
+        <li class="nav-item dropdown ms-2">
+          <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" id="themeDropdown" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Theme">
+            <span class="fa-solid fa-circle-half-stroke fa-fw" aria-hidden="true"></span>
+            <span class="d-none d-md-inline"> Theme</span>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="themeDropdown">
+            <li><button class="dropdown-item" type="button" data-bs-theme-value="light" aria-pressed="false"><span class="fa-regular fa-sun fa-fw"></span> Light</button></li>
+            <li><button class="dropdown-item" type="button" data-bs-theme-value="dark" aria-pressed="false"><span class="fa-solid fa-moon fa-fw"></span> Dark</button></li>
+            <li><button class="dropdown-item" type="button" data-bs-theme-value="auto" aria-pressed="false"><span class="fa-solid fa-circle-half-stroke fa-fw"></span> Auto</button></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </div>
+  </nav>

@@ -1,0 +1,123 @@
+---
+layout: default_container
+title: Home
+description: Posts on Machine Learning, Software Engineering, and Mathematics.
+---
+
+<h1 class="text-center"><span class="fa-solid fa-house" aria-hidden="true"></span> {{ page.title }}</h1>
+
+<!-- Selected posts -->
+<h2>Selected posts:</h2>
+<!-- ReAct REPL agent -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /2023/04/2023-04-07-react-repl-agent %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/llm/ReactLogo.png" alt="ReAct REPL Agent logo" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>ReAct REPL Agent</h2>
+		<p>Project exploring a GPT-Based ReAct Agent with access to a Python REPL and access to method retrieval. The agent can execute simple workflows by chaining API calls.</p>
+		<a class="btn btn-outline-primary w-100 w-md-auto mt-2" href="{% post_url /2023/04/2023-04-07-react-repl-agent %}" role="button">Learn About GPT ReAct Agents »</a>
+	</div>
+</div>
+
+
+<!-- ReAct OpenAI Function Calling Agent -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/agents/openai/2024-01-21-react-openai-function-calling %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/llm/ReactLogo.png" alt="OpenAI ReAct Agent logo" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>Implement a simple ReAct Agent using OpenAI API</h2>
+		<p>Simple example of using OpenAI Function Calling in a ReAct Loop to answer multistep questions.</p>
+		<a class="btn btn-outline-primary w-100 w-md-auto mt-2" href="{% post_url /blog/agents/openai/2024-01-21-react-openai-function-calling %}" role="button">Implement a simple ReAct Agent »</a>
+	</div>
+</div>
+
+
+<!-- Gaussian Processes -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/gaussian_process.png" alt="Gaussian process illustration" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>Implementing Gaussian processes</h2>
+		<p>Blog series exploring Gaussian processes. Starts with building up an understanding of Gaussian processes by implementing them from scratch in Python. Then goes to a practical example illustrating how to use a Gaussian process on a real-world problem using TensorFlow probability.</p>
+		<a class="btn btn-outline-primary w-100 w-md-auto mt-2" href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}" role="button">Implement Gaussian processes »</a>
+	</div>
+</div>
+
+
+<!-- Multi-armed bandit Implementation -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/misc/2018-09-26-multi-armed-bandit-implementation %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/bandit.png" alt="Multi-armed bandit illustration" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>Multi-armed bandit implementation</h2>
+		<p>Learn the basics of Bayesian multi-armed bandit models while implementing a simple example in Python.</p>
+		<a class="btn btn-outline-primary w-100 w-md-auto mt-2" href="{% post_url /blog/misc/2018-09-26-multi-armed-bandit-implementation %}" role="button">Implement a multi-armed bandit »</a>
+	</div>
+</div>
+
+
+<!-- Neural network implementation -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/ANN_preview.png" alt="Artificial neural network diagram" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>How to implement a neural network and RNN from scratch</h2>
+		<p>First, Learn the basics of neural networks and how to implement them from scratch in Python. The tutorial starts with explaining gradient descent on the most basic models and goes along to explain hidden layers with non-linearities, backpropagation, and momentum. The math is explained along the way together with Python code examples.</p>
+		<p>The second part implements a recurrent neural network (RNN) in Python with the help of NumPy. The tutorial explains the basics of backpropagation-through-time and discusses some of the difficulties of training recurrent networks.</p>
+		<div class="d-grid d-md-block gap-2 mt-2">
+			<a class="btn btn-outline-primary w-100 w-md-auto" href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}" role="button">Implement a neural net »</a>
+			<a class="btn btn-outline-primary w-100 w-md-auto" href="{% post_url /blog/rnn_implementation/2015-09-27-rnn-implementation-part01 %}" role="button">Implement a RNN »</a>
+		</div>
+	</div>
+</div>
+
+
+<!-- Linear regression 4 ways -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/misc/2018-10-22-linear-regression-four-ways %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/linear_regression_four_ways.png" alt="Linear regression methods preview" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>Regression quattro stagioni</h2>
+		<p>Linear regression parameter estimation implemented in four different ways: simple linear regression, ordinary least squares (OLS), gradient descent, and markov chain monte carlo (MCMC).</p>
+		<a class="btn btn-outline-primary w-100 w-md-auto mt-2" href="{% post_url /blog/misc/2018-10-22-linear-regression-four-ways %}" role="button">Implement regression 4 different ways »</a>
+	</div>
+</div>
+
+
+<!-- Most recent
+<h2>Most recent posts:</h2>
+{% for post in site.posts limit:3 %}
+<div class="card">
+	<div class="card-body">
+		<h3 class="card-title">{{ post.title }}</h3>
+		<h6 class="card-subtitle mb-2 text-muted">{{ post.date | date_to_string }}</h6>
+		<p class="card-text">{{ post.description }}</p>
+		<a href="{{ post.url }}" class="btn btn-outline-primary">Read post</a>
+	</div>
+</div>
+{% endfor %} -->
+
+
+<!-- By Tag -->
+<div class="mt-5">
+<h2><i class="fa-solid fa-tags fa-fw"></i> More posts by tag:</h2>
+{% include all_tags.html %}
+</div>
