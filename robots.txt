@@ -1,0 +1,9 @@
+---
+layout: none
+---
+# www.robotstxt.org/
+# https://support.google.com/webmasters/answer/6062596?hl=en
+
+# Allow crawling of all content
+User-agent: *
+Sitemap: {{ "sitemap.xml" | absolute_url }}

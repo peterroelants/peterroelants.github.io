@@ -1,0 +1,27 @@
+# Site gen
+_site
+.sass-cache
+.jekyll-metadata
+
+# Python
+*.pyc
+__pycache__
+# IDE
+.idea/*
+# Notebooks
+*.ipynb_checkpoints*
+# Mypy
+.mypy_cache/
+
+# Ruby/Bundler (local installs and config)
+.bundle/
+vendor/
+
+# Node/NPM (local installs and config)
+node_modules/
+package-lock.json
+package.json
+
+# Jekyll (local installs and config)
+.jekyll-cache/
+.jekyll-metadata

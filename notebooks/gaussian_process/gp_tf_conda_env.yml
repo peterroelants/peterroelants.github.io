@@ -1,0 +1,24 @@
+# Install with:
+# conda env create --file ./gp_tf_conda_env.yml && conda activate gp_tf
+# Remove with:
+# conda deactivate && conda remove --name gp_tf --all
+name: gp_tf
+channels:
+  - conda-forge
+dependencies:
+  - bokeh=2.3.2
+  - jupyter_bokeh=3.0.0
+  - matplotlib=3.4.2
+  - notebook=6.3.0
+  - numpy=1.20.2
+  - pip=21.1.1
+  - python=3.9.4
+  - seaborn=0.11.1
+  - tqdm=4.60.0
+  - watermark=2.2.0
+  - pip:
+    - tensorflow==2.5.0
+    - tensorflow-probability==0.12.2
+variables:
+  TF_CPP_MIN_LOG_LEVEL: "3"
+

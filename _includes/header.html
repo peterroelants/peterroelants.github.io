@@ -1,0 +1,62 @@
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+	{% seo %}
+	<!-- favicon -->
+	{% include favicons.html %}
+	<meta name="theme-color" content="#ffffff">
+
+	<!-- Early theme bootstrap: set data-bs-theme before CSS loads to avoid FOUC -->
+	<script>
+	(function() {
+		var storageKey = 'theme';
+		function getStoredTheme() {
+			try { return localStorage.getItem(storageKey); } catch (e) { return null; }
+		}
+		function applyTheme(theme) {
+			var root = document.documentElement;
+			if (theme === 'auto' || !theme) {
+				var isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+				root.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
+			} else {
+				root.setAttribute('data-bs-theme', theme);
+			}
+		}
+		applyTheme(getStoredTheme() || 'auto');
+	})();
+	</script>
+
+	{%- comment -%} Compute dynamic asset version: commit SHA on GitHub Pages, else build timestamp {%- endcomment -%}
+	{%- if site.github and site.github.build_revision -%}
+		{%- assign asset_version = site.github.build_revision -%}
+	{%- else -%}
+		{%- assign asset_version = site.time | date: '%Y%m%d%H%M' -%}
+	{%- endif -%}
+
+	<!-- Bootstrap core CSS -->
+	<link href="{{ '/css/bootstrap.min.css' | relative_url }}?v={{ asset_version }}" rel="stylesheet">
+	<!-- Custom styles for this template -->
+	<link href="{{ '/css/notebook.min.css' | relative_url }}?v={{ asset_version }}" rel="stylesheet">
+	<link href="{{ '/css/main.min.css' | relative_url }}?v={{ asset_version }}" rel="stylesheet">
+	<link href="{{ '/css/syntax.min.css' | relative_url }}?v={{ asset_version }}" rel="stylesheet">
+	<!-- Theme overrides loaded last -->
+	<link href="{{ '/css/theme-overrides.css' | relative_url }}?v={{ asset_version }}" rel="stylesheet">
+	<link href="{{ '/css/fontawesome-all.min.css' | relative_url }}?v={{ asset_version }}" rel="stylesheet">
+
+
+	<!-- Google Analytics -->
+	{% include analytics.html %}
+
+	<!-- jQuery for site scripts and notebook-derived inline scripts -->
+	<!-- IMPORTANT: Keep jQuery in the head. Some posts include inline scripts that call $ during HTML parse; do NOT move or defer. -->
+	<script src="{{ '/js/jquery-3.7.1.min.js' | relative_url }}?v={{ asset_version }}"></script>
+
+	<!-- MathJax (conditional) -->
+	{% if page.math or layout.math %}
+		{% include mathjax.html %}
+	{% endif %}
+
+	<!-- Footer includes additional scripts -->
+</head>
+

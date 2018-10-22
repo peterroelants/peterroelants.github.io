@@ -1,0 +1,23 @@
+<script>
+    MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$','$$'], ["\\[","\\]"]],
+          processEscapes: true,
+          processEnvironments: true,
+          processRefs: true,
+          packages: { '[+]': ['noerrors', 'noundefined'] }
+        },
+        loader: {
+          logLevel: 0,
+          loadMessages: false
+        },
+        options: {
+          skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        },
+        chtml: {
+            displayAlign: 'center',
+        }
+      };
+</script>
+<script id="MathJax-script" async src="/mathjax/tex-chtml-full.js"></script>
