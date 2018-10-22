@@ -1,0 +1,31 @@
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	<!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+	{% include meta.html %}
+	<!-- viewport for MathJax on mobile-->
+	<meta name="viewport" content="width=device-width,minimum-scale=1.0, maximum-scale=1.0" />
+	<!-- favicon -->
+	{% include favicons.html %}
+	<meta name="theme-color" content="#ffffff">
+
+	<!-- Bootstrap core CSS -->
+	<link href="/css/bootstrap.min.css" rel="stylesheet">
+	<!-- Custom styles for this template -->
+	<link href="/css/notebook.min.css" rel="stylesheet">
+	<link href="/css/main.min.css" rel="stylesheet">
+	<link href="/css/syntax.min.css" rel="stylesheet">
+	<link href="/css/font-awesome-all.css" rel="stylesheet">
+
+	<link rel="canonical" href="{{ page.url | replace:'index.html','' | prepend: site.baseurl | prepend: site.url }}">
+
+	<!-- Google Analytics -->
+	{% include analytics.html %}
+
+	<!-- Mathjax -->
+	{% include mathjax.html %}
+
+	<!-- jQuery in header because of Bokeh -->
+	<script src="/js/jquery-3.6.0.min.js"></script>
+</head>
+
