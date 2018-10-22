@@ -1,0 +1,21 @@
+<!-- Sort tags by number of posts
+	Sorting is done by creating sortable strings which have the counts prepended.
+	- Counts are separated from tags with ":::"
+	- Sortable tag-counts are seperated with "###"
+	- `site.tags` is a hashmap from tag to list of posts, use `size` to get number of posts.
+-->
+{% capture count_tags_splittable_str %}
+{% for tag in site.tags %}
+    {{ tag | last | size | prepend:"000000" | slice:-6,6 }}:::{{ tag | first }}
+    {% unless forloop.last %}###{% endunless %}
+{% endfor %}
+{% endcapture %}
+{% assign counts_and_tags_sorted = count_tags_splittable_str | split:"###" | sort | reverse %}
+
+{% for count_and_tag in counts_and_tags_sorted %}
+    {% assign tag = count_and_tag | split:":::" | last | strip %}
+    {% assign count = site.tags[tag].size %}
+    <a href="/tag_index/#{{ tag | slugify }}" class="btn btn-outline-primary tag-btn">
+        <span class="fa fa-tag" aria-hidden="true"></span> {{ tag }} ({{ count }})
+    </a>
+{% endfor %}

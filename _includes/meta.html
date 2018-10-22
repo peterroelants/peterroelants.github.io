@@ -1,0 +1,4 @@
+<title>{{ page.title }}</title>
+<meta name="description" content="{{ page.description }}">
+{% capture keywords %}{% for tag in page.tags %}{{ tag | strip_newlines }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endcapture %}
+<meta name="keywords" content="{{ keywords }}">

@@ -1,0 +1,76 @@
+---
+layout: default_container
+title: Tags
+description: Tags written about on this webpage.
+---
+<h1><span class="fas fa-tags fa-fw"></span> {{ page.title }}</h1>
+
+<!-- Show All tags -->
+{% include all_tags.html %}
+<hr>
+
+<!-- Show tags alphabetically by character -->
+{% capture _site_tags %}{% for tag in site.tags %}{{ tag | first }}{% unless forloop.last %}###{% endunless %}{% endfor %}{% endcapture %}
+{% assign tags_alphabetically_sorted = _site_tags | split:'###' | sort %}
+
+<!-- Divide tags into pages according to their first character -->
+<div class="pagination-container">
+  <!-- Create pages for each character -->
+  {% assign prev_char = "#" %}
+  {% for sorted_tag in tags_alphabetically_sorted %}
+    {% assign tag = sorted_tag | strip %}
+    {% assign current_char = tag | slice: 0 %}
+    {% if current_char != prev_char %}
+      <!-- Create tag pages for current character -->
+      {% assign prev_char = current_char %}
+      <!-- Close previous div -->
+      {% unless forloop.first %}</div>{% endunless %}
+      <!-- Create new tag page, hide by default -->
+      <div class="page-content" page-idx="{{ current_char }}" style="display:none;">
+        <h2 style="margin-top:33px"><span class="fas fa-tags fa-fw"></span> Tags starting with {{ current_char }}:</h2>
+    {% endif %}
+    <!-- Display Tags starting with current character -->
+    <div style="margin-top:33px">
+      <h3 id="{{ tag | slugify}}">
+        <span class="fas fa-tag" aria-hidden="true"></span> {{ tag }}:
+        <a class="anchor-link" href="#{{ tag | slugify}}"><i class="fas fa-sm fa-link"></i></a>
+      </h3>
+      <ul>
+        {% for post in site.tags[tag] %}
+        <li>
+          <a href="{{ post.url }}">{{ post.title }}</a>
+          </br>
+          <i>{{ post.date | date_to_string }}</i>
+          </br>
+          {{ post.description }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <hr>
+    <!-- End last page -->
+    {% if forloop.last %}</div>{% endif %}
+  {% endfor %}
+
+  <!-- Page navigation -->
+  <nav aria-label="Tags Alphabetic Pagination">
+      <ul class="pagination justify-content-center">
+        {% assign prev_char = "#" %}
+        {% for tag in tags_alphabetically_sorted %}
+          {% assign current_char = tag | slice: 0 %}
+          {% if current_char != prev_char %}
+            {% assign prev_char = current_char %}
+            <li class="page-item" page-idx="{{ current_char }}">
+              <a class="page-link" href="#" >
+                {{ current_char }}
+              </a>
+            </li>
+          {% endif %}
+        {% endfor %}
+    </ul>
+  </nav>
+
+</div>
+<hr>
+
+<script src="/js/tag_pages.js"></script>
