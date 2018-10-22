@@ -1,0 +1,6 @@
+# www.robotstxt.org/
+# https://support.google.com/webmasters/answer/6062596?hl=en
+
+# Allow crawling of all content
+User-agent: *
+Sitemap: https://peterroelants.github.io/sitemap.xml
