@@ -1,0 +1,22 @@
+# Install with:
+# conda env create --file ./conda_env.yml && conda activate blog_env
+# Remove with:
+# conda deactivate && conda remove --name blog_env --all
+name: blog_env
+channels:
+  - conda-forge
+dependencies:
+  - bs4
+  - nbconvert
+  - ipython
+  - python=3.11
+  - black
+  - isort
+  - flake8
+  - pyyaml
+  - mypy
+  - pip
+  - pyyaml
+  - pip:
+    - python-slugify
+
