@@ -1,0 +1,863 @@
+---
+layout: post
+title: Implement a simple ReAct Agent using OpenAI function calling
+description: Simple example of using OpenAI Function Calling in a ReAct Loop to execute simple multistep tasks.
+tags:
+- LLM
+- ReAct Loop
+- OpenAI
+- Agents
+---
+
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h1 id="Implement-a-simple-ReAct-Agent-using-OpenAI-function-calling">
+    Implement a simple ReAct Agent using OpenAI function calling
+    <a class="anchor-link" href="#Implement-a-simple-ReAct-Agent-using-OpenAI-function-calling">
+     <i class="fas fa-sm fa-link">
+     </i>
+    </a>
+   </h1>
+   <p>
+    Simple example of using
+    <a href="https://platform.openai.com/docs/guides/function-calling">
+     OpenAI Function Calling
+    </a>
+    in a
+    <a href="https://arxiv.org/abs/2210.03629">
+     ReAct Loop
+    </a>
+    .
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="ReAct-Loop">
+    ReAct Loop
+    <a class="anchor-link" href="#ReAct-Loop">
+     <i class="fas fa-sm fa-link">
+     </i>
+    </a>
+   </h2>
+   <p>
+    <a href="https://arxiv.org/abs/2210.03629">
+     The ReAct loop
+    </a>
+    interleaves reasoning and acting in a thought-action-observation loop. It has been quite popular and successful as a foundation for building simple LLM-based agents, allowing the agent to iteratively solve a multi-step task.
+   </p>
+   <img alt="ReAct Loop" src="/images/llm/ReAct_loop.png" width="400px"/>
+   <p>
+    I explored integrating the ReAct loop with a Python REPL and embedding-based function search in a previous post titled
+    <a href="https://peterroelants.github.io/posts/react-repl-agent/">
+     "ReAct REPL Agent"
+    </a>
+    . In this post we revisit the ReAct loop, but this time using the
+    <a href="https://platform.openai.com/docs/guides/function-calling">
+     OpenAI Function Calling
+    </a>
+    API. I'll provide a simple example of how to easily setup a ReAct loop using the OpenAI Function Calling API to perform the actions.
+   </p>
+   <h2 id="OpenAI-Function-Calling">
+    OpenAI Function Calling
+    <a class="anchor-link" href="#OpenAI-Function-Calling">
+     <i class="fas fa-sm fa-link">
+     </i>
+    </a>
+   </h2>
+   <p>
+    The
+    <a href="https://platform.openai.com/docs/guides/function-calling">
+     OpenAI Function Calling
+    </a>
+    API allows us to have an LLM-based agent call functions. Based on a set of pre-defined functions that we'll provide, and some context, the LLM will select a function to call and provide the arguments to the function. We then have to call the function ourselves and provide the result back to the LLM Agent.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [1]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Imports</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Annotated</span> <span class="k">as</span> <span class="n">A</span><span class="p">,</span> <span class="n">Literal</span> <span class="k">as</span> <span class="n">L</span>
+
+<span class="kn">import</span> <span class="nn">openai</span>
+
+<span class="kn">from</span> <span class="nn">annotated_docs.json_schema</span> <span class="kn">import</span> <span class="n">as_json_schema</span>  <span class="c1"># https://github.com/peterroelants/annotated-docs</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [8]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Setup OpenAI Client</span>
+<span class="c1"># Get your OpenAI API key from https://platform.openai.com/</span>
+<span class="n">openai_client</span><span class="p">:</span> <span class="n">openai</span><span class="o">.</span><span class="n">OpenAI</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">OpenAI</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s2">"&lt;your-api-key-here&gt;"</span><span class="p">)</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Agent-implementation">
+    Agent implementation
+    <a class="anchor-link" href="#Agent-implementation">
+     <i class="fas fa-sm fa-link">
+     </i>
+    </a>
+   </h2>
+   <p>
+    As an example, we'll implement a simple agent that can help us find the current weather for our current location.
+   </p>
+   <h3 id="Defining-the-functions">
+    Defining the functions
+    <a class="anchor-link" href="#Defining-the-functions">
+     <i class="fas fa-sm fa-link">
+     </i>
+    </a>
+   </h3>
+   <p>
+    Let's start by defining a few simple example functions that we can call. The functions the agent can call are:
+   </p>
+   <ul>
+    <li>
+     <code>
+      get_current_location
+     </code>
+     : To find the current location of the agent (Found based on the IP address).
+    </li>
+    <li>
+     <code>
+      get_current_weather
+     </code>
+     : To find the current weather for a given location.
+    </li>
+    <li>
+     <code>
+      calculate
+     </code>
+     : To help calculate any conversion between units.
+    </li>
+    <li>
+     <code>
+      finish
+     </code>
+     : To finish the task and formulate a response. We let the
+     <code>
+      finish
+     </code>
+     function raise a
+     <code>
+      StopException
+     </code>
+     so we can easily detect when the agent is done.
+    </li>
+   </ul>
+   <p>
+    I'm making use of Python's
+    <a href="https://docs.python.org/3/library/typing.html">
+     <code>
+      typing
+     </code>
+    </a>
+    library to annotate the function arguments with extra information useful for the LLM. We'll specifically make use of
+    <a href="https://docs.python.org/3/library/typing.html#typing.Annotated">
+     <code>
+      typing.Annotated
+     </code>
+    </a>
+    to provide extra information about the arguments, and
+    <a href="https://docs.python.org/3/library/typing.html#typing.Literal">
+     <code>
+      typing.Literal
+     </code>
+    </a>
+    to specify the possible values for the arguments.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [3]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="k">class</span> <span class="nc">StopException</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Stop Execution by raising this exception (Signal that the task is Finished).</span>
+<span class="sd">    """</span>
+
+
+<span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="n">answer</span><span class="p">:</span> <span class="n">A</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">"Answer to the user's question."</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Answer the user's question, and finish the conversation."""</span>
+    <span class="k">raise</span> <span class="n">StopException</span><span class="p">(</span><span class="n">answer</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_current_location</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Get the current location of the user."""</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"http://ip-api.com/json?fields=lat,lon"</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">())</span>
+
+
+<span class="k">def</span> <span class="nf">get_current_weather</span><span class="p">(</span>
+    <span class="n">latitude</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">longitude</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">temperature_unit</span><span class="p">:</span> <span class="n">L</span><span class="p">[</span><span class="s2">"celsius"</span><span class="p">,</span> <span class="s2">"fahrenheit"</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Get the current weather in a given location."""</span>
+    <span class="n">resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+        <span class="s2">"https://api.open-meteo.com/v1/forecast"</span><span class="p">,</span>
+        <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">"latitude"</span><span class="p">:</span> <span class="n">latitude</span><span class="p">,</span>
+            <span class="s2">"longitude"</span><span class="p">:</span> <span class="n">longitude</span><span class="p">,</span>
+            <span class="s2">"temperature_unit"</span><span class="p">:</span> <span class="n">temperature_unit</span><span class="p">,</span>
+            <span class="s2">"current_weather"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">json</span><span class="p">())</span>
+
+
+<span class="k">def</span> <span class="nf">calculate</span><span class="p">(</span>
+    <span class="n">formula</span><span class="p">:</span> <span class="n">A</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">"Numerical expression to compute the result of, in Python syntax."</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Calculate the result of a given formula."""</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="nb">eval</span><span class="p">(</span><span class="n">formula</span><span class="p">))</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Providing-the-function-specifications-to-OpenAI">
+    Providing the function specifications to OpenAI
+    <a class="anchor-link" href="#Providing-the-function-specifications-to-OpenAI">
+     <i class="fas fa-sm fa-link">
+     </i>
+    </a>
+   </h3>
+   <p>
+    OpenAI function calling requires us to provide the function specifications to the API as a
+    <a href="https://json-schema.org/">
+     JSON schema
+    </a>
+    .
+   </p>
+   <p>
+    I'm using the
+    <code>
+     as_json_schema
+    </code>
+    function from
+    <a href="https://github.com/peterroelants/annotated-docs">
+     <code>
+      annotated-docs
+     </code>
+    </a>
+    to convert the function annotations to JSON schemas describing the functions.
+    <code>
+     as_json_schema
+    </code>
+    leverages the
+    <code>
+     typing
+    </code>
+    annotations to provide extra information about the arguments to the LLM.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [4]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># All functions that can be called by the LLM Agent</span>
+<span class="n">name_to_function_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">get_current_location</span><span class="o">.</span><span class="vm">__name__</span><span class="p">:</span> <span class="n">get_current_location</span><span class="p">,</span>
+    <span class="n">get_current_weather</span><span class="o">.</span><span class="vm">__name__</span><span class="p">:</span> <span class="n">get_current_weather</span><span class="p">,</span>
+    <span class="n">calculate</span><span class="o">.</span><span class="vm">__name__</span><span class="p">:</span> <span class="n">calculate</span><span class="p">,</span>
+    <span class="n">finish</span><span class="o">.</span><span class="vm">__name__</span><span class="p">:</span> <span class="n">finish</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># JSON Schemas for all functions</span>
+<span class="n">function_schemas</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">"function"</span><span class="p">:</span> <span class="n">as_json_schema</span><span class="p">(</span><span class="n">func</span><span class="p">),</span> <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"function"</span><span class="p">}</span>
+    <span class="k">for</span> <span class="n">func</span> <span class="ow">in</span> <span class="n">name_to_function_map</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+<span class="p">]</span>
+
+<span class="c1"># Print the JSON Schemas</span>
+<span class="k">for</span> <span class="n">schema</span> <span class="ow">in</span> <span class="n">function_schemas</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>{
+  "function": {
+    "name": "get_current_location",
+    "description": "Get the current location of the user.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "type": "function"
+}
+{
+  "function": {
+    "name": "get_current_weather",
+    "description": "Get the current weather in a given location.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "temperature_unit": {
+          "type": "string",
+          "enum": [
+            "celsius",
+            "fahrenheit"
+          ]
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude",
+        "temperature_unit"
+      ]
+    }
+  },
+  "type": "function"
+}
+{
+  "function": {
+    "name": "calculate",
+    "description": "Calculate the result of a given formula.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "formula": {
+          "type": "string",
+          "description": "Numerical expression to compute the result of, in Python syntax."
+        }
+      },
+      "required": [
+        "formula"
+      ]
+    }
+  },
+  "type": "function"
+}
+{
+  "function": {
+    "name": "finish",
+    "description": "Answer the user's question, and finish the conversation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "Answer to the user's question."
+        }
+      },
+      "required": [
+        "answer"
+      ]
+    }
+  },
+  "type": "function"
+}
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Define-the-question-to-ask-the-LLM-Agent">
+    Define the question to ask the LLM Agent
+    <a class="anchor-link" href="#Define-the-question-to-ask-the-LLM-Agent">
+     <i class="fas fa-sm fa-link">
+     </i>
+    </a>
+   </h3>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [9]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="n">QUESTION_PROMPT</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\</span>
+<span class="s2">    What's the current weather for my location? Give me the temperature in degrees Celsius and the wind speed in knots."</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Run-the-ReAct-loop">
+    Run the ReAct loop
+    <a class="anchor-link" href="#Run-the-ReAct-loop">
+     <i class="fas fa-sm fa-link">
+     </i>
+    </a>
+   </h3>
+   <p>
+    The ReAct loop builds up the context iteratively, taking one step at the time. Using the
+    <a href="https://platform.openai.com/docs/guides/text-generation/chat-completions-api">
+     OpenAI Chat Completions API
+    </a>
+    the messages, function calls, and function call results are all appended to the
+    <code>
+     messages
+    </code>
+    list. The full
+    <code>
+     messages
+    </code>
+    list is then used as the context for the next step.
+   </p>
+   <p>
+    Each step of the ReAct loop consists of the following steps:
+   </p>
+   <ol>
+    <li>
+     Send the current context of
+     <code>
+      messages
+     </code>
+     to the LLM Agent and get a response.
+    </li>
+    <li>
+     Append the response to the
+     <code>
+      messages
+     </code>
+     list.
+    </li>
+    <li>
+     For each function call in the response, call the function and append the result to the
+     <code>
+      messages
+     </code>
+     list.
+    </li>
+   </ol>
+   <p>
+    Let's run our question through the ReAct loop and see what happens.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [6]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Initial "chat" messages</span>
+<span class="n">messages</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span>
+        <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"system"</span><span class="p">,</span>
+        <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"You are a helpful assistant who can answer multistep questions by sequentially calling functions. Follow a pattern of THOUGHT (reason step-by-step about which function to call next), ACTION (call a function to as a next step towards the final answer), OBSERVATION (output of the function). Reason step by step which actions to take to get to the answer. Only call functions with arguments coming verbatim from the user or the output of other functions."</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+        <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span>
+        <span class="s2">"content"</span><span class="p">:</span> <span class="n">QUESTION_PROMPT</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="n">messages</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Run the ReAct loop with OpenAI Function Calling.</span>
+<span class="sd">    """</span>
+    <span class="c1"># Run in loop</span>
+    <span class="n">max_iterations</span> <span class="o">=</span> <span class="mi">20</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_iterations</span><span class="p">):</span>
+        <span class="c1"># Send list of messages to get next response</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">openai_client</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="s2">"gpt-4-1106-preview"</span><span class="p">,</span>
+            <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">,</span>
+            <span class="n">tools</span><span class="o">=</span><span class="n">function_schemas</span><span class="p">,</span>
+            <span class="n">tool_choice</span><span class="o">=</span><span class="s2">"auto"</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">response_message</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response_message</span><span class="p">)</span>  <span class="c1"># Extend conversation with assistant's reply</span>
+        <span class="c1"># Check if GPT wanted to call a function</span>
+        <span class="n">tool_calls</span> <span class="o">=</span> <span class="n">response_message</span><span class="o">.</span><span class="n">tool_calls</span>
+        <span class="k">if</span> <span class="n">tool_calls</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">:</span>
+                <span class="n">function_name</span> <span class="o">=</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">function</span><span class="o">.</span><span class="n">name</span>
+                <span class="c1"># Validate function name</span>
+                <span class="k">if</span> <span class="n">function_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">name_to_function_map</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Invalid function name: </span><span class="si">{</span><span class="n">function_name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+                    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">"tool_call_id"</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                            <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"tool"</span><span class="p">,</span>
+                            <span class="s2">"name"</span><span class="p">:</span> <span class="n">function_name</span><span class="p">,</span>
+                            <span class="s2">"content"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"Invalid function name: </span><span class="si">{</span><span class="n">function_name</span><span class="si">!r}</span><span class="s2">"</span><span class="p">,</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="c1"># Get the function to call</span>
+                <span class="n">function_to_call</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="n">name_to_function_map</span><span class="p">[</span><span class="n">function_name</span><span class="p">]</span>
+                <span class="c1"># Try getting the function arguments</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">function_args_dict</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">tool_call</span><span class="o">.</span><span class="n">function</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+                <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                    <span class="c1"># JSON decoding failed</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Error decoding function arguments: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+                    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">"tool_call_id"</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                            <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"tool"</span><span class="p">,</span>
+                            <span class="s2">"name"</span><span class="p">:</span> <span class="n">function_name</span><span class="p">,</span>
+                            <span class="s2">"content"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"Error decoding function call `</span><span class="si">{</span><span class="n">function_name</span><span class="si">}</span><span class="s2">` arguments </span><span class="si">{</span><span class="n">tool_call</span><span class="o">.</span><span class="n">function</span><span class="o">.</span><span class="n">arguments</span><span class="si">!r}</span><span class="s2">! Error: </span><span class="si">{</span><span class="n">exc</span><span class="si">!s}</span><span class="s2">"</span><span class="p">,</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="c1"># Call the selected function with generated arguments</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"Calling function </span><span class="si">{</span><span class="n">function_name</span><span class="si">}</span><span class="s2"> with args: </span><span class="si">{</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">function_args_dict</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="p">)</span>
+                    <span class="n">function_response</span> <span class="o">=</span> <span class="n">function_to_call</span><span class="p">(</span><span class="o">**</span><span class="n">function_args_dict</span><span class="p">)</span>
+                    <span class="c1"># Extend conversation with function response</span>
+                    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">"tool_call_id"</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                            <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"tool"</span><span class="p">,</span>
+                            <span class="s2">"name"</span><span class="p">:</span> <span class="n">function_name</span><span class="p">,</span>
+                            <span class="s2">"content"</span><span class="p">:</span> <span class="n">function_response</span><span class="p">,</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="n">StopException</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                    <span class="c1"># Agent wants to stop the conversation (Expected)</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Finish task with message: '</span><span class="si">{</span><span class="n">exc</span><span class="si">!s}</span><span class="s2">'"</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">messages</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                    <span class="c1"># Unexpected error calling function</span>
+                    <span class="nb">print</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"Error calling function `</span><span class="si">{</span><span class="n">function_name</span><span class="si">}</span><span class="s2">`: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">!s}</span><span class="s2">"</span>
+                    <span class="p">)</span>
+                    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">"tool_call_id"</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                            <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"tool"</span><span class="p">,</span>
+                            <span class="s2">"name"</span><span class="p">:</span> <span class="n">function_name</span><span class="p">,</span>
+                            <span class="s2">"content"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"Error calling function `</span><span class="si">{</span><span class="n">function_name</span><span class="si">}</span><span class="s2">`: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">!s}</span><span class="s2">!"</span><span class="p">,</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+                    <span class="k">continue</span>
+    <span class="k">return</span> <span class="n">messages</span>
+
+
+<span class="n">messages</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>Calling function get_current_location with args: {}
+Calling function get_current_weather with args: {"latitude": 50.935, "longitude": 5.3372, "temperature_unit": "celsius"}
+Calling function calculate with args: {"formula": "*B1['wind_speed'] * 0.539956803"}
+Error calling function `calculate`: SyntaxError: invalid syntax (&lt;string&gt;, line 1)
+Calling function calculate with args: {"formula": "26.8 * 0.539956803"}
+Calling function finish with args: {"answer": "The current temperature at your location is 4.8 degrees Celsius and the wind speed is approximately 14.47 knots."}
+Finish task with message: 'The current temperature at your location is 4.8 degrees Celsius and the wind speed is approximately 14.47 knots.'
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    Looking at the output it seems like the agent is able to answer our question in a few steps.
+   </p>
+   <p>
+    Let's look at the full context of messages to see which functions were called and what the results were:
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [7]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span>  <span class="c1"># Pydantic model</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>{
+  "role": "system",
+  "content": "You are a helpful assistant who can answer multistep questions by sequentially calling functions. Follow a pattern of THOUGHT (reason step-by-step about which function to call next), ACTION (call a function to as a next step towards the final answer), OBSERVATION (output of the function). Reason step by step which actions to take to get to the answer. Only call functions with arguments coming verbatim from the user or the output of other functions."
+}
+{
+  "role": "user",
+  "content": "What's the current weather for my location? Give me the temperature in degrees Celsius and the wind speed in knots."
+}
+{
+  "content": null,
+  "role": "assistant",
+  "function_call": null,
+  "tool_calls": [
+    {
+      "id": "call_UQTJx1xD7KXwpOCVWAgUUDK3",
+      "function": {
+        "arguments": "{}",
+        "name": "get_current_location"
+      },
+      "type": "function"
+    }
+  ]
+}
+{
+  "tool_call_id": "call_UQTJx1xD7KXwpOCVWAgUUDK3",
+  "role": "tool",
+  "name": "get_current_location",
+  "content": "{\"lat\": 50.935, \"lon\": 5.3372}"
+}
+{
+  "content": null,
+  "role": "assistant",
+  "function_call": null,
+  "tool_calls": [
+    {
+      "id": "call_cXPomLevnPmxtWfSWvxx9S8H",
+      "function": {
+        "arguments": "{\"latitude\": 50.935, \"longitude\": 5.3372, \"temperature_unit\": \"celsius\"}",
+        "name": "get_current_weather"
+      },
+      "type": "function"
+    },
+    {
+      "id": "call_5hbeZUcUl3A9RNhAI4QIbv0n",
+      "function": {
+        "arguments": "{\"formula\": \"*B1['wind_speed'] * 0.539956803\"}",
+        "name": "calculate"
+      },
+      "type": "function"
+    }
+  ]
+}
+{
+  "tool_call_id": "call_cXPomLevnPmxtWfSWvxx9S8H",
+  "role": "tool",
+  "name": "get_current_weather",
+  "content": "{\"latitude\": 50.94, \"longitude\": 5.3399997, \"generationtime_ms\": 0.07295608520507812, \"utc_offset_seconds\": 0, \"timezone\": \"GMT\", \"timezone_abbreviation\": \"GMT\", \"elevation\": 30.0, \"current_weather_units\": {\"time\": \"iso8601\", \"interval\": \"seconds\", \"temperature\": \"\\u00b0C\", \"windspeed\": \"km/h\", \"winddirection\": \"\\u00b0\", \"is_day\": \"\", \"weathercode\": \"wmo code\"}, \"current_weather\": {\"time\": \"2024-01-21T20:30\", \"interval\": 900, \"temperature\": 4.8, \"windspeed\": 26.8, \"winddirection\": 195, \"is_day\": 0, \"weathercode\": 3}}"
+}
+{
+  "tool_call_id": "call_5hbeZUcUl3A9RNhAI4QIbv0n",
+  "role": "tool",
+  "name": "calculate",
+  "content": "Error calling function `calculate`: SyntaxError: invalid syntax (&lt;string&gt;, line 1)!"
+}
+{
+  "content": null,
+  "role": "assistant",
+  "function_call": null,
+  "tool_calls": [
+    {
+      "id": "call_FKEuet6UV0qHY9IBiRMYcvbk",
+      "function": {
+        "arguments": "{\"formula\":\"26.8 * 0.539956803\"}",
+        "name": "calculate"
+      },
+      "type": "function"
+    }
+  ]
+}
+{
+  "tool_call_id": "call_FKEuet6UV0qHY9IBiRMYcvbk",
+  "role": "tool",
+  "name": "calculate",
+  "content": "14.470842320400001"
+}
+{
+  "content": null,
+  "role": "assistant",
+  "function_call": null,
+  "tool_calls": [
+    {
+      "id": "call_OdnItcBz57OeKOYWbcg8xbmB",
+      "function": {
+        "arguments": "{\"answer\":\"The current temperature at your location is 4.8 degrees Celsius and the wind speed is approximately 14.47 knots.\"}",
+        "name": "finish"
+      },
+      "type": "function"
+    }
+  ]
+}
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    Looking at the full list of messages we can see that the agent has answered our question by:
+   </p>
+   <ol>
+    <li>
+     Finding the current location of the agent using the
+     <code>
+      get_current_location
+     </code>
+     function.
+    </li>
+    <li>
+     Getting the current weather for the location using the
+     <code>
+      get_current_weather
+     </code>
+     function.
+    </li>
+    <li>
+     Converted the wind speed from km/h to knots using the
+     <code>
+      calculate
+     </code>
+     function.
+    </li>
+    <li>
+     Finished the task with a final answer by calling the
+     <code>
+      finish
+     </code>
+     function.
+    </li>
+   </ol>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post at
+    <a href="https://peterroelants.github.io/posts/react-openai-function-calling/" rel="canonical">
+     peterroelants.github.io
+    </a>
+    is generated from an IPython notebook file.
+    <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/agents/openai/react-openai-function-calling.ipynb">
+     Link to the full IPython notebook file
+    </a>
+   </p>
+  </div>
+ </div>
+</div>
