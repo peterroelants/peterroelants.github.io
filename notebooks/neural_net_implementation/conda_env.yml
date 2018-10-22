@@ -1,0 +1,15 @@
+# Install with:
+# conda env create --file ./conda_env.yml && conda activate nn_numpy_blog
+# Remove with:
+# conda deactivate && conda remove --name nn_numpy_blog --all
+name: nn_numpy_blog
+channels:
+  - conda-forge
+dependencies:
+  - matplotlib=3.4.1
+  - notebook=6.3.0
+  - numpy=1.20.2
+  - python=3.9.2
+  - seaborn=0.11.1
+  - scikit-learn=0.24.2
+  - watermark=2.2.0

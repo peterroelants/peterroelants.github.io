@@ -1,0 +1,2412 @@
+---
+layout: default
+title: Implement binary addition with a non-linear RNN
+description: How to train an RNN with input data stored as a tensor, and optimized with Rmsprop and Nesterov momentum.
+---
+
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    Following from the
+    <a href="{% post_url 2015-09-27-rnn-implementation-part01 %}">
+     first part of the tutorial on implementing RNNs
+    </a>
+    , this second part will show how to train a more complex RNN with input data stored as a
+    <a href="#Binary-addition-dataset-stored-in-tensor">
+     tensor
+    </a>
+    and trained with
+    <a href="#Rmsprop-with-momentum-optimisation">
+     Rmsprop and Nesterov momentum
+    </a>
+    .
+   </p>
+   <p>
+    This is the last part of a 2-part tutorial on how to implement an RNN from scratch in Python and Numpy:
+   </p>
+   <ul>
+    <li>
+     <a href="{% post_url 2015-09-27-rnn-implementation-part01 %}">
+      Part 1: Simple RNN
+     </a>
+    </li>
+    <li>
+     <a href="{% post_url 2015-09-27-rnn-implementation-part02 %}">
+      Part 2: non-linear RNN (this)
+     </a>
+    </li>
+   </ul>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [1]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Imports</span>
+<span class="o">%</span><span class="k">matplotlib</span> inline
+<span class="o">%</span><span class="k">config</span> InlineBackend.figure_formats = ['svg']
+
+<span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>  <span class="c1"># Matrix and vector computation package</span>
+<span class="kn">import</span> <span class="nn">matplotlib</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="kn">import</span> <span class="nn">seaborn</span> <span class="k">as</span> <span class="nn">sns</span>  <span class="c1"># Fancier plots</span>
+
+<span class="c1"># Set seaborn plotting style</span>
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s1">'darkgrid'</span><span class="p">)</span>
+<span class="c1"># Set the seed for reproducability</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Binary-addition-dataset-stored-in-tensor">
+    Binary addition dataset stored in tensor
+    <a class="anchor-link" href="#Binary-addition-dataset-stored-in-tensor">
+     ¶
+    </a>
+   </h2>
+   <p>
+    This tutorial uses a dataset of 2000 training samples to train the RNN that can be created with the
+    <code>
+     create_dataset
+    </code>
+    method defined below. Each sample consists of two 6-bit input numbers $(x_{i1}$, $x_{i2})$ padded with a 0 to make it 7 characters long, and a 7-bit target number ($t_{i}$) so that $t_{i} = x_{i1} + x_{i2}$ ($i$ is the sample index). The numbers are represented as
+    <a href="https://en.wikipedia.org/wiki/Binary_number">
+     binary numbers
+    </a>
+    with the
+    <a href="https://en.wikipedia.org/wiki/Most_significant_bit">
+     most significant bit
+    </a>
+    on the right (least significant bit first). This is so that our RNN can perform the addition form left to right.
+   </p>
+   <p>
+    The input and target vectors are stored in a 3th-order tensor. A
+    <a href="https://en.wikipedia.org/wiki/Tensor">
+     tensor
+    </a>
+    is a generalisation of vectors and matrices, a vector is a 1st-order tensor, a matrix is a 2nd-order tensor. The order of a tensor is the dimensionality of the array data structure needed to represent it.
+    <br/>
+    The dimensions of our training data (
+    <code>
+     X_train
+    </code>
+    ,
+    <code>
+     T_train
+    </code>
+    ) are printed after the creation of the dataset below. The first order of our data tensors goes over all the samples (2000 samples), the second order goes over the variables per unit of time (7 timesteps), and the third order goes over the variables for each timestep and sample (e.g. input variables $x_{ik1}$, $x_{ik2}$ with $i$ the sample index and $k$ the timestep). The input tensor
+    <code>
+     X_train
+    </code>
+    is visualised in the following figure:
+   </p>
+   <p>
+    <img alt="Visualisation of input tensor X" src="/images/RNN_implementation/SimpleRNN02_Tensor.png"/>
+   </p>
+   <p>
+    The following code block initialises the dataset.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [2]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Create dataset</span>
+<span class="n">nb_train</span> <span class="o">=</span> <span class="mi">2000</span>  <span class="c1"># Number of training samples</span>
+<span class="c1"># Addition of 2 n-bit numbers can result in a n+1 bit number</span>
+<span class="n">sequence_len</span> <span class="o">=</span> <span class="mi">7</span>  <span class="c1"># Length of the binary sequence</span>
+
+<span class="k">def</span> <span class="nf">create_dataset</span><span class="p">(</span><span class="n">nb_samples</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">):</span>
+    <span class="sd">"""Create a dataset for binary addition and </span>
+<span class="sd">    return as input, targets."""</span>
+    <span class="n">max_int</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="p">(</span><span class="n">sequence_len</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># Maximum integer that can be added</span>
+     <span class="c1"># Transform integer in binary format</span>
+    <span class="n">format_str</span> <span class="o">=</span> <span class="s1">'{:0'</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">sequence_len</span><span class="p">)</span> <span class="o">+</span> <span class="s1">'b}'</span>
+    <span class="n">nb_inputs</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># Add 2 binary numbers</span>
+    <span class="n">nb_outputs</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># Result is 1 binary number</span>
+    <span class="c1"># Input samples</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_samples</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">,</span> <span class="n">nb_inputs</span><span class="p">))</span>
+    <span class="c1"># Target samples</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_samples</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">,</span> <span class="n">nb_outputs</span><span class="p">))</span>
+    <span class="c1"># Fill up the input and target matrix</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_samples</span><span class="p">):</span>
+        <span class="c1"># Generate random numbers to add</span>
+        <span class="n">nb1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_int</span><span class="p">)</span>
+        <span class="n">nb2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_int</span><span class="p">)</span>
+        <span class="c1"># Fill current input and target row.</span>
+        <span class="c1"># Note that binary numbers are added from right to left, </span>
+        <span class="c1">#  but our RNN reads from left to right, so reverse the sequence.</span>
+        <span class="n">X</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="nb">reversed</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">format_str</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nb1</span><span class="p">)]))</span>
+        <span class="n">X</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="nb">reversed</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">format_str</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nb2</span><span class="p">)]))</span>
+        <span class="n">T</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="nb">reversed</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">format_str</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nb1</span><span class="o">+</span><span class="n">nb2</span><span class="p">)]))</span>
+    <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">T</span>
+
+<span class="c1"># Create training samples</span>
+<span class="n">X_train</span><span class="p">,</span> <span class="n">T_train</span> <span class="o">=</span> <span class="n">create_dataset</span><span class="p">(</span><span class="n">nb_train</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'X_train tensor shape: </span><span class="si">{</span><span class="n">X_train</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'T_train tensor shape: </span><span class="si">{</span><span class="n">T_train</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>X_train tensor shape: (2000, 7, 2)
+T_train tensor shape: (2000, 7, 1)
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Binary-addition">
+    Binary addition
+    <a class="anchor-link" href="#Binary-addition">
+     ¶
+    </a>
+   </h3>
+   <p>
+    Performing binary addition is an interesting
+    <a href="https://www.cs.toronto.edu/~hinton/csc2535/notes/lec10new.pdf">
+     toy problem
+    </a>
+    to illustrate how recurrent neural networks process input streams into output streams. The network needs to learn how to carry a bit to the next state (memory) and when to output a 0 or 1 dependent on the input and state.
+   </p>
+   <p>
+    The following code prints a visualisation of the inputs and target output we want our network to produce.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [3]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Show an example input and target</span>
+<span class="k">def</span> <span class="nf">printSample</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">"""Print a sample in a more visual way."""</span>
+    <span class="n">x1</span> <span class="o">=</span> <span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">x1</span><span class="p">])</span>
+    <span class="n">x1_r</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">x1</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">x2</span> <span class="o">=</span> <span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">x2</span><span class="p">])</span>
+    <span class="n">x2_r</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">x2</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">t</span><span class="p">])</span>
+    <span class="n">t_r</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">t</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">y</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="s1">''</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">y</span><span class="p">])</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'x1:   </span><span class="si">{</span><span class="n">x1</span><span class="si">:</span><span class="s1">s</span><span class="si">}</span><span class="s1">   </span><span class="si">{</span><span class="n">x1_r</span><span class="si">:</span><span class="s1">2d</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'x2: + </span><span class="si">{</span><span class="n">x2</span><span class="si">:</span><span class="s1">s</span><span class="si">}</span><span class="s1">   </span><span class="si">{</span><span class="n">x2_r</span><span class="si">:</span><span class="s1">2d</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'      -------   --'</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'t:  = </span><span class="si">{</span><span class="n">t</span><span class="si">:</span><span class="s1">s</span><span class="si">}</span><span class="s1">   </span><span class="si">{</span><span class="n">t_r</span><span class="si">:</span><span class="s1">2d</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">y</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'y:  = </span><span class="si">{</span><span class="n">y</span><span class="si">:</span><span class="s1">s</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+    
+<span class="c1"># Print the first sample</span>
+<span class="n">printSample</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:])</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>x1:   1010010   37
+x2: + 1101010   43
+      -------   --
+t:  = 0000101   80
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Recurrent-neural-network-architecture">
+    Recurrent neural network architecture
+    <a class="anchor-link" href="#Recurrent-neural-network-architecture">
+     ¶
+    </a>
+   </h2>
+   <p>
+    Our recurrent network will take 2 input variables for each sample for each timepoint, transform them to states, and output a single probability that the current output is $1$ (instead of $0$). The input is transformed into the states of the RNN where it can hold information so the network knows what to output the next timestep.
+   </p>
+   <p>
+    There are many ways to visualise the RNN we are going to build. We can visualise the network as in the
+    <a href="{% post_url 2015-09-27-rnn-implementation-part01 %}">
+     previous part
+    </a>
+    of our tutorial and unfold the processing of each input, state-update and output of a single timestep separately from the other timesteps.
+   </p>
+   <p>
+    <img alt="Structure of the RNN" src="/images/RNN_implementation/SimpleRNN02_1.png"/>
+   </p>
+   <p>
+    Or we can view the processing of the full input, state-updates, and full output seperately from each other. The full input tensor can be
+    <a href="https://en.wikipedia.org/wiki/Map_%28higher-order_function%29">
+     mapped
+    </a>
+    in parallel to be used directly in the RNN state updates. And also the RNN states can be mapped in parallel to the output of each timestep.
+   </p>
+   <p>
+    <img alt="Structure of the RNN tensor processing" src="/images/RNN_implementation/SimpleRNN02_2.png"/>
+   </p>
+   <p>
+    The steps are abstracted in different classes below. Each class has a
+    <code>
+     forward
+    </code>
+    method that performs the
+    <a href="{% post_url 2015-06-10-neural-network-implementation-part03 %}#1.-Forward-step">
+     forward steps
+    </a>
+    of backpropagation, and a
+    <code>
+     backward
+    </code>
+    method that perform the
+    <a href="{% post_url 2015-06-10-neural-network-implementation-part03 %}#2.-Backward-step">
+     backward
+    </a>
+    steps of backpropagation.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Processing-of-input-and-output-tensors">
+    Processing of input and output tensors
+    <a class="anchor-link" href="#Processing-of-input-and-output-tensors">
+     ¶
+    </a>
+   </h3>
+   <h4 id="Linear-transformation">
+    Linear transformation
+    <a class="anchor-link" href="#Linear-transformation">
+     ¶
+    </a>
+   </h4>
+   <p>
+    Neural networks typically transform input vectors by matrix multiplication and vector addition followed by a non-linear transfer function. The 2-dimensional input vectors to our network $(x_{ik1}$, $x_{ik2})$ are transformed by a $2 \times 3$ weight matrix and a bias vector of size 3. Before they can be added to the states of the RNN. The 3-dimensional state vectors are transformed to a 1-dimensional output vector by a $3 \times 1$ weight matrix and a bias vector of size 1 to give the output probabilities.
+   </p>
+   <p>
+    Since we want to process all inputs for each sample and each timestep in one computation we can use the numpy
+    <a href="http://docs.scipy.org/doc/numpy/reference/generated/numpy.tensordot.html">
+     <code>
+      tensordot
+     </code>
+    </a>
+    function to perform the dot products. This function takes 2 tensors and the axes that need to be aggregated by summation between the elements and a product of the result. For example the transformation of input X ($2000 \times 7 \times 2$) to the states S ($2000 \times 7 \times 3$) with the help of matrix W ($2 \times 3$) can be done by
+    <code>
+     S = tensordot(X, W, axes=((-1),(0)))
+    </code>
+    . This method will sum the elements of the last order (-1) of X with the elements of the first order (0) of W and multiply them together. This is the same as doing the matrix dot product for each $[x_{ik1}$, $x_{ik2}]$ vector with W.
+    <code>
+     tensordot
+    </code>
+    can then make sure that the underlying computations can be done efficiently and in parallel.
+   </p>
+   <p>
+    These linear tensor transformations are used to transform the input X to the states S, and from the states S to the output Y. This linear transformation, together with its gradient is implemented in the
+    <code>
+     TensorLinear
+    </code>
+    class below. Note that the weights are initialized by sampling uniformly between $\pm \sqrt{6.0 / (n_{in} + n_{out})}$
+    <a href="http://jmlr.org/proceedings/papers/v9/glorot10a/glorot10a.pdf">
+     as suggested by X. Glorot
+    </a>
+    .
+   </p>
+   <h4 id="Logistic-classification">
+    Logistic classification
+    <a class="anchor-link" href="#Logistic-classification">
+     ¶
+    </a>
+   </h4>
+   <p>
+    <a href="{% post_url 2015-06-10-cross-entropy-logistic %}">
+     Logistic classification
+    </a>
+    is used to output the probability that the output at current time step k is 1. This function together with its loss and gradient is implemented in the
+    <code>
+     LogisticClassifier
+    </code>
+    class below.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [4]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define the linear tensor transformation layer</span>
+<span class="k">class</span> <span class="nc">TensorLinear</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">"""The linear tensor layer applies a linear tensor dot product </span>
+<span class="sd">    and a bias to its input."""</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_in</span><span class="p">,</span> <span class="n">n_out</span><span class="p">,</span> <span class="n">tensor_order</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">"""Initialse the weight W and bias b parameters."""</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">6.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_in</span> <span class="o">+</span> <span class="n">n_out</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">a</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="p">(</span><span class="n">n_in</span><span class="p">,</span> <span class="n">n_out</span><span class="p">))</span> 
+                  <span class="k">if</span> <span class="n">W</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">W</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_out</span><span class="p">))</span> <span class="k">if</span> <span class="n">b</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">b</span><span class="p">)</span>
+        <span class="c1"># Axes summed over in backprop</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bpAxes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">tensor_order</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">"""Perform forward step transformation with the help </span>
+<span class="sd">        of a tensor product."""</span>
+        <span class="c1"># Same as: Y[i,j,:] = np.dot(X[i,j,:], self.W) + self.b </span>
+        <span class="c1">#          (for i,j in X.shape[0:1])</span>
+        <span class="c1"># Same as: Y = np.einsum('ijk,kl-&gt;ijl', X, self.W) + self.b</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">),(</span><span class="mi">0</span><span class="p">)))</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span>
+
+    <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">gY</span><span class="p">):</span>
+        <span class="sd">"""Return the gradient of the parmeters and the inputs of </span>
+<span class="sd">        this layer."""</span>
+        <span class="c1"># Same as: gW = np.einsum('ijk,ijl-&gt;kl', X, gY)</span>
+        <span class="c1"># Same as: gW += np.dot(X[:,j,:].T, gY[:,j,:]) </span>
+        <span class="c1">#          (for i,j in X.shape[0:1])</span>
+        <span class="n">gW</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">gY</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bpAxes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bpAxes</span><span class="p">))</span>
+        <span class="n">gB</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">gY</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">bpAxes</span><span class="p">)</span>
+        <span class="c1"># Same as: gX = np.einsum('ijk,kl-&gt;ijl', gY, self.W.T)</span>
+        <span class="c1"># Same as: gX[i,j,:] = np.dot(gY[i,j,:], self.W.T) </span>
+        <span class="c1">#          (for i,j in gY.shape[0:1])</span>
+        <span class="n">gX</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">gY</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">),(</span><span class="mi">0</span><span class="p">)))</span>  
+        <span class="k">return</span> <span class="n">gX</span><span class="p">,</span> <span class="n">gW</span><span class="p">,</span> <span class="n">gB</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [5]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define the logistic classifier layer</span>
+<span class="k">class</span> <span class="nc">LogisticClassifier</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">"""The logistic layer applies the logistic function to its </span>
+<span class="sd">    inputs."""</span>
+   
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">"""Perform the forward step transformation."""</span>
+        <span class="k">return</span> <span class="mf">1.</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">X</span><span class="p">))</span>
+    
+    <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
+        <span class="sd">"""Return the gradient with respect to the loss function </span>
+<span class="sd">        at the inputs of this layer."""</span>
+        <span class="c1"># Average by the number of samples and sequence length.</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">Y</span> <span class="o">-</span> <span class="n">T</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    
+    <span class="k">def</span> <span class="nf">loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
+        <span class="sd">"""Compute the loss at the output."""</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">T</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">Y</span><span class="p">))</span> <span class="o">+</span> <span class="p">((</span><span class="mi">1</span><span class="o">-</span><span class="n">T</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">Y</span><span class="p">)))</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Unfolding-the-recurrent-states">
+    Unfolding the recurrent states
+    <a class="anchor-link" href="#Unfolding-the-recurrent-states">
+     ¶
+    </a>
+   </h3>
+   <p>
+    Just as in the
+    <a href="{% post_url 2015-09-27-rnn-implementation-part01 %}">
+     previous part
+    </a>
+    of this tutorial the recurrent states need to be unfolded through time. This unfolding during
+    <a href="https://en.wikipedia.org/wiki/Backpropagation_through_time">
+     backpropagation through time
+    </a>
+    is done by the
+    <code>
+     RecurrentStateUnfold
+    </code>
+    class. This class holds the shared weight and bias parameters used to update each state, as well as the initial state that is also treated as a parameter and optimized during backpropagation.
+   </p>
+   <p>
+    The
+    <code>
+     forward
+    </code>
+    method of
+    <code>
+     RecurrentStateUnfold
+    </code>
+    iteratively updates the states through time and returns the resulting state tensor. The
+    <code>
+     backward
+    </code>
+    method propagates the gradients at the outputs of each state backwards through time. Note that at each time $k$ the gradient coming from the output Y needs to be added with the gradient coming from the previous state at time $k+1$. The gradients of the weight and bias parameters are summed over all timestep since they are shared parameters in each state update. The final state gradient at time $k=0$ is used to optimise the initial state $S_0$ since the gradient of the inital state is $\partial \xi / \partial S_{0}$.
+   </p>
+   <p>
+    <code>
+     RecurrentStateUnfold
+    </code>
+    makes use of the
+    <code>
+     RecurrentStateUpdate
+    </code>
+    class. The
+    <code>
+     forward
+    </code>
+    method of this class combines the transformed input and state at time $k-1$ to output state $k$. The
+    <code>
+     backward
+    </code>
+    method propagates the gradient backwards through time for one timestep and calculates the gradients of the parameters of this timestep. The non-linear transfer function used in
+    <code>
+     RecurrentStateUpdate
+    </code>
+    is the
+    <a href="https://en.wikipedia.org/wiki/Hyperbolic_function">
+     hyperbolic tangent
+    </a>
+    (tanh) function. This function, like the logistic function, is a
+    <a href="https://en.wikipedia.org/wiki/Sigmoid_function">
+     sigmoid function
+    </a>
+    that goes from $-1$ to $+1$. The
+    <a href="https://theclevermachine.wordpress.com/tag/tanh-function/">
+     tanh function
+    </a>
+    is chosen because the maximum gradient of this function is higher than the maximum gradient of the
+    <a href="{% post_url 2015-06-10-neural-network-implementation-part02 %}#Logistic-function-and-cross-entropy-loss-function">
+     logistic function
+    </a>
+    which make vanishing gradients less likely. This tanh transfer function is implemented in the
+    <code>
+     TanH
+    </code>
+    class.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [6]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define tanh layer</span>
+<span class="k">class</span> <span class="nc">TanH</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">"""TanH applies the tanh function to its inputs."""</span>
+    
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">"""Perform the forward step transformation."""</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> 
+    
+    <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">):</span>
+        <span class="sd">"""Return the gradient at the inputs of this layer."""</span>
+        <span class="n">gTanh</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="p">(</span><span class="n">Y</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">gTanh</span> <span class="o">*</span> <span class="n">output_grad</span><span class="p">)</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [7]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define internal state update layer</span>
+<span class="k">class</span> <span class="nc">RecurrentStateUpdate</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">"""Update a given state."""</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nbStates</span><span class="p">,</span> <span class="n">W</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+        <span class="sd">"""Initialse the linear transformation and tanh transfer </span>
+<span class="sd">        function."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linear</span> <span class="o">=</span> <span class="n">TensorLinear</span><span class="p">(</span><span class="n">nbStates</span><span class="p">,</span> <span class="n">nbStates</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">W</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tanh</span> <span class="o">=</span> <span class="n">TanH</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xk</span><span class="p">,</span> <span class="n">Sk</span><span class="p">):</span>
+        <span class="sd">"""Return state k+1 from input and state k."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tanh</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">Xk</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">Sk</span><span class="p">))</span>
+    
+    <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Sk0</span><span class="p">,</span> <span class="n">Sk1</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">):</span>
+        <span class="sd">"""Return the gradient of the parmeters and the inputs of </span>
+<span class="sd">        this layer."""</span>
+        <span class="n">gZ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tanh</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">Sk1</span><span class="p">,</span> <span class="n">output_grad</span><span class="p">)</span>
+        <span class="n">gSk0</span><span class="p">,</span> <span class="n">gW</span><span class="p">,</span> <span class="n">gB</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">Sk0</span><span class="p">,</span> <span class="n">gZ</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">gZ</span><span class="p">,</span> <span class="n">gSk0</span><span class="p">,</span> <span class="n">gW</span><span class="p">,</span> <span class="n">gB</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [8]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define layer that unfolds the states over time</span>
+<span class="k">class</span> <span class="nc">RecurrentStateUnfold</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">"""Unfold the recurrent states."""</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nbStates</span><span class="p">,</span> <span class="n">nbTimesteps</span><span class="p">):</span>
+        <span class="sd">"""Initialse the shared parameters, the inital state and </span>
+<span class="sd">        state update function."""</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">6.</span> <span class="o">/</span> <span class="p">(</span><span class="n">nbStates</span> <span class="o">*</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">a</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="p">(</span><span class="n">nbStates</span><span class="p">,</span> <span class="n">nbStates</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>  <span class="c1"># Shared bias</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">S0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nbStates</span><span class="p">)</span>  <span class="c1"># Initial state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span> <span class="o">=</span> <span class="n">nbTimesteps</span>  <span class="c1"># Timesteps to unfold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateUpdate</span> <span class="o">=</span> <span class="n">RecurrentStateUpdate</span><span class="p">(</span>
+            <span class="n">nbStates</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>  <span class="c1"># State update function</span>
+        
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">"""Iteratively apply forward step to all states."""</span>
+        <span class="c1"># State tensor</span>
+        <span class="n">S</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="n">S</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">S0</span>  <span class="c1"># Set initial state</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span><span class="p">):</span>
+            <span class="c1"># Update the states iteratively</span>
+            <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">,:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateUpdate</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:],</span> <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:])</span>
+        <span class="k">return</span> <span class="n">S</span>
+    
+    <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">gY</span><span class="p">):</span>
+        <span class="sd">"""Return the gradient of the parmeters and the inputs of </span>
+<span class="sd">        this layer."""</span>
+        <span class="c1"># Initialise gradient of state outputs</span>
+        <span class="n">gSk</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">gY</span><span class="p">[:,</span><span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span><span class="o">-</span><span class="mi">1</span><span class="p">,:])</span>
+        <span class="c1"># Initialse gradient tensor for state inputs</span>
+        <span class="n">gZ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="n">gWSum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">)</span>  <span class="c1"># Initialise weight gradients</span>
+        <span class="n">gBSum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>  <span class="c1"># Initialse bias gradients</span>
+        <span class="c1"># Propagate the gradients iteratively</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nbTimesteps</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+            <span class="c1"># Gradient at state output is gradient from previous state </span>
+            <span class="c1">#  plus gradient from output</span>
+            <span class="n">gSk</span> <span class="o">+=</span> <span class="n">gY</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:]</span>
+            <span class="c1"># Propgate the gradient back through one state</span>
+            <span class="n">gZ</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:],</span> <span class="n">gSk</span><span class="p">,</span> <span class="n">gW</span><span class="p">,</span> <span class="n">gB</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateUpdate</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span>
+                <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="p">,:],</span> <span class="n">S</span><span class="p">[:,</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">,:],</span> <span class="n">gSk</span><span class="p">)</span>
+            <span class="n">gWSum</span> <span class="o">+=</span> <span class="n">gW</span>  <span class="c1"># Update total weight gradient</span>
+            <span class="n">gBSum</span> <span class="o">+=</span> <span class="n">gB</span>  <span class="c1"># Update total bias gradient</span>
+        <span class="c1"># Get gradient of initial state over all samples</span>
+        <span class="n">gS0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">gSk</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">gZ</span><span class="p">,</span> <span class="n">gWSum</span><span class="p">,</span> <span class="n">gBSum</span><span class="p">,</span> <span class="n">gS0</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="The-full-network">
+    The full network
+    <a class="anchor-link" href="#The-full-network">
+     ¶
+    </a>
+   </h3>
+   <p>
+    The full network that will be trained to perform binary addition of two number is defined in the
+    <code>
+     RnnBinaryAdder
+    </code>
+    class below. It initialises all the layers upon creation. The
+    <code>
+     forward
+    </code>
+    method performs the full backpropagation forward step through all layers and timesteps and returns the intermediary outputs. The
+    <code>
+     backward
+    </code>
+    method performs the backward step through all layers and timesteps and returns the gradients of all the parameters. The
+    <code>
+     getParamGrads
+    </code>
+    method performs both steps and returns the gradients of the parameters in a list. The order of this list corresponds to the order of the iterator returned by
+    <code>
+     get_params_iter
+    </code>
+    . The parameters returned in the iterator of that last method are the same as the parameters of the network and can be used to change the parameters of the network manually.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [9]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define the full network</span>
+<span class="k">class</span> <span class="nc">RnnBinaryAdder</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">"""RNN to perform binary addition of 2 numbers."""</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nb_of_inputs</span><span class="p">,</span> <span class="n">nb_of_outputs</span><span class="p">,</span> <span class="n">nb_of_states</span><span class="p">,</span> 
+                 <span class="n">sequence_len</span><span class="p">):</span>
+        <span class="sd">"""Initialse the network layers."""</span>
+        <span class="c1"># Input layer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span> <span class="o">=</span> <span class="n">TensorLinear</span><span class="p">(</span><span class="n">nb_of_inputs</span><span class="p">,</span> <span class="n">nb_of_states</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="c1"># Recurrent layer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span> <span class="o">=</span> <span class="n">RecurrentStateUnfold</span><span class="p">(</span><span class="n">nb_of_states</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>
+        <span class="c1"># Linear output transform</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span> <span class="o">=</span> <span class="n">TensorLinear</span><span class="p">(</span><span class="n">nb_of_states</span><span class="p">,</span> <span class="n">nb_of_outputs</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="n">LogisticClassifier</span><span class="p">()</span>  <span class="c1"># Classification output</span>
+        
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">"""Perform the forward propagation of input X through all </span>
+<span class="sd">        layers."""</span>
+        <span class="c1"># Linear input transformation</span>
+        <span class="n">recIn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="c1"># Forward propagate through time and return states</span>
+        <span class="n">S</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">recIn</span><span class="p">)</span>
+        <span class="c1"># Linear output transformation</span>
+        <span class="n">Z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">S</span><span class="p">[:,</span><span class="mi">1</span><span class="p">:</span><span class="n">sequence_len</span><span class="o">+</span><span class="mi">1</span><span class="p">,:])</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">Z</span><span class="p">)</span>  <span class="c1"># Classification probabilities</span>
+        <span class="c1"># Return: input to recurrent layer, states, input to classifier, </span>
+        <span class="c1">#  output</span>
+        <span class="k">return</span> <span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span>
+    
+    <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
+        <span class="sd">"""Perform the backward propagation through all layers.</span>
+<span class="sd">        Input: input samples, network output, intput to recurrent </span>
+<span class="sd">        layer, states, targets."""</span>
+        <span class="n">gZ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>  <span class="c1"># Get output gradient</span>
+        <span class="n">gRecOut</span><span class="p">,</span> <span class="n">gWout</span><span class="p">,</span> <span class="n">gBout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span>
+            <span class="n">S</span><span class="p">[:,</span><span class="mi">1</span><span class="p">:</span><span class="n">sequence_len</span><span class="o">+</span><span class="mi">1</span><span class="p">,:],</span> <span class="n">gZ</span><span class="p">)</span>
+        <span class="c1"># Propagate gradient backwards through time</span>
+        <span class="n">gRnnIn</span><span class="p">,</span> <span class="n">gWrec</span><span class="p">,</span> <span class="n">gBrec</span><span class="p">,</span> <span class="n">gS0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span>
+            <span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">gRecOut</span><span class="p">)</span>
+        <span class="n">gX</span><span class="p">,</span> <span class="n">gWin</span><span class="p">,</span> <span class="n">gBin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">gRnnIn</span><span class="p">)</span>
+        <span class="c1"># Return the parameter gradients of: linear output weights, </span>
+        <span class="c1">#  linear output bias, recursive weights, recursive bias, #</span>
+        <span class="c1">#  linear input weights, linear input bias, initial state.</span>
+        <span class="k">return</span> <span class="n">gWout</span><span class="p">,</span> <span class="n">gBout</span><span class="p">,</span> <span class="n">gWrec</span><span class="p">,</span> <span class="n">gBrec</span><span class="p">,</span> <span class="n">gWin</span><span class="p">,</span> <span class="n">gBin</span><span class="p">,</span> <span class="n">gS0</span>
+    
+    <span class="k">def</span> <span class="nf">getOutput</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">"""Get the output probabilities of input X."""</span>
+        <span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Y</span>
+    
+    <span class="k">def</span> <span class="nf">getBinaryOutput</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">"""Get the binary output of input X."""</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">around</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X</span><span class="p">))</span>
+    
+    <span class="k">def</span> <span class="nf">getParamGrads</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
+        <span class="sd">"""Return the gradients with respect to input X and </span>
+<span class="sd">        target T as a list. The list has the same order as the </span>
+<span class="sd">        get_params_iter iterator."""</span>
+        <span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">Z</span><span class="p">,</span> <span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="n">gWout</span><span class="p">,</span> <span class="n">gBout</span><span class="p">,</span> <span class="n">gWrec</span><span class="p">,</span> <span class="n">gBrec</span><span class="p">,</span> <span class="n">gWin</span><span class="p">,</span> <span class="n">gBin</span><span class="p">,</span> <span class="n">gS0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span>
+            <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">recIn</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">g</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="n">gS0</span><span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="n">gWin</span><span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="n">gBin</span><span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="n">gWrec</span><span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="n">gBrec</span><span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="n">gWout</span><span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="n">gBout</span><span class="p">))]</span>
+    
+    <span class="k">def</span> <span class="nf">loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
+        <span class="sd">"""Return the loss of input X w.r.t. targets T."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
+    
+    <span class="k">def</span> <span class="nf">get_params_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">"""Return an iterator over the parameters.</span>
+<span class="sd">        The iterator has the same order as get_params_grad.</span>
+<span class="sd">        The elements returned by the iterator are editable in-place."""</span>
+        <span class="k">return</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">S0</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorInput</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rnnUnfold</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">W</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]),</span> 
+            <span class="n">np</span><span class="o">.</span><span class="n">nditer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensorOutput</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="n">op_flags</span><span class="o">=</span><span class="p">[</span><span class="s1">'readwrite'</span><span class="p">]))</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Gradient-Checking">
+    Gradient Checking
+    <a class="anchor-link" href="#Gradient-Checking">
+     ¶
+    </a>
+   </h2>
+   <p>
+    As in
+    <a href="{% post_url 2015-06-10-neural-network-implementation-part04 %}#Gradient-checking">
+     part 4 of our previous tutorial on feedforward nets
+    </a>
+    the gradient computed by backpropagation is compared with the
+    <a href="https://en.wikipedia.org/wiki/Numerical_differentiation">
+     numerical gradient
+    </a>
+    to assert that there are no bugs in the code to compute the gradients. This is done by the code below.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [10]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Do gradient checking</span>
+<span class="c1"># Define an RNN to test</span>
+<span class="n">RNN</span> <span class="o">=</span> <span class="n">RnnBinaryAdder</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>
+<span class="c1"># Get the gradients of the parameters from a subset of the data</span>
+<span class="n">backprop_grads</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">getParamGrads</span><span class="p">(</span>
+    <span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:],</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:])</span>
+
+<span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-7</span>  <span class="c1"># Set the small change to compute the numerical gradient</span>
+<span class="c1"># Compute the numerical gradients of the parameters in all layers.</span>
+<span class="k">for</span> <span class="n">p_idx</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">()):</span>
+    <span class="n">grad_backprop</span> <span class="o">=</span> <span class="n">backprop_grads</span><span class="p">[</span><span class="n">p_idx</span><span class="p">]</span>
+    <span class="c1"># + eps</span>
+    <span class="n">param</span> <span class="o">+=</span> <span class="n">eps</span>
+    <span class="n">plus_loss</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span>
+        <span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:]),</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:])</span>
+    <span class="c1"># - eps</span>
+    <span class="n">param</span> <span class="o">-=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">eps</span>
+    <span class="n">min_loss</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span>
+        <span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:]),</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:])</span>
+    <span class="c1"># reset param value</span>
+    <span class="n">param</span> <span class="o">+=</span> <span class="n">eps</span>
+    <span class="c1"># calculate numerical gradient</span>
+    <span class="n">grad_num</span> <span class="o">=</span> <span class="p">(</span><span class="n">plus_loss</span> <span class="o">-</span> <span class="n">min_loss</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">eps</span><span class="p">)</span>
+    <span class="c1"># Raise error if the numerical grade is not close to the </span>
+    <span class="c1">#  backprop gradient</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">grad_num</span><span class="p">,</span> <span class="n">grad_backprop</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">((</span>
+            <span class="sa">f</span><span class="s1">'Numerical gradient of </span><span class="si">{</span><span class="n">grad_num</span><span class="si">:</span><span class="s1">.6f</span><span class="si">}</span><span class="s1"> is not close '</span>
+            <span class="sa">f</span><span class="s1">'to the backpropagation gradient of </span><span class="si">{</span><span class="n">grad_backprop</span><span class="si">:</span><span class="s1">.6f</span><span class="si">}</span><span class="s1">!'</span>
+        <span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">'No gradient errors found'</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>No gradient errors found
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Rmsprop-with-momentum-optimisation">
+    Rmsprop with momentum optimisation
+    <a class="anchor-link" href="#Rmsprop-with-momentum-optimisation">
+     ¶
+    </a>
+   </h2>
+   <p>
+    While the
+    <a href="{% post_url 2015-09-27-rnn-implementation-part01 %}">
+     first part
+    </a>
+    of this tutorial used
+    <a href="https://en.wikipedia.org/wiki/Rprop">
+     Rprop
+    </a>
+    to optimise the network, this part will use the
+    <a href="http://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf">
+     Rmsprop
+    </a>
+    algorithm with
+    <a href="http://www.cs.toronto.edu/~fritz/absps/momentum.pdf">
+     Nesterov's accelerated gradient
+    </a>
+    to perform the optimisation. We replaced the Rprop algorithm because Rprop doesn't work well with minibatches due to the stochastic nature of the error surface that can result in sign changes of the gradient.
+   </p>
+   <p>
+    The Rmsprop algorithm was inspired by the Rprop algorithm. It keeps a
+    <a href="https://en.wikipedia.org/wiki/Moving_average">
+     moving average
+    </a>
+    (MA) of the squared gradient for each parameter $\theta$ ($MA = \lambda \cdot MA + (1-\lambda) \cdot (\partial \xi / \partial \theta)^2$, with $\lambda$ the moving average hyperparameter). The gradient is then normalised by dividing by the square root of this moving average (
+    <code>
+     maSquare
+    </code>
+    = $(\partial \xi / \partial \theta)/\sqrt{MA}$). This normalised gradient is then used to update the parameters. Note that if $\lambda=0$ the gradient is reduced to its sign.
+   </p>
+   <p>
+    This transformed gradient is not used directly to update the parameters, but it is used to update a momentum parameter (
+    <code>
+     Vs
+    </code>
+    ) for each parameter of the network. This parameter is similar to the momentum parameter from our
+    <a href="{% post_url 2015-06-10-neural-network-implementation-part04 %}#Backpropagation-updates-with-momentum">
+     previous tutorial
+    </a>
+    but it is used in a slightly different way. Nesterov's accelerated gradient is different from regular momentum in that it applies updates in a different way. While the regular momentum algorithm calculates the gradient at the beginning of the iteration, updates the momentum and moves the parameters according to this momentum, Nesterov's accelerated gradient moves the parameters according to the reduced momentum, then calculates the gradients, updates the momentum, and then moves again according to the local gradient. This has as benefit that the gradient is more informative to do the local update, and can correct for a bad momentum update. The Nesterov updates can be described as:
+   </p>
+   $$
+\begin{split}
+V_{i+1} &amp; = \lambda V_i - \mu \nabla(\theta_i + \lambda V_i) \\
+\theta_{i+1} &amp; = \theta_i + V_{i+1} \\
+\end{split}
+$$
+   <p>
+    With $\nabla(\theta)$ the local gradient at position $\theta$ in the parameter space. And $i$ the iteration number. This formula can be visualised as in the following illustration (See
+    <a href="http://www.cs.toronto.edu/~fritz/absps/momentum.pdf">
+     Sutskever I.
+    </a>
+    ):
+   </p>
+   <p>
+    <img alt="Illustration of Nesterov Momentum updates" src="/images/RNN_implementation/NesterovMomentum.png"/>
+   </p>
+   <p>
+    Note that the training converges to a loss of 0. This convergence is actually not guaranteed. If the parameters of the network start out in a bad position the network might convert to a local minimum that is far from the global minimum. The training is also sensitive to the meta parameters
+    <code>
+     lmbd
+    </code>
+    ,
+    <code>
+     learning_rate
+    </code>
+    ,
+    <code>
+     momentum_term
+    </code>
+    ,
+    <code>
+     eps
+    </code>
+    . Try rerunning this yourself to see how many times it actually converges.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [11]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Set hyper-parameters</span>
+<span class="n">lmbd</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># Rmsprop lambda</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.05</span>  <span class="c1"># Learning rate</span>
+<span class="n">momentum_term</span> <span class="o">=</span> <span class="mf">0.80</span>  <span class="c1"># Momentum term</span>
+<span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-6</span>  <span class="c1"># Numerical stability term to prevent division by zero</span>
+<span class="n">mb_size</span> <span class="o">=</span> <span class="mi">100</span>  <span class="c1"># Size of the minibatches (number of samples)</span>
+
+<span class="c1"># Create the network</span>
+<span class="n">nb_of_states</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Number of states in the recurrent layer</span>
+<span class="n">RNN</span> <span class="o">=</span> <span class="n">RnnBinaryAdder</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">nb_of_states</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>
+<span class="c1"># Set the initial parameters</span>
+<span class="c1"># Number of parameters in the network</span>
+<span class="n">nbParameters</span> <span class="o">=</span>  <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">RNN</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">())</span>
+<span class="c1"># Rmsprop moving average</span>
+<span class="n">maSquare</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nbParameters</span><span class="p">)]</span>
+<span class="n">Vs</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nbParameters</span><span class="p">)]</span>  <span class="c1"># Momentum</span>
+
+<span class="c1"># Create a list of minibatch losses to be plotted</span>
+<span class="n">ls_of_loss</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">RNN</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:]),</span> <span class="n">T_train</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">100</span><span class="p">,:,:])]</span>
+<span class="c1"># Iterate over some iterations</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+    <span class="c1"># Iterate over all the minibatches</span>
+    <span class="k">for</span> <span class="n">mb</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_train</span> <span class="o">//</span> <span class="n">mb_size</span><span class="p">):</span>
+        <span class="n">X_mb</span> <span class="o">=</span> <span class="n">X_train</span><span class="p">[</span><span class="n">mb</span><span class="p">:</span><span class="n">mb</span><span class="o">+</span><span class="n">mb_size</span><span class="p">,:,:]</span>  <span class="c1"># Input minibatch</span>
+        <span class="n">T_mb</span> <span class="o">=</span> <span class="n">T_train</span><span class="p">[</span><span class="n">mb</span><span class="p">:</span><span class="n">mb</span><span class="o">+</span><span class="n">mb_size</span><span class="p">,:,:]</span>  <span class="c1"># Target minibatch</span>
+        <span class="n">V_tmp</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span> <span class="o">*</span> <span class="n">momentum_term</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">Vs</span><span class="p">]</span>
+        <span class="c1"># Update each parameters according to previous gradient</span>
+        <span class="k">for</span> <span class="n">pIdx</span><span class="p">,</span> <span class="n">P</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">()):</span>
+            <span class="n">P</span> <span class="o">+=</span> <span class="n">V_tmp</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span>
+        <span class="c1"># Get gradients after following old velocity</span>
+        <span class="c1"># Get the parameter gradients</span>
+        <span class="n">backprop_grads</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">getParamGrads</span><span class="p">(</span><span class="n">X_mb</span><span class="p">,</span> <span class="n">T_mb</span><span class="p">)</span>    
+        <span class="c1"># Update each parameter seperately</span>
+        <span class="k">for</span> <span class="n">pIdx</span><span class="p">,</span> <span class="n">P</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">get_params_iter</span><span class="p">()):</span>
+            <span class="c1"># Update the Rmsprop moving averages</span>
+            <span class="n">maSquare</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">=</span> <span class="n">lmbd</span> <span class="o">*</span> <span class="n">maSquare</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span>
+                <span class="mi">1</span><span class="o">-</span><span class="n">lmbd</span><span class="p">)</span> <span class="o">*</span> <span class="n">backprop_grads</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span>
+            <span class="c1"># Calculate the Rmsprop normalised gradient</span>
+            <span class="n">pGradNorm</span> <span class="o">=</span> <span class="p">((</span>
+                <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">backprop_grads</span><span class="p">[</span><span class="n">pIdx</span><span class="p">])</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span>
+                <span class="n">maSquare</span><span class="p">[</span><span class="n">pIdx</span><span class="p">])</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
+            <span class="c1"># Update the momentum</span>
+            <span class="n">Vs</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">=</span> <span class="n">V_tmp</span><span class="p">[</span><span class="n">pIdx</span><span class="p">]</span> <span class="o">-</span> <span class="n">pGradNorm</span>     
+            <span class="n">P</span> <span class="o">-=</span> <span class="n">pGradNorm</span>   <span class="c1"># Update the parameter</span>
+        <span class="c1"># Add loss to list to plot</span>
+        <span class="n">ls_of_loss</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span><span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">X_mb</span><span class="p">),</span> <span class="n">T_mb</span><span class="p">))</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [12]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Plot the loss over the iterations</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ls_of_loss</span><span class="p">,</span> <span class="s1">'b-'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'minibatch iteration'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Decrease of loss over backprop iteration'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">bottom</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_svg output_subarea">
+     <?xml version="1.0" encoding="utf-8" standalone="no"?>
+     <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+     <svg height="206.754375pt" version="1.1" viewbox="0 0 344.396875 206.754375" width="344.396875pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <metadata>
+       <rdf:rdf xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+        <cc:work>
+         <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage">
+         </dc:type>
+         <dc:date>
+          2021-05-05T21:13:35.629009
+         </dc:date>
+         <dc:format>
+          image/svg+xml
+         </dc:format>
+         <dc:creator>
+          <cc:agent>
+           <dc:title>
+            Matplotlib v3.4.1, https://matplotlib.org/
+           </dc:title>
+          </cc:agent>
+         </dc:creator>
+        </cc:work>
+       </rdf:rdf>
+      </metadata>
+      <defs>
+       <style type="text/css">
+        *{stroke-linecap:butt;stroke-linejoin:round;}
+       </style>
+      </defs>
+      <g id="figure_1">
+       <g id="patch_1">
+        <path d="M 0 206.754375 
+L 344.396875 206.754375 
+L 344.396875 0 
+L 0 0 
+z
+" style="fill:#ffffff;">
+        </path>
+       </g>
+       <g id="axes_1">
+        <g id="patch_2">
+         <path d="M 48.653125 169.198125 
+L 327.653125 169.198125 
+L 327.653125 22.318125 
+L 48.653125 22.318125 
+z
+" style="fill:#eaeaf2;">
+         </path>
+        </g>
+        <g id="matplotlib.axis_1">
+         <g id="xtick_1">
+          <g id="line2d_1">
+           <path clip-path="url(#pe313d92554)" d="M 48.653125 169.198125 
+L 48.653125 22.318125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_1">
+           <!-- 0 -->
+           <g style="fill:#262626;" transform="translate(45.471875 183.796562)scale(0.1 -0.1)">
+            <defs>
+             <path d="M 2034 4250 
+Q 1547 4250 1301 3770 
+Q 1056 3291 1056 2328 
+Q 1056 1369 1301 889 
+Q 1547 409 2034 409 
+Q 2525 409 2770 889 
+Q 3016 1369 3016 2328 
+Q 3016 3291 2770 3770 
+Q 2525 4250 2034 4250 
+z
+M 2034 4750 
+Q 2819 4750 3233 4129 
+Q 3647 3509 3647 2328 
+Q 3647 1150 3233 529 
+Q 2819 -91 2034 -91 
+Q 1250 -91 836 529 
+Q 422 1150 422 2328 
+Q 422 3509 836 4129 
+Q 1250 4750 2034 4750 
+z
+" id="DejaVuSans-30" transform="scale(0.015625)">
+             </path>
+            </defs>
+            <use xlink:href="#DejaVuSans-30">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="xtick_2">
+          <g id="line2d_2">
+           <path clip-path="url(#pe313d92554)" d="M 104.453125 169.198125 
+L 104.453125 22.318125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_2">
+           <!-- 20 -->
+           <g style="fill:#262626;" transform="translate(98.090625 183.796562)scale(0.1 -0.1)">
+            <defs>
+             <path d="M 1228 531 
+L 3431 531 
+L 3431 0 
+L 469 0 
+L 469 531 
+Q 828 903 1448 1529 
+Q 2069 2156 2228 2338 
+Q 2531 2678 2651 2914 
+Q 2772 3150 2772 3378 
+Q 2772 3750 2511 3984 
+Q 2250 4219 1831 4219 
+Q 1534 4219 1204 4116 
+Q 875 4013 500 3803 
+L 500 4441 
+Q 881 4594 1212 4672 
+Q 1544 4750 1819 4750 
+Q 2544 4750 2975 4387 
+Q 3406 4025 3406 3419 
+Q 3406 3131 3298 2873 
+Q 3191 2616 2906 2266 
+Q 2828 2175 2409 1742 
+Q 1991 1309 1228 531 
+z
+" id="DejaVuSans-32" transform="scale(0.015625)">
+             </path>
+            </defs>
+            <use xlink:href="#DejaVuSans-32">
+            </use>
+            <use x="63.623047" xlink:href="#DejaVuSans-30">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="xtick_3">
+          <g id="line2d_3">
+           <path clip-path="url(#pe313d92554)" d="M 160.253125 169.198125 
+L 160.253125 22.318125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_3">
+           <!-- 40 -->
+           <g style="fill:#262626;" transform="translate(153.890625 183.796562)scale(0.1 -0.1)">
+            <defs>
+             <path d="M 2419 4116 
+L 825 1625 
+L 2419 1625 
+L 2419 4116 
+z
+M 2253 4666 
+L 3047 4666 
+L 3047 1625 
+L 3713 1625 
+L 3713 1100 
+L 3047 1100 
+L 3047 0 
+L 2419 0 
+L 2419 1100 
+L 313 1100 
+L 313 1709 
+L 2253 4666 
+z
+" id="DejaVuSans-34" transform="scale(0.015625)">
+             </path>
+            </defs>
+            <use xlink:href="#DejaVuSans-34">
+            </use>
+            <use x="63.623047" xlink:href="#DejaVuSans-30">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="xtick_4">
+          <g id="line2d_4">
+           <path clip-path="url(#pe313d92554)" d="M 216.053125 169.198125 
+L 216.053125 22.318125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_4">
+           <!-- 60 -->
+           <g style="fill:#262626;" transform="translate(209.690625 183.796562)scale(0.1 -0.1)">
+            <defs>
+             <path d="M 2113 2584 
+Q 1688 2584 1439 2293 
+Q 1191 2003 1191 1497 
+Q 1191 994 1439 701 
+Q 1688 409 2113 409 
+Q 2538 409 2786 701 
+Q 3034 994 3034 1497 
+Q 3034 2003 2786 2293 
+Q 2538 2584 2113 2584 
+z
+M 3366 4563 
+L 3366 3988 
+Q 3128 4100 2886 4159 
+Q 2644 4219 2406 4219 
+Q 1781 4219 1451 3797 
+Q 1122 3375 1075 2522 
+Q 1259 2794 1537 2939 
+Q 1816 3084 2150 3084 
+Q 2853 3084 3261 2657 
+Q 3669 2231 3669 1497 
+Q 3669 778 3244 343 
+Q 2819 -91 2113 -91 
+Q 1303 -91 875 529 
+Q 447 1150 447 2328 
+Q 447 3434 972 4092 
+Q 1497 4750 2381 4750 
+Q 2619 4750 2861 4703 
+Q 3103 4656 3366 4563 
+z
+" id="DejaVuSans-36" transform="scale(0.015625)">
+             </path>
+            </defs>
+            <use xlink:href="#DejaVuSans-36">
+            </use>
+            <use x="63.623047" xlink:href="#DejaVuSans-30">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="xtick_5">
+          <g id="line2d_5">
+           <path clip-path="url(#pe313d92554)" d="M 271.853125 169.198125 
+L 271.853125 22.318125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_5">
+           <!-- 80 -->
+           <g style="fill:#262626;" transform="translate(265.490625 183.796562)scale(0.1 -0.1)">
+            <defs>
+             <path d="M 2034 2216 
+Q 1584 2216 1326 1975 
+Q 1069 1734 1069 1313 
+Q 1069 891 1326 650 
+Q 1584 409 2034 409 
+Q 2484 409 2743 651 
+Q 3003 894 3003 1313 
+Q 3003 1734 2745 1975 
+Q 2488 2216 2034 2216 
+z
+M 1403 2484 
+Q 997 2584 770 2862 
+Q 544 3141 544 3541 
+Q 544 4100 942 4425 
+Q 1341 4750 2034 4750 
+Q 2731 4750 3128 4425 
+Q 3525 4100 3525 3541 
+Q 3525 3141 3298 2862 
+Q 3072 2584 2669 2484 
+Q 3125 2378 3379 2068 
+Q 3634 1759 3634 1313 
+Q 3634 634 3220 271 
+Q 2806 -91 2034 -91 
+Q 1263 -91 848 271 
+Q 434 634 434 1313 
+Q 434 1759 690 2068 
+Q 947 2378 1403 2484 
+z
+M 1172 3481 
+Q 1172 3119 1398 2916 
+Q 1625 2713 2034 2713 
+Q 2441 2713 2670 2916 
+Q 2900 3119 2900 3481 
+Q 2900 3844 2670 4047 
+Q 2441 4250 2034 4250 
+Q 1625 4250 1398 4047 
+Q 1172 3844 1172 3481 
+z
+" id="DejaVuSans-38" transform="scale(0.015625)">
+             </path>
+            </defs>
+            <use xlink:href="#DejaVuSans-38">
+            </use>
+            <use x="63.623047" xlink:href="#DejaVuSans-30">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="xtick_6">
+          <g id="line2d_6">
+           <path clip-path="url(#pe313d92554)" d="M 327.653125 169.198125 
+L 327.653125 22.318125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_6">
+           <!-- 100 -->
+           <g style="fill:#262626;" transform="translate(318.109375 183.796562)scale(0.1 -0.1)">
+            <defs>
+             <path d="M 794 531 
+L 1825 531 
+L 1825 4091 
+L 703 3866 
+L 703 4441 
+L 1819 4666 
+L 2450 4666 
+L 2450 531 
+L 3481 531 
+L 3481 0 
+L 794 0 
+L 794 531 
+z
+" id="DejaVuSans-31" transform="scale(0.015625)">
+             </path>
+            </defs>
+            <use xlink:href="#DejaVuSans-31">
+            </use>
+            <use x="63.623047" xlink:href="#DejaVuSans-30">
+            </use>
+            <use x="127.246094" xlink:href="#DejaVuSans-30">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="text_7">
+          <!-- minibatch iteration -->
+          <g style="fill:#262626;" transform="translate(140.507812 197.474688)scale(0.1 -0.1)">
+           <defs>
+            <path d="M 3328 2828 
+Q 3544 3216 3844 3400 
+Q 4144 3584 4550 3584 
+Q 5097 3584 5394 3201 
+Q 5691 2819 5691 2113 
+L 5691 0 
+L 5113 0 
+L 5113 2094 
+Q 5113 2597 4934 2840 
+Q 4756 3084 4391 3084 
+Q 3944 3084 3684 2787 
+Q 3425 2491 3425 1978 
+L 3425 0 
+L 2847 0 
+L 2847 2094 
+Q 2847 2600 2669 2842 
+Q 2491 3084 2119 3084 
+Q 1678 3084 1418 2786 
+Q 1159 2488 1159 1978 
+L 1159 0 
+L 581 0 
+L 581 3500 
+L 1159 3500 
+L 1159 2956 
+Q 1356 3278 1631 3431 
+Q 1906 3584 2284 3584 
+Q 2666 3584 2933 3390 
+Q 3200 3197 3328 2828 
+z
+" id="DejaVuSans-6d" transform="scale(0.015625)">
+            </path>
+            <path d="M 603 3500 
+L 1178 3500 
+L 1178 0 
+L 603 0 
+L 603 3500 
+z
+M 603 4863 
+L 1178 4863 
+L 1178 4134 
+L 603 4134 
+L 603 4863 
+z
+" id="DejaVuSans-69" transform="scale(0.015625)">
+            </path>
+            <path d="M 3513 2113 
+L 3513 0 
+L 2938 0 
+L 2938 2094 
+Q 2938 2591 2744 2837 
+Q 2550 3084 2163 3084 
+Q 1697 3084 1428 2787 
+Q 1159 2491 1159 1978 
+L 1159 0 
+L 581 0 
+L 581 3500 
+L 1159 3500 
+L 1159 2956 
+Q 1366 3272 1645 3428 
+Q 1925 3584 2291 3584 
+Q 2894 3584 3203 3211 
+Q 3513 2838 3513 2113 
+z
+" id="DejaVuSans-6e" transform="scale(0.015625)">
+            </path>
+            <path d="M 3116 1747 
+Q 3116 2381 2855 2742 
+Q 2594 3103 2138 3103 
+Q 1681 3103 1420 2742 
+Q 1159 2381 1159 1747 
+Q 1159 1113 1420 752 
+Q 1681 391 2138 391 
+Q 2594 391 2855 752 
+Q 3116 1113 3116 1747 
+z
+M 1159 2969 
+Q 1341 3281 1617 3432 
+Q 1894 3584 2278 3584 
+Q 2916 3584 3314 3078 
+Q 3713 2572 3713 1747 
+Q 3713 922 3314 415 
+Q 2916 -91 2278 -91 
+Q 1894 -91 1617 61 
+Q 1341 213 1159 525 
+L 1159 0 
+L 581 0 
+L 581 4863 
+L 1159 4863 
+L 1159 2969 
+z
+" id="DejaVuSans-62" transform="scale(0.015625)">
+            </path>
+            <path d="M 2194 1759 
+Q 1497 1759 1228 1600 
+Q 959 1441 959 1056 
+Q 959 750 1161 570 
+Q 1363 391 1709 391 
+Q 2188 391 2477 730 
+Q 2766 1069 2766 1631 
+L 2766 1759 
+L 2194 1759 
+z
+M 3341 1997 
+L 3341 0 
+L 2766 0 
+L 2766 531 
+Q 2569 213 2275 61 
+Q 1981 -91 1556 -91 
+Q 1019 -91 701 211 
+Q 384 513 384 1019 
+Q 384 1609 779 1909 
+Q 1175 2209 1959 2209 
+L 2766 2209 
+L 2766 2266 
+Q 2766 2663 2505 2880 
+Q 2244 3097 1772 3097 
+Q 1472 3097 1187 3025 
+Q 903 2953 641 2809 
+L 641 3341 
+Q 956 3463 1253 3523 
+Q 1550 3584 1831 3584 
+Q 2591 3584 2966 3190 
+Q 3341 2797 3341 1997 
+z
+" id="DejaVuSans-61" transform="scale(0.015625)">
+            </path>
+            <path d="M 1172 4494 
+L 1172 3500 
+L 2356 3500 
+L 2356 3053 
+L 1172 3053 
+L 1172 1153 
+Q 1172 725 1289 603 
+Q 1406 481 1766 481 
+L 2356 481 
+L 2356 0 
+L 1766 0 
+Q 1100 0 847 248 
+Q 594 497 594 1153 
+L 594 3053 
+L 172 3053 
+L 172 3500 
+L 594 3500 
+L 594 4494 
+L 1172 4494 
+z
+" id="DejaVuSans-74" transform="scale(0.015625)">
+            </path>
+            <path d="M 3122 3366 
+L 3122 2828 
+Q 2878 2963 2633 3030 
+Q 2388 3097 2138 3097 
+Q 1578 3097 1268 2742 
+Q 959 2388 959 1747 
+Q 959 1106 1268 751 
+Q 1578 397 2138 397 
+Q 2388 397 2633 464 
+Q 2878 531 3122 666 
+L 3122 134 
+Q 2881 22 2623 -34 
+Q 2366 -91 2075 -91 
+Q 1284 -91 818 406 
+Q 353 903 353 1747 
+Q 353 2603 823 3093 
+Q 1294 3584 2113 3584 
+Q 2378 3584 2631 3529 
+Q 2884 3475 3122 3366 
+z
+" id="DejaVuSans-63" transform="scale(0.015625)">
+            </path>
+            <path d="M 3513 2113 
+L 3513 0 
+L 2938 0 
+L 2938 2094 
+Q 2938 2591 2744 2837 
+Q 2550 3084 2163 3084 
+Q 1697 3084 1428 2787 
+Q 1159 2491 1159 1978 
+L 1159 0 
+L 581 0 
+L 581 4863 
+L 1159 4863 
+L 1159 2956 
+Q 1366 3272 1645 3428 
+Q 1925 3584 2291 3584 
+Q 2894 3584 3203 3211 
+Q 3513 2838 3513 2113 
+z
+" id="DejaVuSans-68" transform="scale(0.015625)">
+            </path>
+            <path id="DejaVuSans-20" transform="scale(0.015625)">
+            </path>
+            <path d="M 3597 1894 
+L 3597 1613 
+L 953 1613 
+Q 991 1019 1311 708 
+Q 1631 397 2203 397 
+Q 2534 397 2845 478 
+Q 3156 559 3463 722 
+L 3463 178 
+Q 3153 47 2828 -22 
+Q 2503 -91 2169 -91 
+Q 1331 -91 842 396 
+Q 353 884 353 1716 
+Q 353 2575 817 3079 
+Q 1281 3584 2069 3584 
+Q 2775 3584 3186 3129 
+Q 3597 2675 3597 1894 
+z
+M 3022 2063 
+Q 3016 2534 2758 2815 
+Q 2500 3097 2075 3097 
+Q 1594 3097 1305 2825 
+Q 1016 2553 972 2059 
+L 3022 2063 
+z
+" id="DejaVuSans-65" transform="scale(0.015625)">
+            </path>
+            <path d="M 2631 2963 
+Q 2534 3019 2420 3045 
+Q 2306 3072 2169 3072 
+Q 1681 3072 1420 2755 
+Q 1159 2438 1159 1844 
+L 1159 0 
+L 581 0 
+L 581 3500 
+L 1159 3500 
+L 1159 2956 
+Q 1341 3275 1631 3429 
+Q 1922 3584 2338 3584 
+Q 2397 3584 2469 3576 
+Q 2541 3569 2628 3553 
+L 2631 2963 
+z
+" id="DejaVuSans-72" transform="scale(0.015625)">
+            </path>
+            <path d="M 1959 3097 
+Q 1497 3097 1228 2736 
+Q 959 2375 959 1747 
+Q 959 1119 1226 758 
+Q 1494 397 1959 397 
+Q 2419 397 2687 759 
+Q 2956 1122 2956 1747 
+Q 2956 2369 2687 2733 
+Q 2419 3097 1959 3097 
+z
+M 1959 3584 
+Q 2709 3584 3137 3096 
+Q 3566 2609 3566 1747 
+Q 3566 888 3137 398 
+Q 2709 -91 1959 -91 
+Q 1206 -91 779 398 
+Q 353 888 353 1747 
+Q 353 2609 779 3096 
+Q 1206 3584 1959 3584 
+z
+" id="DejaVuSans-6f" transform="scale(0.015625)">
+            </path>
+           </defs>
+           <use xlink:href="#DejaVuSans-6d">
+           </use>
+           <use x="97.412109" xlink:href="#DejaVuSans-69">
+           </use>
+           <use x="125.195312" xlink:href="#DejaVuSans-6e">
+           </use>
+           <use x="188.574219" xlink:href="#DejaVuSans-69">
+           </use>
+           <use x="216.357422" xlink:href="#DejaVuSans-62">
+           </use>
+           <use x="279.833984" xlink:href="#DejaVuSans-61">
+           </use>
+           <use x="341.113281" xlink:href="#DejaVuSans-74">
+           </use>
+           <use x="380.322266" xlink:href="#DejaVuSans-63">
+           </use>
+           <use x="435.302734" xlink:href="#DejaVuSans-68">
+           </use>
+           <use x="498.681641" xlink:href="#DejaVuSans-20">
+           </use>
+           <use x="530.46875" xlink:href="#DejaVuSans-69">
+           </use>
+           <use x="558.251953" xlink:href="#DejaVuSans-74">
+           </use>
+           <use x="597.460938" xlink:href="#DejaVuSans-65">
+           </use>
+           <use x="658.984375" xlink:href="#DejaVuSans-72">
+           </use>
+           <use x="700.097656" xlink:href="#DejaVuSans-61">
+           </use>
+           <use x="761.376953" xlink:href="#DejaVuSans-74">
+           </use>
+           <use x="800.585938" xlink:href="#DejaVuSans-69">
+           </use>
+           <use x="828.369141" xlink:href="#DejaVuSans-6f">
+           </use>
+           <use x="889.550781" xlink:href="#DejaVuSans-6e">
+           </use>
+          </g>
+         </g>
+        </g>
+        <g id="matplotlib.axis_2">
+         <g id="ytick_1">
+          <g id="line2d_7">
+           <path clip-path="url(#pe313d92554)" d="M 48.653125 162.524543 
+L 327.653125 162.524543 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_8">
+           <!-- 0.0 -->
+           <g style="fill:#262626;" transform="translate(25.75 166.323762)scale(0.1 -0.1)">
+            <defs>
+             <path d="M 684 794 
+L 1344 794 
+L 1344 0 
+L 684 0 
+L 684 794 
+z
+" id="DejaVuSans-2e" transform="scale(0.015625)">
+             </path>
+            </defs>
+            <use xlink:href="#DejaVuSans-30">
+            </use>
+            <use x="63.623047" xlink:href="#DejaVuSans-2e">
+            </use>
+            <use x="95.410156" xlink:href="#DejaVuSans-30">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="ytick_2">
+          <g id="line2d_8">
+           <path clip-path="url(#pe313d92554)" d="M 48.653125 125.95518 
+L 327.653125 125.95518 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_9">
+           <!-- 0.2 -->
+           <g style="fill:#262626;" transform="translate(25.75 129.754399)scale(0.1 -0.1)">
+            <use xlink:href="#DejaVuSans-30">
+            </use>
+            <use x="63.623047" xlink:href="#DejaVuSans-2e">
+            </use>
+            <use x="95.410156" xlink:href="#DejaVuSans-32">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="ytick_3">
+          <g id="line2d_9">
+           <path clip-path="url(#pe313d92554)" d="M 48.653125 89.385817 
+L 327.653125 89.385817 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_10">
+           <!-- 0.4 -->
+           <g style="fill:#262626;" transform="translate(25.75 93.185036)scale(0.1 -0.1)">
+            <use xlink:href="#DejaVuSans-30">
+            </use>
+            <use x="63.623047" xlink:href="#DejaVuSans-2e">
+            </use>
+            <use x="95.410156" xlink:href="#DejaVuSans-34">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="ytick_4">
+          <g id="line2d_10">
+           <path clip-path="url(#pe313d92554)" d="M 48.653125 52.816454 
+L 327.653125 52.816454 
+" style="fill:none;stroke:#ffffff;stroke-linecap:round;stroke-width:0.8;">
+           </path>
+          </g>
+          <g id="text_11">
+           <!-- 0.6 -->
+           <g style="fill:#262626;" transform="translate(25.75 56.615673)scale(0.1 -0.1)">
+            <use xlink:href="#DejaVuSans-30">
+            </use>
+            <use x="63.623047" xlink:href="#DejaVuSans-2e">
+            </use>
+            <use x="95.410156" xlink:href="#DejaVuSans-36">
+            </use>
+           </g>
+          </g>
+         </g>
+         <g id="text_12">
+          <!-- $\xi$ -->
+          <g style="fill:#262626;" transform="translate(18.6 99.958125)rotate(-90)scale(0.15 -0.15)">
+           <defs>
+            <path d="M 2016 397 
+Q 2428 394 2628 159 
+Q 2844 -88 2772 -463 
+Q 2700 -822 2422 -1072 
+Q 2119 -1344 1609 -1344 
+Q 1656 -1109 1700 -872 
+Q 1913 -888 2072 -750 
+Q 2194 -641 2216 -525 
+Q 2247 -359 2175 -222 
+Q 2100 -91 1922 -91 
+Q -25 -91 241 1275 
+Q 422 2213 1516 2488 
+Q 663 2600 822 3413 
+Q 941 4028 1678 4284 
+L 1028 4284 
+L 1141 4863 
+L 3606 4863 
+L 3494 4284 
+Q 1528 4284 1350 3375 
+Q 1234 2778 2881 2750 
+L 2778 2219 
+Q 1009 2288 819 1275 
+Q 659 428 2016 397 
+z
+" id="DejaVuSans-Oblique-3be" transform="scale(0.015625)">
+            </path>
+           </defs>
+           <use transform="translate(0 0.015625)" xlink:href="#DejaVuSans-Oblique-3be">
+           </use>
+          </g>
+         </g>
+        </g>
+        <g id="line2d_11">
+         <path clip-path="url(#pe313d92554)" d="M 48.653125 28.994489 
+L 51.443125 33.045531 
+L 54.233125 36.089175 
+L 57.023125 37.936443 
+L 59.813125 39.251294 
+L 62.603125 40.598938 
+L 65.393125 42.104763 
+L 68.183125 43.351376 
+L 70.973125 44.375172 
+L 73.763125 45.357852 
+L 76.553125 46.128712 
+L 79.343125 47.157466 
+L 82.133125 48.079394 
+L 84.923125 49.116713 
+L 87.713125 51.632356 
+L 90.503125 54.699102 
+L 93.293125 57.708197 
+L 96.083125 60.950712 
+L 98.873125 63.453814 
+L 101.663125 65.745761 
+L 104.453125 68.468234 
+L 107.243125 69.33038 
+L 110.033125 71.215702 
+L 112.823125 71.921166 
+L 115.613125 73.377928 
+L 118.403125 75.084406 
+L 121.193125 75.609131 
+L 123.983125 75.738579 
+L 126.773125 76.702885 
+L 129.563125 77.227614 
+L 132.353125 77.687023 
+L 135.143125 78.618113 
+L 137.933125 79.165646 
+L 140.723125 79.319114 
+L 143.513125 80.468481 
+L 146.303125 81.348191 
+L 149.093125 81.832915 
+L 151.883125 81.801168 
+L 154.673125 81.668829 
+L 157.463125 81.831544 
+L 160.253125 82.737257 
+L 163.043125 83.288591 
+L 165.833125 86.477334 
+L 168.623125 89.82497 
+L 171.413125 96.998718 
+L 174.203125 105.673904 
+L 176.993125 114.420852 
+L 179.783125 122.114737 
+L 182.573125 128.868041 
+L 185.363125 134.807528 
+L 188.153125 139.232865 
+L 190.943125 143.500458 
+L 193.733125 146.390353 
+L 196.523125 148.981394 
+L 199.313125 151.384562 
+L 202.103125 153.410113 
+L 204.893125 154.97668 
+L 207.683125 156.310527 
+L 210.473125 157.33113 
+L 213.263125 158.213533 
+L 216.053125 158.97138 
+L 218.843125 159.50967 
+L 221.633125 160.039899 
+L 224.423125 160.404086 
+L 227.213125 160.778082 
+L 230.003125 161.057257 
+L 232.793125 161.281982 
+L 235.583125 161.497606 
+L 238.373125 161.684744 
+L 241.163125 161.839519 
+L 243.953125 161.9682 
+L 246.743125 162.068788 
+L 249.533125 162.149199 
+L 252.323125 162.214123 
+L 255.113125 162.270788 
+L 257.903125 162.31744 
+L 260.693125 162.351301 
+L 263.483125 162.365773 
+L 266.273125 162.400147 
+L 269.063125 162.412807 
+L 271.853125 162.424297 
+L 274.643125 162.436383 
+L 277.433125 162.449677 
+L 280.223125 162.460844 
+L 283.013125 162.470997 
+L 285.803125 162.479307 
+L 288.593125 162.486404 
+L 291.383125 162.492322 
+L 294.173125 162.497556 
+L 296.963125 162.50211 
+L 299.753125 162.506095 
+L 302.543125 162.509286 
+L 305.333125 162.511947 
+L 308.123125 162.514134 
+L 310.913125 162.515958 
+L 313.703125 162.517478 
+L 316.493125 162.518658 
+L 319.283125 162.519681 
+L 322.073125 162.520491 
+L 324.863125 162.521181 
+L 327.653125 162.521761 
+" style="fill:none;stroke:#0000ff;stroke-linecap:round;stroke-width:1.5;">
+         </path>
+        </g>
+        <g id="patch_3">
+         <path d="M 48.653125 169.198125 
+L 48.653125 22.318125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:square;stroke-linejoin:miter;stroke-width:0.8;">
+         </path>
+        </g>
+        <g id="patch_4">
+         <path d="M 327.653125 169.198125 
+L 327.653125 22.318125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:square;stroke-linejoin:miter;stroke-width:0.8;">
+         </path>
+        </g>
+        <g id="patch_5">
+         <path d="M 48.653125 169.198125 
+L 327.653125 169.198125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:square;stroke-linejoin:miter;stroke-width:0.8;">
+         </path>
+        </g>
+        <g id="patch_6">
+         <path d="M 48.653125 22.318125 
+L 327.653125 22.318125 
+" style="fill:none;stroke:#ffffff;stroke-linecap:square;stroke-linejoin:miter;stroke-width:0.8;">
+         </path>
+        </g>
+        <g id="text_13">
+         <!-- Decrease of loss over backprop iteration -->
+         <g style="fill:#262626;" transform="translate(66.50875 16.318125)scale(0.12 -0.12)">
+          <defs>
+           <path d="M 1259 4147 
+L 1259 519 
+L 2022 519 
+Q 2988 519 3436 956 
+Q 3884 1394 3884 2338 
+Q 3884 3275 3436 3711 
+Q 2988 4147 2022 4147 
+L 1259 4147 
+z
+M 628 4666 
+L 1925 4666 
+Q 3281 4666 3915 4102 
+Q 4550 3538 4550 2338 
+Q 4550 1131 3912 565 
+Q 3275 0 1925 0 
+L 628 0 
+L 628 4666 
+z
+" id="DejaVuSans-44" transform="scale(0.015625)">
+           </path>
+           <path d="M 2834 3397 
+L 2834 2853 
+Q 2591 2978 2328 3040 
+Q 2066 3103 1784 3103 
+Q 1356 3103 1142 2972 
+Q 928 2841 928 2578 
+Q 928 2378 1081 2264 
+Q 1234 2150 1697 2047 
+L 1894 2003 
+Q 2506 1872 2764 1633 
+Q 3022 1394 3022 966 
+Q 3022 478 2636 193 
+Q 2250 -91 1575 -91 
+Q 1294 -91 989 -36 
+Q 684 19 347 128 
+L 347 722 
+Q 666 556 975 473 
+Q 1284 391 1588 391 
+Q 1994 391 2212 530 
+Q 2431 669 2431 922 
+Q 2431 1156 2273 1281 
+Q 2116 1406 1581 1522 
+L 1381 1569 
+Q 847 1681 609 1914 
+Q 372 2147 372 2553 
+Q 372 3047 722 3315 
+Q 1072 3584 1716 3584 
+Q 2034 3584 2315 3537 
+Q 2597 3491 2834 3397 
+z
+" id="DejaVuSans-73" transform="scale(0.015625)">
+           </path>
+           <path d="M 2375 4863 
+L 2375 4384 
+L 1825 4384 
+Q 1516 4384 1395 4259 
+Q 1275 4134 1275 3809 
+L 1275 3500 
+L 2222 3500 
+L 2222 3053 
+L 1275 3053 
+L 1275 0 
+L 697 0 
+L 697 3053 
+L 147 3053 
+L 147 3500 
+L 697 3500 
+L 697 3744 
+Q 697 4328 969 4595 
+Q 1241 4863 1831 4863 
+L 2375 4863 
+z
+" id="DejaVuSans-66" transform="scale(0.015625)">
+           </path>
+           <path d="M 603 4863 
+L 1178 4863 
+L 1178 0 
+L 603 0 
+L 603 4863 
+z
+" id="DejaVuSans-6c" transform="scale(0.015625)">
+           </path>
+           <path d="M 191 3500 
+L 800 3500 
+L 1894 563 
+L 2988 3500 
+L 3597 3500 
+L 2284 0 
+L 1503 0 
+L 191 3500 
+z
+" id="DejaVuSans-76" transform="scale(0.015625)">
+           </path>
+           <path d="M 581 4863 
+L 1159 4863 
+L 1159 1991 
+L 2875 3500 
+L 3609 3500 
+L 1753 1863 
+L 3688 0 
+L 2938 0 
+L 1159 1709 
+L 1159 0 
+L 581 0 
+L 581 4863 
+z
+" id="DejaVuSans-6b" transform="scale(0.015625)">
+           </path>
+           <path d="M 1159 525 
+L 1159 -1331 
+L 581 -1331 
+L 581 3500 
+L 1159 3500 
+L 1159 2969 
+Q 1341 3281 1617 3432 
+Q 1894 3584 2278 3584 
+Q 2916 3584 3314 3078 
+Q 3713 2572 3713 1747 
+Q 3713 922 3314 415 
+Q 2916 -91 2278 -91 
+Q 1894 -91 1617 61 
+Q 1341 213 1159 525 
+z
+M 3116 1747 
+Q 3116 2381 2855 2742 
+Q 2594 3103 2138 3103 
+Q 1681 3103 1420 2742 
+Q 1159 2381 1159 1747 
+Q 1159 1113 1420 752 
+Q 1681 391 2138 391 
+Q 2594 391 2855 752 
+Q 3116 1113 3116 1747 
+z
+" id="DejaVuSans-70" transform="scale(0.015625)">
+           </path>
+          </defs>
+          <use xlink:href="#DejaVuSans-44">
+          </use>
+          <use x="77.001953" xlink:href="#DejaVuSans-65">
+          </use>
+          <use x="138.525391" xlink:href="#DejaVuSans-63">
+          </use>
+          <use x="193.505859" xlink:href="#DejaVuSans-72">
+          </use>
+          <use x="232.369141" xlink:href="#DejaVuSans-65">
+          </use>
+          <use x="293.892578" xlink:href="#DejaVuSans-61">
+          </use>
+          <use x="355.171875" xlink:href="#DejaVuSans-73">
+          </use>
+          <use x="407.271484" xlink:href="#DejaVuSans-65">
+          </use>
+          <use x="468.794922" xlink:href="#DejaVuSans-20">
+          </use>
+          <use x="500.582031" xlink:href="#DejaVuSans-6f">
+          </use>
+          <use x="561.763672" xlink:href="#DejaVuSans-66">
+          </use>
+          <use x="596.96875" xlink:href="#DejaVuSans-20">
+          </use>
+          <use x="628.755859" xlink:href="#DejaVuSans-6c">
+          </use>
+          <use x="656.539062" xlink:href="#DejaVuSans-6f">
+          </use>
+          <use x="717.720703" xlink:href="#DejaVuSans-73">
+          </use>
+          <use x="769.820312" xlink:href="#DejaVuSans-73">
+          </use>
+          <use x="821.919922" xlink:href="#DejaVuSans-20">
+          </use>
+          <use x="853.707031" xlink:href="#DejaVuSans-6f">
+          </use>
+          <use x="914.888672" xlink:href="#DejaVuSans-76">
+          </use>
+          <use x="974.068359" xlink:href="#DejaVuSans-65">
+          </use>
+          <use x="1035.591797" xlink:href="#DejaVuSans-72">
+          </use>
+          <use x="1076.705078" xlink:href="#DejaVuSans-20">
+          </use>
+          <use x="1108.492188" xlink:href="#DejaVuSans-62">
+          </use>
+          <use x="1171.96875" xlink:href="#DejaVuSans-61">
+          </use>
+          <use x="1233.248047" xlink:href="#DejaVuSans-63">
+          </use>
+          <use x="1288.228516" xlink:href="#DejaVuSans-6b">
+          </use>
+          <use x="1346.138672" xlink:href="#DejaVuSans-70">
+          </use>
+          <use x="1409.615234" xlink:href="#DejaVuSans-72">
+          </use>
+          <use x="1448.478516" xlink:href="#DejaVuSans-6f">
+          </use>
+          <use x="1509.660156" xlink:href="#DejaVuSans-70">
+          </use>
+          <use x="1573.136719" xlink:href="#DejaVuSans-20">
+          </use>
+          <use x="1604.923828" xlink:href="#DejaVuSans-69">
+          </use>
+          <use x="1632.707031" xlink:href="#DejaVuSans-74">
+          </use>
+          <use x="1671.916016" xlink:href="#DejaVuSans-65">
+          </use>
+          <use x="1733.439453" xlink:href="#DejaVuSans-72">
+          </use>
+          <use x="1774.552734" xlink:href="#DejaVuSans-61">
+          </use>
+          <use x="1835.832031" xlink:href="#DejaVuSans-74">
+          </use>
+          <use x="1875.041016" xlink:href="#DejaVuSans-69">
+          </use>
+          <use x="1902.824219" xlink:href="#DejaVuSans-6f">
+          </use>
+          <use x="1964.005859" xlink:href="#DejaVuSans-6e">
+          </use>
+         </g>
+        </g>
+       </g>
+      </g>
+      <defs>
+       <clippath id="pe313d92554">
+        <rect height="146.88" width="279" x="48.653125" y="22.318125">
+        </rect>
+       </clippath>
+      </defs>
+     </svg>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Test-examples">
+    Test examples
+    <a class="anchor-link" href="#Test-examples">
+     ¶
+    </a>
+   </h2>
+   <p>
+    The figure above shows that the training converged to a loss of 0. We expect the network to have learned how to perfectly do binary addition for our training examples. If we put some independent test cases through the network and print them out we can see that the network also outputs the correct output for these test cases.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [13]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Create test samples</span>
+<span class="n">nb_test</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="n">Xtest</span><span class="p">,</span> <span class="n">Ttest</span> <span class="o">=</span> <span class="n">create_dataset</span><span class="p">(</span><span class="n">nb_test</span><span class="p">,</span> <span class="n">sequence_len</span><span class="p">)</span>
+<span class="c1"># Push test data through network</span>
+<span class="n">Y</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">getBinaryOutput</span><span class="p">(</span><span class="n">Xtest</span><span class="p">)</span>
+<span class="n">Yf</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">getOutput</span><span class="p">(</span><span class="n">Xtest</span><span class="p">)</span>
+
+<span class="c1"># Print out all test examples</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">Xtest</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+    <span class="n">printSample</span><span class="p">(</span><span class="n">Xtest</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">Xtest</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">Ttest</span><span class="p">[</span><span class="n">i</span><span class="p">,:,:],</span> <span class="n">Y</span><span class="p">[</span><span class="n">i</span><span class="p">,:,:])</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">''</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>x1:   0100010   34
+x2: + 1100100   19
+      -------   --
+t:  = 1010110   53
+y:  = 1010110
+
+x1:   1010100   21
+x2: + 1110100   23
+      -------   --
+t:  = 0011010   44
+y:  = 0011010
+
+x1:   1111010   47
+x2: + 0000000    0
+      -------   --
+t:  = 1111010   47
+y:  = 1111010
+
+x1:   1000000    1
+x2: + 1111110   63
+      -------   --
+t:  = 0000001   64
+y:  = 0000001
+
+x1:   1010100   21
+x2: + 1010100   21
+      -------   --
+t:  = 0101010   42
+y:  = 0101010
+
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This was the last part of a 2-part tutorial on how to implement an RNN from scratch in Python and Numpy:
+   </p>
+   <ul>
+    <li>
+     <a href="{% post_url 2015-09-27-rnn-implementation-part01 %}">
+      Part 1: Simple RNN
+     </a>
+    </li>
+    <li>
+     <a href="{% post_url 2015-09-27-rnn-implementation-part02 %}">
+      Part 2: non-linear RNN (this)
+     </a>
+    </li>
+   </ul>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [14]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa fa-1x fa-minus-square-o">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>Python implementation: CPython
+Python version       : 3.9.2
+IPython version      : 7.23.0
+
+seaborn   : 0.11.1
+numpy     : 1.20.2
+matplotlib: 3.4.1
+
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h6 id="Version-history">
+    Version history
+    <a class="anchor-link" href="#Version-history">
+     ¶
+    </a>
+   </h6>
+   <ul>
+    <li>
+     <em>
+      2015-09-27
+     </em>
+     : Published
+    </li>
+    <li>
+     <em>
+      2021-05-05
+     </em>
+     : Updated packages, use watermark for versions, minor edits in text.
+    </li>
+   </ul>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post at
+    <a href="https://peterroelants.github.io/posts/rnn-implementation-part02/" rel="canonical">
+     peterroelants.github.io
+    </a>
+    is generated from an IPython notebook file.
+    <a href="https://github.com/peterroelants/peterroelants.github.io/blob/master/notebooks/RNN_implementation/rnn-implementation-part02.ipynb">
+     Link to the full IPython notebook file
+    </a>
+   </p>
+  </div>
+ </div>
+</div>

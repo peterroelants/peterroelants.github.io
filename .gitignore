@@ -1,0 +1,12 @@
+# Site gen
+_site
+.sass-cache
+.jekyll-metadata
+
+# Python
+*.pyc
+__pycache__
+# IDE
+.idea/*
+# Notebooks
+*.ipynb_checkpoints*
