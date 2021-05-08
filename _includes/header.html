@@ -1,33 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 	<!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
-	<meta name="description" content="{{ page.description }}">
-  <!-- viewport for MathJax on mobile-->
-  <meta name="viewport" content="width=device-width,minimum-scale=1.0, maximum-scale=1.0" />
+	{% include meta.html %}
+	<!-- viewport for MathJax on mobile-->
+	<meta name="viewport" content="width=device-width,minimum-scale=1.0, maximum-scale=1.0" />
 	<!-- favicon -->
-	<link rel="apple-touch-icon" sizes="57x57" href="/images/favicon/apple-icon-57x57.png">
-	<link rel="apple-touch-icon" sizes="60x60" href="/images/favicon/apple-icon-60x60.png">
-	<link rel="apple-touch-icon" sizes="72x72" href="/images/favicon/apple-icon-72x72.png">
-	<link rel="apple-touch-icon" sizes="76x76" href="/images/favicon/apple-icon-76x76.png">
-	<link rel="apple-touch-icon" sizes="114x114" href="/images/favicon/apple-icon-114x114.png">
-	<link rel="apple-touch-icon" sizes="120x120" href="/images/favicon/apple-icon-120x120.png">
-	<link rel="apple-touch-icon" sizes="144x144" href="/images/favicon/apple-icon-144x144.png">
-	<link rel="apple-touch-icon" sizes="152x152" href="/images/favicon/apple-icon-152x152.png">
-	<link rel="apple-touch-icon" sizes="180x180" href="/images/favicon/apple-icon-180x180.png">
-	<link rel="icon" type="image/png" sizes="192x192"  href="/images/favicon/android-icon-192x192.png">
-	<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon/favicon-32x32.png">
-	<link rel="icon" type="image/png" sizes="96x96" href="/images/favicon/favicon-96x96.png">
-	<link rel="icon" type="image/png" sizes="16x16" href="/images/favicon/favicon-16x16.png">
-	<meta name="msapplication-TileColor" content="#ffffff">
-	<meta name="msapplication-TileImage" content="/images/favicon/ms-icon-144x144.png">
+	{% include favicons.html %}
 	<meta name="theme-color" content="#ffffff">
-
-
-	<title>{{ page.title }}</title>
 
 	<!-- Bootstrap core CSS -->
 	<link href="/css/bootstrap.min.css" rel="stylesheet">
@@ -35,56 +15,17 @@
 	<link href="/css/notebook.min.css" rel="stylesheet">
 	<link href="/css/main.min.css" rel="stylesheet">
 	<link href="/css/syntax.min.css" rel="stylesheet">
-
-  <link href="/css/font-awesome.min.css" rel="stylesheet">
+	<link href="/css/font-awesome-all.css" rel="stylesheet">
 
 	<link rel="canonical" href="{{ page.url | replace:'index.html','' | prepend: site.baseurl | prepend: site.url }}">
 
 	<!-- Google Analytics -->
-	{% if site.google_analytics and jekyll.environment == 'production' %}
 	{% include analytics.html %}
-	{% endif %}
 
-	<!-- Loading mathjax macro -->
-	<!-- Load mathjax -->
-	<script type="text/javascript" async
-		src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-MML-AM_CHTML">
-	</script>
-	</script>
-    <!-- MathJax configuration -->
-    <script type="text/x-mathjax-config">
-      MathJax.Hub.Config({
-          tex2jax: {
-              inlineMath: [ ['$','$'], ["\\(","\\)"] ],
-              displayMath: [ ['$$','$$'], ["\\[","\\]"] ],
-              processEscapes: true,
-              processEnvironments: true
-          },
-          // Center justify equations in code and markdown cells. Elsewhere
-          // we use CSS to left justify single line equations in code cells.
-          displayAlign: 'center',
-          "HTML-CSS": {
-              styles: {'.MathJax_Display': {"margin": 0}},
-              linebreaks: { automatic: true }
-          }
-      });
-    </script>
-  	<!-- End of mathjax configuration -->
+	<!-- Mathjax -->
+	{% include mathjax.html %}
 
 	<!-- jQuery in header because of Bokeh -->
-	<script src="/js/jquery-3.3.1.min.js"></script>
+	<script src="/js/jquery-3.6.0.min.js"></script>
 </head>
 
-<body>
-
-
-	<nav class="navbar navbar-light bg-light">
-	  <a class="navbar-brand" href="/">
-			<i class="fa fa-home"></i> Notes on machine learning
-		</a>
-		<div class="d-flex justify-content-end">
-			<ul class="nav navbar-nav mr-auto">
-				<li><a class="navbar-brand" href="/about">About</a></li>
-			</ul>
-		</div>
-	</nav>

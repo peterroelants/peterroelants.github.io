@@ -17,7 +17,7 @@ body {
   margin-right: auto;
 }
 
-.btn {
+.wide-btn {
   margin: auto;
   text-align: center;
   margin-left: auto;
@@ -25,13 +25,39 @@ body {
   display: block;
 }
 
+.tag-btn {
+  margin-bottom:5px;
+}
+
 .img-padding {
   padding-bottom: 10px;
 }
 
+/* Blockquotes */
+blockquote {
+  background: #f9f9f9;
+  border-left: 5px solid #ccc;
+  margin: 1.5em 10px;
+  padding: 0.5em 10px;
+  position: relative;
+  font-style: italic;
+}
+blockquote:before {
+  color: #ccc;
+  content: open-quote;
+  font-size: 4em;
+  line-height: 0.1em;
+  margin-right: 0.25em;
+  vertical-align: -0.4em;
+}
+blockquote:after {
+  content: no-close-quote;
+}
+blockquote p {
+  display: inline;
+}
 
-/* CUSTOMIZE THE NAVBAR
--------------------------------------------------- */
+/* CUSTOMIZE THE NAVBAR --------------------------------------------- */
 
 /* Special class on .container surrounding .navbar, used for positioning it into place. */
 .navbar-wrapper {
@@ -88,20 +114,47 @@ body {
   }
 }
 
+.navbar-custom-toggler {
+  padding: .25rem .75rem;
+  font-size: 1.5rem;
+  line-height: 1;
+  border: none;
+}
 
+.navbar-custom-button {
+  border: none;
+  font-size: 1.25rem;
+}
+
+
+/* Rouge code block  ----------------------------------------------- */
+div.highlighter-rouge {
+  padding: 5px;
+  margin-bottom: 1rem;
+}
+
+div.highlighter-rouge > div.highlight {
+  position: relative;
+  border: 1px solid #cfcfcf;
+  border-radius: 2px;
+  background: #f7f7f7;
+  line-height: 1.21429em;
+
+}
+
+div.highlighter-rouge > div.highlight > pre.highlight {
+  background-color: transparent;
+  margin: 0.4em;
+  padding: 0px;
+  border: none;
+}
 
 /*Fix Bootstrap and jumping to Anchors*/
 h1, h2, h3, h4, h5, h6  {
   margin-top:10px;
 }
 
-/* center images */
-img {
-  display:block;
-  margin-left:auto;
-  margin-right:auto;
-  max-width: 100%
-}
+
 
 /* IPython notebook stuff */
 div#notebook {
@@ -144,7 +197,8 @@ div.output_text > pre {
     display: inline;
 }
 
-/* Social media buttons */
+
+/* Social media buttons  ----------------------------------------------- */
 ul.share-buttons{
   list-style: none;
   padding: 0;
@@ -154,17 +208,11 @@ ul.share-buttons li{
   display: inline;
 }
 span.share-buttons {
-  position: absolute;
-  right: 0;
-  margin-right: 10%;
+  float: right;
 }
 
-/* MathJax stuff */
-.MathJax_Display {
-  padding: 8px 0px;
-}
 
-/* Collapsable input */
+/* Collapsible input  ----------------------------------------------- */
 div.collapsed {
   height: 1.8em;
   overflow: hidden;
@@ -175,8 +223,40 @@ div.collapsed {
     top: 2px;
     right: 2px;
     cursor: pointer;
+    color: rgb(75, 75, 75);
 }
 
+/* Images  ----------------------------------------------- */
+
+/* center images */
+img {
+    display:block;
+    margin-left:auto;
+    margin-right:auto;
+    max-width: 100%
+}
+
+/* center svgs */
+svg {
+  display:block;
+  margin-left:auto;
+  margin-right:auto;
+  max-width: 100%
+}
+
+/* Center Bokeh plots */
+div.bk-root {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+
+/* Center Dataframe tables */
+.contains-table {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
 
 /* index list */
 /* Center align the text within the three columns below the carousel */

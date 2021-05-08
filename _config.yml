@@ -1,5 +1,5 @@
-# Use Github pages Jekyll configuration
-# Launch Github pages Jekyll with:
+# Use GitHub pages Jekyll configuration
+# Launch GitHub pages Jekyll with:
 # bundle exec jekyll serve
 
 # General blog information
@@ -12,8 +12,8 @@ description: Aggregation of notes and code samples.
 # Your name, as you want it to appear underneath each post and in the footer
 author: Peter
 # Your email if you want it to be linked on the contact page
-author_email: peter.roelants@gmail.com
-email: peter.roelants@gmail.com
+author_email: peter.roelants+githubblog@gmail.com
+email: peter.roelants+githubblog@gmail.com
 # The URL of your actual domain. This will be used to make absolute links in the RSS feed.
 url: https://peterroelants.github.io
 twitter_username: PeterRoelants
@@ -21,7 +21,7 @@ github_username:  peterroelants
 
 # Where things are
 ############################################################
-source: . # Set by Github
+source: . # Set by GitHub
 # This is where the generated site will be placed once Jekyll is done transforming it.
 destination: ./_site
 #plugins_dir: ./_plugins
@@ -33,10 +33,14 @@ collections: null
 # Handling Reading
 ############################################################
 # Safe: Disable custom plugins, and ignore symbolic links.
-safe: true # Set by Github
+safe: true # Set by GitHub
 include: [".htaccess"]
-exclude: [notebooks, jekyll_info]
-keep_files: [".git", ".svn"]
+exclude:
+  - notebooks
+  - build_info
+keep_files:
+  - ".git"
+  - ".svn"
 encoding: "utf-8"
 markdown_ext: "markdown,mkdown,mkdn,mkd,md"
 
@@ -58,10 +62,20 @@ plugins:
 # Conversion
 ############################################################
 markdown: kramdown
-highlighter: rouge # Set by Github
+mathjax: true
+highlighter: rouge
 # LSI: produce an index for related posts.
-lsi: false # Set by Github
+lsi: false # Set by GitHub
 excerpt_separator: "\n\n"
+
+kramdown:
+  auto_ids: true
+  footnote_nr: 1
+  entity_output: as_char
+  toc_levels: 1..6
+  smart_quotes: lsquo,rsquo,ldquo,rdquo
+  syntax_highlighter: rouge
+  math_engine: mathjax
 
 
 # Serving
@@ -86,22 +100,6 @@ timezone: Europe/Brussels
 
 quiet: false
 defaults: []
-
-# Markdown Processors
-############################################################
-rdiscount:
-  extensions: []
-
-redcarpet:
-  extensions: []
-
-kramdown:
-  auto_ids:       true
-  footnote_nr:    1
-  entity_output:  as_char
-  toc_levels:     1..6
-  smart_quotes:   lsquo,rsquo,ldquo,rdquo
-  syntax_highlighter: rouge
 
 
 # Analytics

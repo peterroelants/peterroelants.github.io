@@ -9,4 +9,14 @@ dependencies:
   - bs4=4.9.3
   - nbconvert=6.0.7
   - ipython=7.23.0
-  - python=3.9.2
+  - python=3.9.4
+  - black
+  - isort
+  - flake8
+  - pyyaml
+  - mypy
+  - pip
+  - pyyaml
+  - pip:
+    - python-slugify
+

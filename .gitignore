@@ -10,3 +10,5 @@ __pycache__
 .idea/*
 # Notebooks
 *.ipynb_checkpoints*
+# Mypy
+.mypy_cache/

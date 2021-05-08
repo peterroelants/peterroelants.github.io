@@ -5,5 +5,7 @@
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
 
-  gtag('config', '{{ site.google_analytics }}');
+  gtag('config', '{{ site.google_analytics }}', { 'anonymize_ip': true });
+  // Disable cookies
+  gtag('consent', 'default', {analytics_storage: 'denied', ad_storage: 'denied'});
 </script>
