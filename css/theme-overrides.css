@@ -1,0 +1,416 @@
+pre.highlight  {
+    position: relative;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 2px;
+    background: var(--bs-tertiary-bg);
+    line-height: 1.21429em;
+}
+
+/* Notebook / code areas use Bootstrap CSS variables so they auto-switch */
+div.input_area {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 2px;
+  background: var(--bs-tertiary-bg);
+}
+
+div.output_text {
+  color: var(--bs-body-color);
+}
+
+div.output_stderr {
+  background: color-mix(in srgb, var(--bs-danger-bg-subtle) 85%, transparent);
+}
+
+/* Ensure output text and streams are readable in all modes */
+div.output_area pre,
+div.output_subarea {
+  color: var(--bs-body-color);
+  background-color: transparent;
+}
+
+div.highlighter-rouge > div.highlight {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+}
+
+div.highlighter-rouge > div.highlight > pre.highlight {
+  background-color: transparent;
+}
+
+.highlight { background: var(--bs-body-bg); }
+.highlight .gh { color: var(--bs-secondary-color); }
+.highlight .go { color: var(--bs-secondary-color); }
+.highlight .gp { color: var(--bs-secondary-color); }
+.highlight .w  { color: var(--bs-secondary-color); }
+
+/* Ensure inner_cell does not reintroduce scrollbars styling conflicts */
+div.inner_cell { overflow: auto; }
+
+/* GitHub Light */
+[data-bs-theme="light"] .highlighter-rouge > div.highlight,
+[data-bs-theme="light"] .highlight {
+  color: #24292f; /* fg */
+  background: #ffffff; /* bg */
+}
+[data-bs-theme="light"] .highlighter-rouge > div.highlight { border-color: #d0d7de; }
+[data-bs-theme="light"] .highlight .c,
+[data-bs-theme="light"] .highlight .cm,
+[data-bs-theme="light"] .highlight .cp,
+[data-bs-theme="light"] .highlight .c1,
+[data-bs-theme="light"] .highlight .cs { color: #6a737d; font-style: italic; }
+[data-bs-theme="light"] .highlight .k,
+[data-bs-theme="light"] .highlight .kc,
+[data-bs-theme="light"] .highlight .kd,
+[data-bs-theme="light"] .highlight .kp,
+[data-bs-theme="light"] .highlight .kr,
+[data-bs-theme="light"] .highlight .ow { color: #d73a49; }
+[data-bs-theme="light"] .highlight .o { color: #24292f; }
+[data-bs-theme="light"] .highlight .s,
+[data-bs-theme="light"] .highlight .sb,
+[data-bs-theme="light"] .highlight .sc,
+[data-bs-theme="light"] .highlight .sd,
+[data-bs-theme="light"] .highlight .s1,
+[data-bs-theme="light"] .highlight .s2,
+[data-bs-theme="light"] .highlight .se,
+[data-bs-theme="light"] .highlight .sh,
+[data-bs-theme="light"] .highlight .si,
+[data-bs-theme="light"] .highlight .sx,
+[data-bs-theme="light"] .highlight .sr { color: #22863a; }
+[data-bs-theme="light"] .highlight .m,
+[data-bs-theme="light"] .highlight .mf,
+[data-bs-theme="light"] .highlight .mh,
+[data-bs-theme="light"] .highlight .mi,
+[data-bs-theme="light"] .highlight .mo,
+[data-bs-theme="light"] .highlight .il { color: #005cc5; }
+[data-bs-theme="light"] .highlight .na { color: #e36209; }
+[data-bs-theme="light"] .highlight .nb,
+[data-bs-theme="light"] .highlight .bp { color: #005cc5; }
+[data-bs-theme="light"] .highlight .nc,
+[data-bs-theme="light"] .highlight .kt,
+[data-bs-theme="light"] .highlight .nn { color: #6f42c1; }
+[data-bs-theme="light"] .highlight .nf,
+[data-bs-theme="light"] .highlight .nt { color: #6f42c1; }
+[data-bs-theme="light"] .highlight .no,
+[data-bs-theme="light"] .highlight .nv,
+[data-bs-theme="light"] .highlight .vc,
+[data-bs-theme="light"] .highlight .vg,
+[data-bs-theme="light"] .highlight .vi { color: #24292f; }
+[data-bs-theme="light"] .highlight .gh,
+[data-bs-theme="light"] .highlight .go,
+[data-bs-theme="light"] .highlight .gp,
+[data-bs-theme="light"] .highlight .w { color: #6a737d; }
+[data-bs-theme="light"] .highlight .err,
+[data-bs-theme="light"] .highlight .gr,
+[data-bs-theme="light"] .highlight .gt { color: #b31d28; background: transparent; }
+[data-bs-theme="light"] .highlight .gd { background-color: #ffeef0; }
+[data-bs-theme="light"] .highlight .gd .x { background-color: #ffdce0; }
+[data-bs-theme="light"] .highlight .gi { background-color: #e6ffec; }
+[data-bs-theme="light"] .highlight .gi .x { background-color: #cdffd8; }
+
+/* GitHub Dark */
+[data-bs-theme="dark"] .highlighter-rouge > div.highlight,
+[data-bs-theme="dark"] .highlight {
+  color: #c9d1d9; /* fg */
+  background: #0d1117; /* bg */
+}
+[data-bs-theme="dark"] .highlighter-rouge > div.highlight { border-color: #30363d; }
+[data-bs-theme="dark"] .highlight .c,
+[data-bs-theme="dark"] .highlight .cm,
+[data-bs-theme="dark"] .highlight .cp,
+[data-bs-theme="dark"] .highlight .c1,
+[data-bs-theme="dark"] .highlight .cs { color: #8b949e; font-style: italic; }
+[data-bs-theme="dark"] .highlight .k,
+[data-bs-theme="dark"] .highlight .kc,
+[data-bs-theme="dark"] .highlight .kd,
+[data-bs-theme="dark"] .highlight .kp,
+[data-bs-theme="dark"] .highlight .kr,
+[data-bs-theme="dark"] .highlight .ow { color: #ff7b72; }
+[data-bs-theme="dark"] .highlight .o { color: #c9d1d9; }
+[data-bs-theme="dark"] .highlight .s,
+[data-bs-theme="dark"] .highlight .sb,
+[data-bs-theme="dark"] .highlight .sc,
+[data-bs-theme="dark"] .highlight .sd,
+[data-bs-theme="dark"] .highlight .s1,
+[data-bs-theme="dark"] .highlight .s2,
+[data-bs-theme="dark"] .highlight .se,
+[data-bs-theme="dark"] .highlight .sh,
+[data-bs-theme="dark"] .highlight .si,
+[data-bs-theme="dark"] .highlight .sx,
+[data-bs-theme="dark"] .highlight .sr { color: #7ee787; }
+[data-bs-theme="dark"] .highlight .m,
+[data-bs-theme="dark"] .highlight .mf,
+[data-bs-theme="dark"] .highlight .mh,
+[data-bs-theme="dark"] .highlight .mi,
+[data-bs-theme="dark"] .highlight .mo,
+[data-bs-theme="dark"] .highlight .il { color: #79c0ff; }
+[data-bs-theme="dark"] .highlight .na { color: #b58900; }
+[data-bs-theme="dark"] .highlight .nb,
+[data-bs-theme="dark"] .highlight .bp { color: #79c0ff; }
+[data-bs-theme="dark"] .highlight .nc,
+[data-bs-theme="dark"] .highlight .kt,
+[data-bs-theme="dark"] .highlight .nn { color: #ffa657; }
+[data-bs-theme="dark"] .highlight .nf { color: #d2a8ff; }
+[data-bs-theme="dark"] .highlight .nt { color: #7ee787; }
+[data-bs-theme="dark"] .highlight .no,
+[data-bs-theme="dark"] .highlight .nv,
+[data-bs-theme="dark"] .highlight .vc,
+[data-bs-theme="dark"] .highlight .vg,
+[data-bs-theme="dark"] .highlight .vi { color: #c9d1d9; }
+[data-bs-theme="dark"] .highlight .gh,
+[data-bs-theme="dark"] .highlight .go,
+[data-bs-theme="dark"] .highlight .gp,
+[data-bs-theme="dark"] .highlight .w { color: #8b949e; }
+[data-bs-theme="dark"] .highlight .err,
+[data-bs-theme="dark"] .highlight .gr,
+[data-bs-theme="dark"] .highlight .gt { color: #f85149; background: transparent; }
+[data-bs-theme="dark"] .highlight .gd { background-color: rgba(248, 81, 73, 0.15); }
+[data-bs-theme="dark"] .highlight .gd .x { background-color: rgba(248, 81, 73, 0.3); }
+[data-bs-theme="dark"] .highlight .gi { background-color: rgba(46, 160, 67, 0.15); }
+[data-bs-theme="dark"] .highlight .gi .x { background-color: rgba(46, 160, 67, 0.3); }
+
+/* Inline code styling aligned with VS Code themes */
+/* Ensure block code uses container background; inline code gets its own chip */
+pre code { background: transparent; color: inherit; border: 0; padding: 0; }
+
+[data-bs-theme="light"] code:not(pre code) {
+  background: #f8f8f8;
+  color: #000000;
+  border: 1px solid #e5e5e5;
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+}
+
+[data-bs-theme="dark"] code:not(pre code) {
+  background: #1f1f1f;
+  color: #d4d4d4;
+  border: 1px solid #2d2d2d;
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+}
+
+/* Ensure links inherit Bootstrap color-mode variables regardless of earlier CSS */
+a:not(.btn) {
+  color: var(--bs-link-color);
+}
+a:not(.btn):hover, a:not(.btn):focus {
+  color: var(--bs-link-hover-color);
+}
+
+/* Tag buttons: make outline-dark readable on dark backgrounds */
+[data-bs-theme="dark"] .btn-outline-dark {
+  --bs-btn-color: var(--bs-light);
+  --bs-btn-border-color: var(--bs-light);
+  --bs-btn-hover-bg: var(--bs-light);
+  --bs-btn-hover-border-color: var(--bs-light);
+  --bs-btn-hover-color: var(--bs-dark);
+  --bs-btn-active-bg: var(--bs-light);
+  --bs-btn-active-border-color: var(--bs-light);
+  --bs-btn-disabled-color: var(--bs-light);
+  --bs-btn-disabled-border-color: var(--bs-light);
+}
+
+[data-bs-theme="dark"] .btn-outline-dark.tag-btn {
+  --bs-btn-color: var(--bs-light);
+  --bs-btn-border-color: var(--bs-light);
+  --bs-btn-hover-bg: var(--bs-light);
+  --bs-btn-hover-border-color: var(--bs-light);
+  --bs-btn-hover-color: var(--bs-dark);
+  --bs-btn-active-bg: var(--bs-light);
+  --bs-btn-active-border-color: var(--bs-light);
+  --bs-btn-disabled-color: var(--bs-light);
+  --bs-btn-disabled-border-color: var(--bs-light);
+}
+
+/* Make outline-primary respect theme intent more in dark mode */
+[data-bs-theme="dark"] .btn-outline-primary {
+  --bs-btn-color: var(--bs-link-color);
+  --bs-btn-border-color: var(--bs-link-color);
+  --bs-btn-hover-bg: var(--bs-link-color);
+  --bs-btn-hover-border-color: var(--bs-link-color);
+}
+
+/* Improve outline button contrast across themes */
+.btn-outline-primary {
+  --bs-btn-color: var(--bs-primary);
+  --bs-btn-border-color: var(--bs-primary);
+}
+[data-bs-theme="light"] .btn-outline-primary {
+  --bs-btn-color: #0a58ca; /* slightly darker than default link for contrast */
+  --bs-btn-border-color: #0a58ca;
+}
+[data-bs-theme="dark"] .btn-outline-primary {
+  --bs-btn-color: #6ea8fe; /* lighter for dark bg */
+  --bs-btn-border-color: #6ea8fe;
+}
+
+/* Secondary outline buttons: ensure sufficient contrast in navbar and elsewhere */
+.btn-outline-secondary {
+  --bs-btn-color: var(--bs-secondary-color);
+  --bs-btn-border-color: var(--bs-secondary-color);
+}
+[data-bs-theme="light"] .btn-outline-secondary {
+  --bs-btn-color: #495057;
+  --bs-btn-border-color: #495057;
+}
+[data-bs-theme="dark"] .btn-outline-secondary {
+  --bs-btn-color: #e2e6ea;
+  --bs-btn-border-color: #e2e6ea;
+  --bs-btn-hover-bg: #e2e6ea;
+  --bs-btn-hover-color: #212529;
+}
+
+/* Ensure .d-none text in axe selector is not used for visible content; if used in buttons, adjust */
+.d-none { color: inherit; }
+
+/* Skip link: visible when focused, hidden otherwise */
+.visually-hidden-focusable:not(:focus) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.visually-hidden-focusable:focus {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.5rem;
+  z-index: 10000;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  border: 2px solid var(--bs-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+/* =======================
+   VS Code Light Modern and Dark Modern
+   ======================= */
+
+/* VS Code Light Modern */
+[data-bs-theme="light"] .highlighter-rouge > div.highlight,
+[data-bs-theme="light"] .highlight {
+  color: #24292f;
+  background: #ffffff;
+}
+[data-bs-theme="light"] .highlighter-rouge > div.highlight { border-color: #e5e5e5; }
+[data-bs-theme="light"] .highlight .c,
+[data-bs-theme="light"] .highlight .cm,
+[data-bs-theme="light"] .highlight .cp,
+[data-bs-theme="light"] .highlight .c1,
+[data-bs-theme="light"] .highlight .cs { color: #008000; font-style: italic; }
+[data-bs-theme="light"] .highlight .k,
+[data-bs-theme="light"] .highlight .kc,
+[data-bs-theme="light"] .highlight .kd,
+[data-bs-theme="light"] .highlight .kp,
+[data-bs-theme="light"] .highlight .kr,
+[data-bs-theme="light"] .highlight .ow { color: #af00db; }
+[data-bs-theme="light"] .highlight .o { color: #000000; }
+[data-bs-theme="light"] .highlight .s,
+[data-bs-theme="light"] .highlight .sb,
+[data-bs-theme="light"] .highlight .sc,
+[data-bs-theme="light"] .highlight .sd,
+[data-bs-theme="light"] .highlight .s1,
+[data-bs-theme="light"] .highlight .s2,
+[data-bs-theme="light"] .highlight .se,
+[data-bs-theme="light"] .highlight .sh,
+[data-bs-theme="light"] .highlight .si,
+[data-bs-theme="light"] .highlight .sx,
+[data-bs-theme="light"] .highlight .sr { color: #a31515; }
+[data-bs-theme="light"] .highlight .m,
+[data-bs-theme="light"] .highlight .mf,
+[data-bs-theme="light"] .highlight .mh,
+[data-bs-theme="light"] .highlight .mi,
+[data-bs-theme="light"] .highlight .mo,
+[data-bs-theme="light"] .highlight .il { color: #098658; }
+[data-bs-theme="light"] .highlight .na { color: #001080; }
+[data-bs-theme="light"] .highlight .nb,
+[data-bs-theme="light"] .highlight .bp { color: #267f99; }
+[data-bs-theme="light"] .highlight .nc,
+[data-bs-theme="light"] .highlight .kt,
+[data-bs-theme="light"] .highlight .nn { color: #2b91af; }
+[data-bs-theme="light"] .highlight .ne { color: #2b91af; }
+[data-bs-theme="light"] .highlight .nf { color: #795e26; }
+[data-bs-theme="light"] .highlight .nt { color: #800000; }
+[data-bs-theme="light"] .highlight .no,
+[data-bs-theme="light"] .highlight .nv,
+[data-bs-theme="light"] .highlight .vc,
+[data-bs-theme="light"] .highlight .vg,
+[data-bs-theme="light"] .highlight .vi { color: #001080; }
+[data-bs-theme="light"] .highlight .gh,
+[data-bs-theme="light"] .highlight .go,
+[data-bs-theme="light"] .highlight .gp,
+[data-bs-theme="light"] .highlight .w { color: #6e7781; }
+[data-bs-theme="light"] .highlight .err,
+[data-bs-theme="light"] .highlight .gr,
+[data-bs-theme="light"] .highlight .gt { color: #f14c4c; background: transparent; }
+[data-bs-theme="light"] .highlight .gd { background-color: #ffebe9; }
+[data-bs-theme="light"] .highlight .gd .x { background-color: #ffdcd7; }
+[data-bs-theme="light"] .highlight .gi { background-color: #e6ffec; }
+[data-bs-theme="light"] .highlight .gi .x { background-color: #ccead6; }
+
+/* VS Code Dark Modern */
+[data-bs-theme="dark"] .highlighter-rouge > div.highlight,
+[data-bs-theme="dark"] .highlight {
+  color: #d4d4d4;
+  background: #1f1f1f;
+}
+[data-bs-theme="dark"] .highlighter-rouge > div.highlight { border-color: #2d2d2d; }
+[data-bs-theme="dark"] .highlight .c,
+[data-bs-theme="dark"] .highlight .cm,
+[data-bs-theme="dark"] .highlight .cp,
+[data-bs-theme="dark"] .highlight .c1,
+[data-bs-theme="dark"] .highlight .cs { color: #6a9955; font-style: italic; }
+[data-bs-theme="dark"] .highlight .k,
+[data-bs-theme="dark"] .highlight .kc,
+[data-bs-theme="dark"] .highlight .kd,
+[data-bs-theme="dark"] .highlight .kp,
+[data-bs-theme="dark"] .highlight .kr,
+[data-bs-theme="dark"] .highlight .ow { color: #c586c0; }
+[data-bs-theme="dark"] .highlight .o { color: #d4d4d4; }
+[data-bs-theme="dark"] .highlight .s,
+[data-bs-theme="dark"] .highlight .sb,
+[data-bs-theme="dark"] .highlight .sc,
+[data-bs-theme="dark"] .highlight .sd,
+[data-bs-theme="dark"] .highlight .s1,
+[data-bs-theme="dark"] .highlight .s2,
+[data-bs-theme="dark"] .highlight .se,
+[data-bs-theme="dark"] .highlight .sh,
+[data-bs-theme="dark"] .highlight .si,
+[data-bs-theme="dark"] .highlight .sx,
+[data-bs-theme="dark"] .highlight .sr { color: #ce9178; }
+[data-bs-theme="dark"] .highlight .m,
+[data-bs-theme="dark"] .highlight .mf,
+[data-bs-theme="dark"] .highlight .mh,
+[data-bs-theme="dark"] .highlight .mi,
+[data-bs-theme="dark"] .highlight .mo,
+[data-bs-theme="dark"] .highlight .il { color: #b5cea8; }
+[data-bs-theme="dark"] .highlight .na { color: #9cdcfe; }
+[data-bs-theme="dark"] .highlight .nb,
+[data-bs-theme="dark"] .highlight .bp { color: #569cd6; }
+[data-bs-theme="dark"] .highlight .nc,
+[data-bs-theme="dark"] .highlight .kt,
+[data-bs-theme="dark"] .highlight .nn { color: #4ec9b0; }
+[data-bs-theme="dark"] .highlight .ne { color: #4ec9b0; }
+[data-bs-theme="dark"] .highlight .nf { color: #dcdcaa; }
+[data-bs-theme="dark"] .highlight .nt { color: #569cd6; }
+[data-bs-theme="dark"] .highlight .no,
+[data-bs-theme="dark"] .highlight .nv,
+[data-bs-theme="dark"] .highlight .vc,
+[data-bs-theme="dark"] .highlight .vg,
+[data-bs-theme="dark"] .highlight .vi { color: #9cdcfe; }
+[data-bs-theme="dark"] .highlight .gh,
+[data-bs-theme="dark"] .highlight .go,
+[data-bs-theme="dark"] .highlight .gp,
+[data-bs-theme="dark"] .highlight .w { color: #808080; }
+[data-bs-theme="dark"] .highlight .err,
+[data-bs-theme="dark"] .highlight .gr,
+[data-bs-theme="dark"] .highlight .gt { color: #f44747; background: transparent; }
+[data-bs-theme="dark"] .highlight .gd { background-color: rgba(244, 71, 71, 0.15); }
+[data-bs-theme="dark"] .highlight .gd .x { background-color: rgba(244, 71, 71, 0.3); }
+[data-bs-theme="dark"] .highlight .gi { background-color: rgba(46, 160, 67, 0.15); }
+[data-bs-theme="dark"] .highlight .gi .x { background-color: rgba(46, 160, 67, 0.3); }
+

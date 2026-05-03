@@ -1,0 +1,129 @@
+---
+layout: default_container
+title: Home
+description: Posts on Machine Learning, Software Engineering, and Mathematics.
+---
+
+<h1 class="text-center"><span class="fa-solid fa-house" aria-hidden="true"></span> {{ page.title }}</h1>
+
+<!-- Selected posts -->
+<h2>Selected posts:</h2>
+
+
+<!-- Flow Matching intro -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/diffusion_flow_matching/2025-11-01-flow_matching_intro %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/flow_matching.png" alt="Flow Matching illustration" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>Flow Matching: A visual introduction</h2>
+		<p>Visual introduction to flow matching. Illustrates the flow matching model, the velocity field, and the sampled paths using a simple 1D toy example.</p>
+		<a class="btn btn-outline-primary w-100 w-md-auto mt-2" href="{% post_url /blog/diffusion_flow_matching/2025-11-01-flow_matching_intro %}" role="button">Flow Matching: A visual introduction »</a>
+	</div>
+</div>
+
+
+<!-- Neural network implementation -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/ANN_preview.png" alt="Artificial neural network diagram" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>Neural networks from scratch</h2>
+		<p>The first section gradually builds a feedforward neural network from scratch in Python using NumPy. It starts by explaining gradient descent on basic models, then adds hidden layers with nonlinearities, backpropagation, and momentum.</p>
+		<p>The second section implements a recurrent neural network (RNN) in Python using NumPy. It explains the basics of backpropagation through time (BPTT) and discusses challenges in training recurrent networks.</p>
+		<div class="d-grid d-md-block gap-2 mt-2">
+			<a class="btn btn-outline-primary w-100 w-md-auto" href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}" role="button">Neural networks from scratch »</a>
+			<a class="btn btn-outline-primary w-100 w-md-auto" href="{% post_url /blog/rnn_implementation/2015-09-27-rnn-implementation-part01 %}" role="button">RNNs from scratch »</a>
+		</div>
+	</div>
+</div>
+
+
+<!-- Gaussian Processes -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/gaussian_process.png" alt="Gaussian process illustration" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>Gaussian processes from scratch</h2>
+		<p>A blog series exploring Gaussian processes. It starts by building intuition with from-scratch implementations in Python, then moves to a practical example using TensorFlow Probability on a real-world problem.</p>
+		<a class="btn btn-outline-primary w-100 w-md-auto mt-2" href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}" role="button">Gaussian processes from scratch »</a>
+	</div>
+</div>
+
+
+<!-- Multi-armed bandit Implementation -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/misc/2018-09-26-multi-armed-bandit-implementation %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/bandit.png" alt="Multi-armed bandit illustration" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>Multi-armed bandit introduction</h2>
+		<p>Learn the basics of Bayesian multi-armed bandit models by implementing a simple example in Python.</p>
+		<a class="btn btn-outline-primary w-100 w-md-auto mt-2" href="{% post_url /blog/misc/2018-09-26-multi-armed-bandit-implementation %}" role="button">Multi-armed bandit introduction »</a>
+	</div>
+</div>
+
+
+
+<!-- Linear regression 4 ways -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /blog/misc/2018-10-22-linear-regression-four-ways %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/linear_regression_four_ways.png" alt="Linear regression methods preview" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>Regression quattro stagioni</h2>
+		<p>Linear regression parameter estimation implemented in four ways: simple linear regression, ordinary least squares (OLS), gradient descent, and Markov chain Monte Carlo (MCMC).</p>
+		<a class="btn btn-outline-primary w-100 w-md-auto mt-2" href="{% post_url /blog/misc/2018-10-22-linear-regression-four-ways %}" role="button">Linear regression four ways »</a>
+	</div>
+</div>
+
+
+<!-- ReAct Agent -->
+<div class="row align-items-center g-3 my-4">
+	<div class="col-12 col-md-auto text-center">
+		<a href="{% post_url /2023/04/2023-04-07-react-repl-agent %}">
+			<img class="rounded-circle img-fluid d-block mx-auto" src="/images/llm/ReactLogo.png" alt="ReAct REPL Agent logo" width="140" height="140" loading="lazy" decoding="async">
+		</a>
+	</div>
+	<div class="col-12 col-md text-center text-md-start">
+		<h2>ReAct Agent</h2>
+		<p>A project exploring ReAct agents. The main project is a GPT-based ReAct agent with access to a Python REPL and function retrieval, enabling simple workflows by chaining API calls. A second project demonstrates a minimal ReAct agent using OpenAI function calling.</p>
+		<div class="d-grid d-md-block gap-2 mt-2"></div>
+			<a class="btn btn-outline-primary w-100 w-md-auto" href="{% post_url /2023/04/2023-04-07-react-repl-agent %}" role="button">Python REPL ReAct Agent »</a>
+			<a class="btn btn-outline-primary w-100 w-md-auto" href="{% post_url /blog/agents/openai/2024-01-21-react-openai-function-calling %}" role="button">OpenAI function-calling ReAct agent »</a>
+		</div>
+	</div>
+</div>
+
+
+<!-- Most recent
+<h2>Most recent posts:</h2>
+{% for post in site.posts limit:3 %}
+<div class="card">
+	<div class="card-body">
+		<h3 class="card-title">{{ post.title }}</h3>
+		<h6 class="card-subtitle mb-2 text-muted">{{ post.date | date_to_string }}</h6>
+		<p class="card-text">{{ post.description }}</p>
+		<a href="{{ post.url }}" class="btn btn-outline-primary">Read post</a>
+	</div>
+</div>
+{% endfor %} -->
+
+
+<!-- By Tag -->
+<div class="mt-5">
+<h2><i class="fa-solid fa-tags fa-fw"></i> More posts by tag:</h2>
+{% include all_tags.html %}
+</div>

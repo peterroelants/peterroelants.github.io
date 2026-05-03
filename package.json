@@ -1,0 +1,18 @@
+{
+  "name": "peterroelants-github-io",
+  "version": "0.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "css:build": "postcss css/main.css -o css/main.min.css && postcss css/notebook.css -o css/notebook.min.css && postcss css/syntax.css -o css/syntax.min.css",
+    "css:watch": "postcss css/main.css -o css/main.min.css --watch & postcss css/notebook.css -o css/notebook.min.css --watch & postcss css/syntax.css -o css/syntax.min.css --watch"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.5.0",
+    "cssnano": "^7.1.7",
+    "postcss": "^8.5.13",
+    "postcss-cli": "^11.0.1"
+  }
+}
