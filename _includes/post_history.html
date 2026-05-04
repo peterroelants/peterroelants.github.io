@@ -1,0 +1,31 @@
+{% if page.date or page.updates %}
+<div class="post-history text-body-secondary">
+  {% if page.date %}
+  <p class="post-published-date">
+    First published on <time datetime="{{ page.date | date_to_xmlschema }}">{{ page.date | date: "%B %-d, %Y" }}</time>.
+  </p>
+  {% endif %}
+
+  {% if page.updates %}
+  {% assign post_updates = page.updates | sort: "date" | reverse %}
+  <div class="post-updates">
+    <p class="mb-1"><strong>Major updates</strong></p>
+    <ul class="mb-0">
+      {% for update in post_updates %}
+      <li>
+        {% if update.date %}
+        <time datetime="{{ update.date | date_to_xmlschema }}">{{ update.date | date: "%B %-d, %Y" }}</time>
+        {% endif %}
+        {% if update.title %}
+        {% if update.date %}: {% endif %}{{ update.title | escape }}
+        {% endif %}
+        {% if update.description %}
+        <span class="d-block">{{ update.description | escape }}</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endif %}

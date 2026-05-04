@@ -1,0 +1,41 @@
+[project]
+name = "gaussian-process-notebooks"
+version = "0.1.0"
+description = "Runtime environment for the Gaussian process notebook-derived blog posts."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "bokeh>=3.7,<4",
+  "ipykernel>=6.29,<7",
+  "jupyter-bokeh>=4,<5",
+  "jupyterlab>=4,<5",
+  "matplotlib>=3.10,<4",
+  "nbconvert>=7,<8",
+  "numpy>=1.26",
+  "jax>=0.8,<0.9",
+  "optax>=0.2,<0.3",
+  "pandas>=2.3,<3",
+  "scipy>=1.16,<2",
+  "seaborn>=0.13,<0.14",
+  "tqdm>=4.66,<5",
+  "watermark>=2.5,<3",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint.per-file-ignores]
+"*.ipynb" = [
+  # Notebook setup cells often need magics, warning filters, or JAX config
+  # before all imports are complete.
+  "E402",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.12",
+    "ty>=0.0.34",
+]
