@@ -1,0 +1,5 @@
+{
+  "jupyter.notebookFileRoot": "${fileDirname}",
+  "python.defaultInterpreterPath": "${workspaceFolder}/notebooks/gaussian_process/.venv/bin/python"
+}
+
