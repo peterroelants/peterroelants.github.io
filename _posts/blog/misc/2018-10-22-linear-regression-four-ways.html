@@ -1,0 +1,713 @@
+---
+layout: post
+title: Regression quattro stagioni
+description: 'Linear regression implemented in four different ways. We''ll describe the model and four different ways of estimating its parameters: MLE, OLS, gradient descent, & MCMC.'
+tags:
+- Linear Regression
+- MCMC
+- Probability
+- Gradient Descent
+- Least Squares
+- Metropolis-Hastings
+- Machine Learning
+- Notebook
+image: /images/social/2018-10-22-linear-regression-four-ways-preview.png
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Regression-quattro-stagioni">Regression quattro stagioni<a class="anchor-link" href="#Regression-quattro-stagioni"><i class="fa-solid fa-sm fa-link"></i></a></h1><p><em>Linear regression implemented four different ways</em></p>
+<p>Linear regression is one of the simplest machine learning models out there. According to some, it shouldn't even be classified as "machine learning" because it's too simple.
+Whatever your opinion, I believe its simplicity makes it a great stepping stone to more complex models and algorithms.
+Inspired by the classical pizza dish, we will explore the linear regression model with four different flavours of estimating its parameters. I hope this helps build our understanding of this basic model. The four different "seasons" we'll explore are:</p>
+<ol>
+<li><a href="#1.-Simple-linear-regression">Simple linear regression</a></li>
+<li><a href="#2.-Ordinary-least-squares-regression">Ordinary least squares regression (OLS)</a></li>
+<li><a href="#3.-Gradient-descent-optimization">Gradient descent</a></li>
+<li><a href="#4.-Markov-Chain-Monte-Carlo-parameter-estimation">MCMC parameter estimation with Metropolis-Hastings</a></li>
+</ol>
+<p>We'll start of by describing the problem of linear regression and the toy data we'll use, followed by implementations of all four methods.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports</span>
+<span class="o">%</span><span class="k">matplotlib</span> inline
+<span class="o">%</span><span class="k">config</span> InlineBackend.figure_formats = ['svg']
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">log</span><span class="p">,</span> <span class="n">exp</span><span class="p">,</span> <span class="n">sqrt</span><span class="p">,</span> <span class="n">pi</span><span class="p">,</span> <span class="n">e</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">cm</span>  <span class="c1"># Colormaps</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s1">'darkgrid'</span><span class="p">)</span>
+<span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s1">'ignore'</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">FutureWarning</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Linear-regression-problem-description">Linear regression problem description<a class="anchor-link" href="#Linear-regression-problem-description"><i class="fa-solid fa-sm fa-link"></i></a></h2><p><a href="https://en.wikipedia.org/wiki/Simple_linear_regression">Simple linear regression</a> will try to fit a linear relationship (straight line) between an independent variable $x$ (input) and an dependent variable $y$ (output).</p>
+<p>For $n$ data samples the assumed linear relationship can be modelled as:</p>
+<p>$$
+y_i = \theta_0 + \theta_1 x_i + \epsilon_i  \quad (i = 1, \ldots, n)
+$$</p>
+<p>With:</p>
+<ul>
+<li>$x_i$ the independent (input) variable of sample $i$, with $x = \{x_i \ldots x_n \}$.</li>
+<li>$y_i$ the dependent (output) variable of sample $i$, with $y = \{y_i \ldots y_n \}$.</li>
+<li>$\epsilon_i \sim \mathcal{N}(0, \sigma^2)$ <a href="https://en.wikipedia.org/wiki/Normal_distribution">Gaussian noise</a> affecting the output $y_i$.</li>
+<li>$\theta = \{\theta_0, \theta_1 \}$ the set of the parameters we want to optimize:<ul>
+<li>$\theta_0$ the intercept of the model (bias)</li>
+<li>$\theta_1$ the coefficient of variable $x$ (slope)</li>
+</ul>
+</li>
+</ul>
+<p>We can use this discription to define our toy data sample:</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define the data</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="c1"># Generate random data</span>
+<span class="n">n</span> <span class="o">=</span> <span class="mi">50</span> <span class="c1"># Number of samples</span>
+<span class="c1"># Underlying linear relation</span>
+<span class="n">m</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># slope</span>
+<span class="n">b</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># bias</span>
+<span class="c1"># Noise</span>
+<span class="n">e_std</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># Standard deviation of the noise</span>
+<span class="n">err</span> <span class="o">=</span> <span class="n">e_std</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>  <span class="c1"># Noise</span>
+<span class="c1"># Features and output</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>  <span class="c1"># Independent variable x</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">x</span> <span class="o">*</span> <span class="n">m</span> <span class="o">+</span> <span class="n">b</span> <span class="o">+</span> <span class="n">err</span>  <span class="c1"># Dependent variable</span>
+<span class="c1"># Stack X with ones to be fitted by vectorized methods</span>
+<span class="c1">#  such as OLS and gradient descent</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="n">x</span><span class="p">))</span><span class="o">.</span><span class="n">T</span>
+
+<span class="c1"># Show data</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'data: $(x,y)$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">b</span><span class="p">,</span> <span class="n">m</span><span class="o">+</span><span class="n">b</span><span class="p">],</span> <span class="s1">'b-'</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">'$y = </span><span class="si">{</span><span class="n">b</span><span class="si">:</span><span class="s1">.0f</span><span class="si">}</span><span class="s1"> + </span><span class="si">{</span><span class="n">m</span><span class="si">:</span><span class="s1">.0f</span><span class="si">}</span><span class="s1"> x$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$y$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Noisy data samples from linear line'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Noisy data samples with the underlying linear relationship."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Noisy data samples with the underlying linear relationship." decoding="async" height="281" loading="lazy" src="/images/notebook_outputs/misc/linear-regression-four-ways/figure-0003-00-41a36463cf92.svg" width="390"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Probabilistic-description">Probabilistic description<a class="anchor-link" href="#Probabilistic-description"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>An alternative description is the <a href="https://en.wikipedia.org/wiki/Bayesian_inference">probabilistic</a> description of the linear regression problem where we treat the dependent variable $y$ as randomly sampled from a normal distribution with a mean $\mu$ in function of the independent variable $x$ and random variables $\theta$.</p>
+<p>$$
+y_i \sim \mathcal{N}(\theta_0 + \theta_1 x_i, \sigma^2) \quad (i = 1, \ldots, n)
+$$</p>
+<p>Note that the mean $\mu = \theta_0 + \theta_1 x$. Given the definition of the <a href="https://en.wikipedia.org/wiki/Probability_density_function">probability densitity</a> of the <a href="https://en.wikipedia.org/wiki/Normal_distribution">normal distribution</a> we can write this as:</p>
+<p>$$
+p(y_i \mid \theta_0 + \theta_1 x_i, \sigma^2) =
+\frac{1}{\sqrt{2\pi\sigma^2}} \exp{ \left( -\frac{(y_i - (\theta_0 + \theta_1 x_i))^2}{2\sigma^2}\right)}
+$$</p>
+<p>Given the observed data $(x, y)$ and ignoring $\sigma^2$ we can then model the parameters $\theta$ as a density function which we can split up according to the <a href="https://en.wikipedia.org/wiki/Bayes%27_theorem">Bayes rule</a>:</p>
+<p>$$
+p(\theta \mid y, x) = \frac{p(y \mid x, \theta)p(\theta)}{p(y \mid x)}
+$$</p>
+<p>With:</p>
+<ul>
+<li>$P(\theta \mid y, x)$ the <a href="https://en.wikipedia.org/wiki/Posterior_probability">posterior</a> density which is our belief of parameters $\theta$ after taking the observed data $(x, y)$ into account.</li>
+<li>$p(y \mid x, \theta)$ is the <a href="https://en.wikipedia.org/wiki/Likelihood_function">likelihood</a> function which is the probability density of the normal distribution $y \sim \mathcal{N}(\theta_0 + \theta_1 x, \sigma^2)$ described above.</li>
+<li>$p(\theta)$ is the <a href="https://en.wikipedia.org/wiki/Prior_probability">prior</a> density of $\theta$, which captures our belief about parameters $\theta$ before we observed any data. Note that we assume that $\theta$ is independent of $x$ and that $p(\theta \mid x) = p(\theta)$.</li>
+<li>$p(y \mid x)$ is the <a href="https://en.wikipedia.org/wiki/Marginal_likelihood">marginal likelihood</a> of the data where $\theta$ has been <a href="https://en.wikipedia.org/wiki/Marginal_distribution">marginalized out</a> according to $p(y \mid x) = \int_{\theta} p(y \mid x, \theta) p(\theta) d\theta$.</li>
+</ul>
+<p>Note that the error $\epsilon$ is implicitly captured in this model by treating $y$ as sampled from a normal distribution parametrized by $x$ and $\theta$. In what follows we will also ignore fitting of the variance term $\sigma^2$ for practical purposes.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Maximum-a-posteriori-estimation-(MAP)">Maximum a posteriori estimation (MAP)<a class="anchor-link" href="#Maximum-a-posteriori-estimation-(MAP)"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>We can find a <a href="https://en.wikipedia.org/wiki/Point_estimation">point estimate</a> $\hat{\theta}$ to fit our parameters $\theta$ by finding the maximum of the posterior distribution $p(\theta \mid y, x)$:</p>
+<p>$$
+\hat{\theta} = \underset{\theta}{\text{argmax}}\;p(\theta \mid y, x)
+= \underset{\theta}{\text{argmax}}\; \frac{p(y \mid x, \theta)p(\theta)}{p(y \mid x)}
+$$</p>
+<p>This can be simplified this since the marginal likelihood $p(y \mid x)$ is independent of the parameters $\theta$, and thus won't have an effect on $\hat{\theta}$ corresponding to the maximum of the posterior:</p>
+<p>$$
+\hat{\theta} = \underset{\theta}{\text{argmax}}\;p(\theta \mid y, x)
+= \underset{\theta}{\text{argmax}}\; p(y \mid x, \theta)p(\theta)
+$$</p>
+<p>This is also known as <a href="https://en.wikipedia.org/wiki/Maximum_a_posteriori_estimation">maximum a posteriori (MAP)</a> estimate. In practice most methods to fit the parameters $\theta$ will try to avoid computing the marginal likelihood $p(y \mid x)$, which can be computational expensive due to the integral.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Maximum-likelihood-estimation-(MLE)">Maximum likelihood estimation (MLE)<a class="anchor-link" href="#Maximum-likelihood-estimation-(MLE)"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>Deviating from the Bayesian perspective, some of the models will ignore the prior $p(\theta)$ for simplicity. They will be treating $p(\theta)$ as an uninformative and <a href="https://en.wikipedia.org/wiki/Prior_probability#Improper_priors">improper</a> prior:</p>
+<p>$$
+\hat{\theta} = \underset{\theta}{\text{argmax}}\;p(\theta \mid y, x) \approx \underset{\theta}{\text{argmax}}\; p(y \mid x, \theta)
+$$</p>
+<p>The resulting optimization is what is known as <a href="https://en.wikipedia.org/wiki/Maximum_likelihood_estimation">maximum likelihood estimation (MLE)</a>, which will focus only on the <a href="https://en.wikipedia.org/wiki/Maximum_likelihood_estimation">likelihood function</a> $p(y \mid x, \theta)$ while ignoring the prior and marginal term completely.</p>
+<p>In our regression example if we assume that all samples $y_i, x_i$ are taken independently from the <a href="https://en.wikipedia.org/wiki/Normal_distribution">normal distribution</a> $y_i \sim \mathcal{N}(\theta_0 + \theta_1 x_i, \sigma^2)$ we can write the likelihood function based on the definition of the normal distribution's density function as was <a href="#Bayesian-description">mentioned before</a>:</p>
+<p>$$
+p(y \mid x, \theta_0, \theta_1) = \prod_{i=1}^{n} p(y_i \mid x_i, \theta_0, \theta_1) =
+\prod_{i=1}^{n} \frac{1}{\sqrt{2\pi\sigma^2}} \exp{ \left( -\frac{(y_i - (\theta_0 + \theta_1 x_i))^2}{2\sigma^2}\right)}
+$$</p>
+<p>In what follows we will describe 4 different algorithms that can be used to fit a linear regression model.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="1.-Simple-linear-regression">1. Simple linear regression<a class="anchor-link" href="#1.-Simple-linear-regression"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Given the density function above we can find the estimated parameters $\hat{\theta}_0$ and $\hat{\theta}_1$ corresponding to the maximum of the likelihood function $p(y \mid x, \theta_0, \theta_1)$.</p>
+<p>Because the exponents of the density function are difficult to work with and can be numerically unstable we will transform the function with a <a href="https://en.wikipedia.org/wiki/Log_probability">logarithmic function</a> which is <a href="https://en.wikipedia.org/wiki/Monotonic_function">strictly increasing</a> and will thus not affect the maxima of the original likelihood function. We call the resulting function the <a href="https://en.wikipedia.org/wiki/Likelihood_function#Log-likelihood">log-likelihood</a>:</p>
+<p>$$
+\log(\prod_{i=1}^{n} p(y_i \mid x_i, \theta_0, \theta_1)) = n(1 - \log(\sqrt{2\pi\sigma^2}) - \frac{1}{2\sigma^2} \left[ \sum_{i=1}^{n} (y_i - (\theta_0 + \theta_1 x_i))^2 \right]
+$$</p>
+<p>We can then find the <a href="https://en.wikipedia.org/wiki/Maxima_and_minima">maximum</a> for this function by finding where the <a href="https://en.wikipedia.org/wiki/Derivative">derivative</a> of this function with respect to its parameters becomes 0. If we solve this for our parameters we find that:</p>
+<p>$$\begin{align}
+\hat{\theta}_1 &amp;= \frac{\sum_{i=1}^{n}(x_i - \bar{x})(y_i - \bar{y})}{\sum_{i=1}^{n}(x_i - \bar{x})^2} \\
+\hat{\theta}_0 &amp;= \bar{y} - \hat{\theta}_1 \bar{x}
+\end{align}$$</p>
+<p>with $\bar{y}$ the mean of all dependent variables $y$ and $\bar{x}$ the mean of all independent variables $x$. We can easily implement this as:</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Simple linear regression</span>
+<span class="c1"># Compute mean</span>
+<span class="n">x_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="n">y_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+
+<span class="c1"># Compute parameters according to simple linear regression</span>
+<span class="n">theta_1</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">(</span><span class="n">x</span><span class="o">-</span><span class="n">x_mean</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">y</span><span class="o">-</span><span class="n">y_mean</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="p">((</span><span class="n">x</span><span class="o">-</span><span class="n">x_mean</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+<span class="n">theta_0</span> <span class="o">=</span> <span class="n">y_mean</span> <span class="o">-</span> <span class="n">theta_1</span> <span class="o">*</span> <span class="n">x_mean</span>
+
+<span class="c1"># Function representing fitted line</span>
+<span class="n">f</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">theta_0</span> <span class="o">+</span> <span class="n">theta_1</span> <span class="o">*</span> <span class="n">x</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Show simple linear regression fitted line</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">f</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">f</span><span class="p">(</span><span class="mi">1</span><span class="p">)],</span> <span class="s1">'r-'</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">'$y = </span><span class="si">{</span><span class="n">theta_0</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> + </span><span class="si">{</span><span class="n">theta_1</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> x$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'data $(x,y)$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Simple linear regression fit'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$y$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Simple linear regression fit through the observed data points."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Simple linear regression fit through the observed data points." decoding="async" height="281" loading="lazy" src="/images/notebook_outputs/misc/linear-regression-four-ways/figure-0009-00-78f0ef2b9e60.svg" width="390"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="2.-Ordinary-least-squares-regression">2. Ordinary least squares regression<a class="anchor-link" href="#2.-Ordinary-least-squares-regression"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Note that in the simple linear regression formulation above we end up maximising the log-likelihood which has the term $- \sum_{i=1}^{n} (y_i - (\theta_0 + \theta_1 x_i))^2$. This would be the same as minimizing the negative of this term. We can simplify this solution and make it more general by <a href="https://en.wikipedia.org/wiki/Linear_algebra">vectorizing</a> our variables and data:</p>
+<ul>
+<li>$\Theta = [ \theta_0, \theta_1]$</li>
+<li>$X = [(1, x_1), \ldots , (1, x_n)]$</li>
+<li>$Y = [y_1, \ldots, y_n]$</li>
+</ul>
+<p>Our optimization problem then becomes:</p>
+<p>$$
+\hat{\Theta} = \underset{\Theta}{\text{argmin}}{\; \left\Vert Y-X\Theta \right\Vert^2}
+$$</p>
+<p>This is what is typically known as <a href="https://en.wikipedia.org/wiki/Ordinary_least_squares">ordinary least squares (OLS)</a> since we are finding the solution with the least deviance in the square of the residuals (error), which is also known as <a href="https://en.wikipedia.org/wiki/Least_squares">least squares</a>. Note that in our example minimizing the least squares is the same as maximizing the likelihood (MLE).</p>
+<p>We can solve this by setting the <a href="https://en.wikipedia.org/wiki/Jacobian_matrix_and_determinant">Jacobian</a> (derivative) of $\left\Vert Y-X\Theta \right\Vert^2$ with respect to $\Theta$ to 0:</p>
+<p>$$
+\frac{\delta \left\Vert Y-X\Theta \right\Vert^2}{\delta \Theta} = -2X^{\top} (Y - X\Theta) = 0
+$$</p>
+<p>When we drop the $-2$ by multiplying this into the $0$ this gives us $X^{\top}X\hat{\Theta} = X^{\top}Y$, which leads us to the following solution:</p>
+<p>$$
+\hat{\Theta} = (X^{\top} X)^{-1} X^{\top} Y
+$$</p>
+<p>With $(X^{\top} X)^{-1} X^{\top}$ the <a href="https://en.wikipedia.org/wiki/Moore%E2%80%93Penrose_inverse">Moore-Penrose pseude-inverse</a> of $X$.</p>
+<p>The OLS method leads to more advanced regression methods such as <a href="https://en.wikipedia.org/wiki/Polynomial_regression">polynomial regression</a>. The OLS fitting example on our linear toy data is implemented below:</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Ordinary least squares</span>
+<span class="c1"># Fit parameters with OLS</span>
+<span class="n">Theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">X</span><span class="p">)</span> <span class="o">@</span> <span class="n">X</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">y</span>
+
+<span class="c1"># Function representing fitted line</span>
+<span class="n">f</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">Theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">Theta</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">x</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Show OLS fitted line</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">f</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">f</span><span class="p">(</span><span class="mi">1</span><span class="p">)],</span> <span class="s1">'r-'</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">'$y = </span><span class="si">{</span><span class="n">Theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> + </span><span class="si">{</span><span class="n">Theta</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> x$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'data $(x,y)$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Ordinary least squares regression fit'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$y$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Ordinary least-squares regression fit through the observed data points."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Ordinary least-squares regression fit through the observed data points." decoding="async" height="281" loading="lazy" src="/images/notebook_outputs/misc/linear-regression-four-ways/figure-0012-00-38e3d35dadb6.svg" width="390"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="3.-Gradient-descent-optimization">3. Gradient descent optimization<a class="anchor-link" href="#3.-Gradient-descent-optimization"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>OLS assumes a unique solution to the least squares maximisation problem and will not work in more complex non-linear regression methods such as neural networks where our optimization surface is not <a href="https://en.wikipedia.org/wiki/Convex_function">convex</a> anymore. In this case we can resort to <a href="https://en.wikipedia.org/wiki/Stochastic_gradient_descent">stochastic gradient descent</a> to optimize the loss function.</p>
+<p>Next we'll show how to optimize our parameters with regular <a href="https://en.wikipedia.org/wiki/Gradient_descent">gradient descent</a> which can be made stochastic by breaking it down in random batches of size $m &lt; n$.</p>
+<p>We're optimizing the same <a href="https://en.wikipedia.org/wiki/Loss_function">loss function</a> as in OLS, which means we're maximizing the log-likelihood:</p>
+<p>$$
+\hat{\Theta}  = \underset{\Theta}{\text{argmax}}\log \left( p(Y \mid X, \Theta) \right) = \underset{\Theta}{\text{argmin}}{\; \left\Vert Y-X\Theta \right\Vert^2}
+$$</p>
+<p>Now because we want to minimize this loss function we can just take small steps towards the <a href="https://en.wikipedia.org/wiki/Maxima_and_minima">minimum</a> of this function, which lies in the oposite direction of the gradient. We saw that the <a href="https://en.wikipedia.org/wiki/Gradient">gradient</a> (Jacobian, or derivative) of this loss function was:</p>
+<p>$$
+\frac{\delta \text{loss}}{\delta \Theta}  = \frac{\delta \left\Vert Y-X\Theta \right\Vert^2}{\delta \Theta} = -2X^T (Y - X\Theta)
+$$</p>
+<p>This means that if we start out with random parameters $\hat{\Theta}(0)$ we can update these parameters each iteration in the oposite direction of the gradient. Because our loss function is <a href="https://en.wikipedia.org/wiki/Convex_function">convex</a> in this simple example we should end up at the minimum of our function after a certain amount of steps. One thing we have to make sure that the steps that we take are not to big so that we are not "stepping over" the minimum of our function. We introduce a learning rate parameter $\eta = 0.01$ to prevent this from happening. The parameter update for each iteration $k$ becomes:</p>
+<p>$$
+\hat{\Theta}(k+1) = \hat{\Theta}(k) - \eta \frac{\delta \text{loss}}{\delta \Theta(k)}
+$$</p>
+<p>The learning rate $\eta$ is an important parameter that needs to be carefully tuned. If it's too large the solution might never converge, if it's too small the convergence will take a lot of iterations.</p>
+<p>Note that in this case the gradient descent optimizer acts as a maximum likelihood estimator (MLE). Gradient descent and it's variants can be used to optimize complex neural network functions [<a href="#Further-readings">1, 2</a>]. A simple implementation of gradient descent is provided below.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Gradient descent update</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">Theta</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Update the parameters with one iteration."""</span>
+    <span class="n">grad</span> <span class="o">=</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">X</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="p">(</span><span class="n">y</span> <span class="o">-</span> <span class="p">(</span><span class="n">X</span> <span class="o">@</span> <span class="n">Theta</span><span class="p">))</span>  <span class="c1"># Compute gradient</span>
+    <span class="n">Theta</span> <span class="o">-=</span> <span class="n">grad</span> <span class="o">*</span> <span class="n">learning_rate</span>  <span class="c1"># Update paramters</span>
+    <span class="k">return</span> <span class="n">Theta</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Implementation of gradient descent</span>
+<span class="c1"># Random initial parameters</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">Theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.01</span>  <span class="c1"># Learning rate</span>
+<span class="n">losses</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Will hold the loss (cost) per iteration</span>
+<span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Will hold the Theta params per iteration</span>
+
+<span class="c1"># Run gradient descent for a number of steps</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">50</span><span class="p">):</span>
+    <span class="n">Theta</span> <span class="o">=</span> <span class="n">update</span><span class="p">(</span><span class="n">Theta</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>
+    <span class="c1"># Store iterations for visualisation</span>
+    <span class="n">losses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">y</span><span class="o">-</span><span class="p">(</span><span class="n">X</span><span class="nd">@Theta</span><span class="p">))</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+    <span class="n">params</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Theta</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+
+<span class="c1"># Function representing fitted line</span>
+<span class="n">f</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">Theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">Theta</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">x</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Show fitted line</span>
+<span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">9.5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">f</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">f</span><span class="p">(</span><span class="mi">1</span><span class="p">)],</span> <span class="s1">'r-'</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">'$y = </span><span class="si">{</span><span class="n">Theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> + </span><span class="si">{</span><span class="n">Theta</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> x$'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'data $(x, y)$'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'Gradient descent fit'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$y$'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="c1"># Show loss surface</span>
+<span class="n">nb_of_ws</span> <span class="o">=</span> <span class="mi">50</span> <span class="c1"># compute the loss nb_of_ws times in each dimension</span>
+<span class="n">wsa</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c1"># theta_0</span>
+<span class="n">wsb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c1"># theta_1</span>
+<span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">wsa</span><span class="p">,</span> <span class="n">wsb</span><span class="p">)</span> <span class="c1"># generate grid</span>
+<span class="n">loss_ws</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_ws</span><span class="p">,</span> <span class="n">nb_of_ws</span><span class="p">))</span> <span class="c1"># initialize loss matrix</span>
+<span class="c1"># Fill the loss matrix for each combination of weights</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
+        <span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">ws_x</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">ws_y</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]])</span>
+        <span class="n">loss_ws</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">y</span> <span class="o">-</span> <span class="p">(</span><span class="n">X</span> <span class="o">@</span> <span class="n">theta</span><span class="p">))</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+<span class="c1"># Plot the loss function surface</span>
+<span class="n">cont</span> <span class="o">=</span> <span class="n">ax2</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span><span class="p">,</span> <span class="n">loss_ws</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">viridis</span><span class="p">)</span>
+<span class="c1"># Plot the parameter updates</span>
+<span class="n">theta_prev</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">has_label</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">params_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+<span class="c1"># Plot the param-loss values that represents the update</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">params_arr</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">params_arr</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">'w'</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">params_arr</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">params_arr</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'w-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'gradient descent steps'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">Theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="p">[</span><span class="n">Theta</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span> <span class="n">label</span><span class="o">=</span><span class="s1">'Final parameter $</span><span class="se">\\</span><span class="s1">hat{</span><span class="se">\\</span><span class="s1">Theta}$'</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s1">'w'</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">'*'</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">edgecolors</span><span class="o">=</span><span class="s1">'k'</span><span class="p">)</span>
+<span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">cont</span><span class="p">)</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">set_label</span><span class="p">(</span><span class="s1">'X+Y'</span><span class="p">)</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span>
+    <span class="s1">'$</span><span class="se">\\</span><span class="s1">left</span><span class="se">\\</span><span class="s1">Vert Y-X</span><span class="se">\\</span><span class="s1">Theta </span><span class="se">\\</span><span class="s1">right</span><span class="se">\\</span><span class="s1">Vert^2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">((</span>
+    <span class="s1">'$</span><span class="se">\\</span><span class="s1">Theta(k)$ updates on loss surface '</span>
+    <span class="s1">'$</span><span class="se">\\</span><span class="s1">left</span><span class="se">\\</span><span class="s1">Vert Y-X</span><span class="se">\\</span><span class="s1">Theta </span><span class="se">\\</span><span class="s1">right</span><span class="se">\\</span><span class="s1">Vert^2$'</span><span class="p">))</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">Theta_0$'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">Theta_1$'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Gradient-descent regression fit alongside the loss surface and parameter-update path."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Gradient-descent regression fit alongside the loss surface and parameter-update path." decoding="async" height="283" loading="lazy" src="/images/notebook_outputs/misc/linear-regression-four-ways/figure-0016-00-14bd54cc585c.svg" width="592"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="4.-Markov-Chain-Monte-Carlo-parameter-estimation">4. Markov Chain Monte Carlo parameter estimation<a class="anchor-link" href="#4.-Markov-Chain-Monte-Carlo-parameter-estimation"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>An alternative to optimizing the likelihood function is to <a href="https://en.wikipedia.org/wiki/Approximate_Bayesian_computation">approximate</a> the full posterior by sampling based on <a href="https://en.wikipedia.org/wiki/Markov_chain_Monte_Carlo">Markov Chain Monte Carlo (MCMC)</a> methods. One such sampling algorithm is the <a href="https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm">Metropolis-Hastings algorithm</a> which allows us to sample from the posterior $p(\theta \mid y, x)$.</p>
+<p>Remember that the posterior density of $\theta$ given the observed data $x, y$ is defined as:</p>
+<p>$$
+p(\theta \mid y, x) = \frac{p(y \mid x, \theta)p(\theta)}{p(y \mid x)}
+$$</p>
+<h3 id="Sampling-with-Metropolis-Hastings">Sampling with Metropolis-Hastings<a class="anchor-link" href="#Sampling-with-Metropolis-Hastings"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The Metropolis-Hasting algorithm defines a way to create a <a href="https://en.wikipedia.org/wiki/Markov_chain">Markov chain</a> which has as <a href="https://en.wikipedia.org/wiki/Stationary_distribution">stationary distribution</a> the posterior $p(\theta \mid y, x)$ we're trying to approximate. What this means is that if we sample infinite number of samples from this markov chain the samples should be as if they were sampled from the posterior.</p>
+<p>Given an initial guess for parameters $\theta(0)$, the Metropolis-Hastings algorithm works as follows</p>
+<ol>
+<li>Propose a new parameter value $\theta_p$ by adding random noise to the the initial parameters:</li>
+</ol>
+<p>$$
+\theta_{p}(k) = \theta(k) + \Delta \theta \quad \text{with}\; \Delta \theta \sim \mathcal{N}(0, \sigma^2)
+$$</p>
+<ol start="2">
+<li>Find out how much more likely the new proposed parameter $\theta_{p}(k)$ is with respect to the previous parameter $\theta(k)$ by calculating the ratio:</li>
+</ol>
+<p>$$
+\rho = \frac{p(\theta_p \mid y, x)}{p(\theta \mid y, x)}
+= \frac{\frac{p(y \mid x, \theta_p) p(\theta_p)}{p(y \mid x)}}{\frac{p(y \mid x, \theta)p(\theta)}{p(y \mid x)}}
+=\frac{p(y \mid x, \theta_p)p(\theta_p)}{p(y\mid x, \theta)p(\theta)}
+$$</p>
+<ol start="3">
+<li><p>Then accept the proposal $\theta_{p}(k)$ as the new parameter $\theta(k+1)$ if the ratio $\rho \geq 1$, or if $\rho \lt 1$ accept $\theta_{p}(k)$ as new parameter with probability $\rho$. If not accepted keep $\theta(k+1)=\theta(k)$.</p>
+</li>
+<li><p>To keep sampling repeat from step 1.</p>
+</li>
+</ol>
+<p>For simplicity we will be ignoring the prior $p(\theta)$ below and treating it as an <a href="https://en.wikipedia.org/wiki/Prior_probability#Improper_priors">improper prior</a> when calculuting the ratio (no intention to offend any Bayesian practitioners):</p>
+<p>$$
+\rho = \frac{p(y \mid x, \theta_p)}{p(y \mid x, \theta)}
+$$</p>
+<p>If we want to add a specific prior this should be relatively simple and we shoud just multiply an extra term when calculating the ratio $\rho$. We will thus only use the ratio of the likelihood functions. We defined this likelhood function for our problem <a href="#Bayesian-description">earlier</a> as:</p>
+<p>$$
+p(y \mid x, \theta_0, \theta_1) = \prod_{i=1}^{n} p(y_i \mid x_i, \theta_0, \theta_1) = \prod_{i=1}^{n} \frac{1}{\sqrt{2\pi\sigma^2}} \exp{ \left( -\frac{(y_i - (\theta_0 + \theta_1 x_i))^2}{2\sigma^2}\right)}
+$$</p>
+<p>To avoid <a href="https://en.wikipedia.org/wiki/Arithmetic_underflow">numerical underflow</a> when probabilities are small we will be performing the computations in the <a href="https://en.wikipedia.org/wiki/Log_probability">log</a> space where the multiplications will become additions.</p>
+<h3 id="Parameter-estimation">Parameter estimation<a class="anchor-link" href="#Parameter-estimation"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>After sampling we can find best point estimates of the parameter by <a href="https://en.wikipedia.org/wiki/Bayes_estimator">Bayesian estimation</a> by taking the <a href="https://en.wikipedia.org/wiki/Expected_value">expected value</a> (<a href="https://en.wikipedia.org/wiki/Arithmetic_mean">mean</a>) of the sampled parameters. In practice we only compute the mean over the last samples because MCMC needs the first steps to converge towards the stationary distribution. A simple implementation on our toy data is provided below.</p>
+<p>MCMC might be overkill for our simple toy problem, however, it can be used to approximate the posterior of complex distributions such as <a href="https://docs.pymc.io/notebooks/multilevel_modeling.html">multilevel models</a>. Powerfull software exists to sample from these complex methods more efficiently [<a href="#Further-readings">3</a>].</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">metropolis_hastings_step</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">theta_0</span><span class="p">,</span> <span class="n">theta_1</span><span class="p">,</span> <span class="n">sigma</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Single step of the Metropolis-Hastings algorithm."""</span>
+    <span class="c1"># Run until new proposed sample has been accepted</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">theta_0_p</span> <span class="o">=</span> <span class="n">theta_0</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.1</span>
+        <span class="n">theta_1_p</span> <span class="o">=</span> <span class="n">theta_1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.1</span>
+        <span class="n">sigma_p</span> <span class="o">=</span> <span class="n">sigma</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.1</span>
+        <span class="n">log_ratio</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">log_likelihood</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">theta_0_p</span><span class="p">,</span> <span class="n">theta_1_p</span><span class="p">,</span> <span class="n">sigma_p</span><span class="p">)</span> <span class="o">-</span>
+            <span class="n">log_likelihood</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">theta_0</span><span class="p">,</span> <span class="n">theta_1</span><span class="p">,</span> <span class="n">sigma</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">log_ratio</span> <span class="o">&gt;=</span> <span class="n">e</span><span class="p">:</span>
+            <span class="c1"># Ratio &gt;= 1: accept proposal</span>
+            <span class="k">return</span> <span class="n">theta_0_p</span><span class="p">,</span> <span class="n">theta_1_p</span><span class="p">,</span> <span class="n">sigma_p</span>
+        <span class="k">elif</span> <span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">())</span> <span class="o">&lt;</span> <span class="n">log_ratio</span><span class="p">:</span>
+            <span class="c1"># Ratio &lt; 1: check with probability == ratio</span>
+            <span class="k">return</span> <span class="n">theta_0_p</span><span class="p">,</span> <span class="n">theta_1_p</span><span class="p">,</span> <span class="n">sigma_p</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">log_likelihood</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">theta_0</span><span class="p">,</span> <span class="n">theta_1</span><span class="p">,</span> <span class="n">sigma</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Log-likelihood function."""</span>
+    <span class="n">sigma_sq</span> <span class="o">=</span> <span class="n">sigma</span><span class="o">**</span><span class="mi">2</span>
+    <span class="c1"># Sum of squared errors</span>
+    <span class="n">sse</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">((</span><span class="n">y</span> <span class="o">-</span> <span class="p">(</span><span class="n">theta_0</span><span class="o">+</span><span class="n">theta_1</span><span class="o">*</span><span class="n">x</span><span class="p">))</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">)</span> <span class="o">*</span> <span class="n">log</span><span class="p">(</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">pi</span><span class="o">*</span><span class="n">sigma_sq</span><span class="p">))</span> \
+        <span class="o">-</span> <span class="p">(</span><span class="n">sse</span><span class="o">/</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">sigma_sq</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Implementation of metropolis-Hasting MCMC</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Initial parameters</span>
+<span class="n">theta_0</span> <span class="o">=</span> <span class="mf">1.</span>
+<span class="n">theta_1</span> <span class="o">=</span> <span class="mf">1.</span>
+<span class="n">sigma</span> <span class="o">=</span> <span class="mf">1.</span>
+
+<span class="c1"># Run Metropolis-Hastings MCMC</span>
+<span class="n">samples</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># List of all samples</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3000</span><span class="p">):</span>
+    <span class="c1"># Generate new parameter proposals</span>
+    <span class="n">theta_0</span><span class="p">,</span> <span class="n">theta_1</span><span class="p">,</span> <span class="n">sigma</span> <span class="o">=</span> <span class="n">metropolis_hastings_step</span><span class="p">(</span>
+        <span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">theta_0</span><span class="p">,</span> <span class="n">theta_1</span><span class="p">,</span> <span class="n">sigma</span><span class="p">)</span>
+    <span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">theta_0</span><span class="p">,</span> <span class="n">theta_1</span><span class="p">,</span> <span class="n">sigma</span><span class="p">))</span>
+
+
+<span class="n">th_0_samples</span><span class="p">,</span> <span class="n">th_1_samples</span><span class="p">,</span> <span class="n">sigma_samples</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">samples</span><span class="p">)</span>
+<span class="c1"># Compute the expected value of the last samples</span>
+<span class="c1"># The first 1000 samples are ignored because the MCMC has not </span>
+<span class="c1">#  yet converged</span>
+<span class="n">theta_0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">th_0_samples</span><span class="p">[</span><span class="mi">1000</span><span class="p">:])</span>
+<span class="n">theta_1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">th_1_samples</span><span class="p">[</span><span class="mi">1000</span><span class="p">:])</span>
+
+<span class="c1"># Function representing fitted line</span>
+<span class="n">f</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">theta_0</span> <span class="o">+</span> <span class="n">theta_1</span> <span class="o">*</span> <span class="n">x</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Show fitted line</span>
+<span class="o">%</span><span class="k">config</span> InlineBackend.figure_formats = ['retina']
+<span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span><span class="mi">4</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">f</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">f</span><span class="p">(</span><span class="mi">1</span><span class="p">)],</span> <span class="s1">'r-'</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">'$y = </span><span class="si">{</span><span class="n">theta_0</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> + </span><span class="si">{</span><span class="n">theta_1</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> x$'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'data $(x,y)$'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'MCMC mean fit'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'x'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'y'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+<span class="n">ax2</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+    <span class="n">th_0_samples</span><span class="p">[</span><span class="mi">1000</span><span class="p">:],</span> <span class="n">th_1_samples</span><span class="p">[</span><span class="mi">1000</span><span class="p">:],</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'MCMC samples'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">theta_0</span><span class="p">],</span> <span class="p">[</span><span class="n">theta_1</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">'Expected value $</span><span class="se">\\</span><span class="s1">hat{</span><span class="se">\\</span><span class="s1">theta}$'</span><span class="p">,</span>
+    <span class="n">s</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">'*'</span><span class="p">,</span> <span class="n">edgecolors</span><span class="o">=</span><span class="s1">'k'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'Samples from $p(</span><span class="se">\\</span><span class="s1">theta_0, </span><span class="se">\\</span><span class="s1">theta_1 </span><span class="se">\\</span><span class="s1">mid x,y)$'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">theta_0$'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">theta_1$'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"MCMC mean regression fit alongside posterior samples of the intercept and slope."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="MCMC mean regression fit alongside posterior samples of the intercept and slope." decoding="async" height="391" loading="lazy" src="/images/notebook_outputs/misc/linear-regression-four-ways/figure-0020-00-34921979d9fb.png" width="765"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Please note that the <a href="https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm">Metropolis-Hasting</a> sampling algorithm used here can be quite inefficient. A lot of proposed samples will be rejected to get to our desired sample size. More efficient sampling methods such as <a href="https://en.wikipedia.org/wiki/Hamiltonian_Monte_Carlo">Hamiltonian Monte Carlo</a> exist and are readily available in tools such as <a href="https://mc-stan.org/">Stan</a>, <a href="https://docs.pymc.io/">PyMC3</a>, and <a href="https://github.com/pyro-ppl/numpyro">NumPyro</a>.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Further-readings">Further readings<a class="anchor-link" href="#Further-readings"><i class="fa-solid fa-sm fa-link"></i></a></h2><ol>
+<li><a href="https://peterroelants.github.io/posts/neural-network-implementation-part01/">Gradient descent optimization in neural networks</a>.</li>
+<li>Popular tools that can automatically give you the gradients to use in your optimization are <a href="https://www.tensorflow.org/">TensorFlow</a>, <a href="https://pytorch.org/">PyTorch</a>, and <a href="https://jax.readthedocs.io/">Jax</a>.</li>
+<li>Popular probabilistic programming tools supporting powerful sampling methods areas <a href="https://mc-stan.org/">Stan</a>, <a href="https://docs.pymc.io/">PyMC3</a>, and <a href="https://github.com/pyro-ppl/numpyro">NumPyro</a>.</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[13]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python implementation: CPython
+Python version       : 3.13.12
+IPython version      : 9.14.1
+
+IPython   : 9.14.1
+matplotlib: 3.11.0
+numpy     : 2.4.6
+seaborn   : 0.13.2
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This post at <a href="https://peterroelants.github.io/posts/linear-regression-four-ways/" rel="canonical">peterroelants.github.io</a> is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/misc/linear-regression-four-ways.ipynb">Link to the full IPython notebook file</a></p>
+</div>
+</div>
+</div>

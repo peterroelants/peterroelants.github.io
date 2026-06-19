@@ -1,0 +1,19 @@
+[project]
+name = "misc-notebooks"
+version = "0.1.0"
+description = "Notebook environment for miscellaneous blog posts"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "ipykernel>=6.28,<7",
+  "jupyter>=1,<2",
+  "matplotlib>=3.7,<4",
+  "nbconvert>=7,<8",
+  "numpy>=1.24",
+  "scipy>=1.10,<2",
+  "seaborn>=0.12,<0.14",
+  "watermark>=2.5,<3",
+]
+
+[tool.uv]
+package = false
+

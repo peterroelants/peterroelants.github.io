@@ -1,0 +1,44 @@
+[project]
+name = "diffusion-flow-matching-notebooks"
+version = "0.1.0"
+description = "Jupyter notebooks for diffusion and flow matching experiments"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy",
+  "scipy",
+  "torch",
+  "scikit-learn",
+  "ipython",
+  "ipykernel",
+  "jupyter",
+  "nbconvert",
+  "watermark",
+  "matplotlib",
+  "seaborn",
+  "tqdm",
+  "ruff",
+]
+
+
+# Tool configuration ###############################################
+[tool.ruff]
+line-length = 120
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+]
+
+[tool.ruff.lint]
+exclude = ["*.ipynb"]
+extend-select = [
+    "I001"  # isort
+]
+ignore = [
+  'E501',  # Line too long (E501)
+  'E731',  # Do not assign a lambda expression, use a def (E731)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

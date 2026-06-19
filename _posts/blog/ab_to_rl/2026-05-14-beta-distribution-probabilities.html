@@ -1,0 +1,959 @@
+---
+layout: post
+title: 'Beta distribution: Probabilities and binary data'
+description: Understand the Beta distribution as a model for unknown success probabilities, and derive the Beta-Bernoulli update for binary data.
+tags:
+- Beta Distribution
+- Bernoulli Distribution
+- Binomial Distribution
+- Bayesian Inference
+- A/B-testing
+- Probability
+- Notebook
+image: /images/social/2026-05-14-beta-distribution-probabilities-preview.png
+---
+
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=568cf531"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Beta-distribution:-Probabilities-and-binary-data">Beta distribution: Probabilities and binary data<a class="anchor-link" href="#Beta-distribution:-Probabilities-and-binary-data"><i class="fa-solid fa-sm fa-link"></i></a></h1><p>Many statistical problems start with an unknown probability. A visitor might convert or not. A coin might land heads or tails. A machine part might fail or keep working. A user might click a recommendation or ignore it.</p>
+<p>In all of these examples the quantity we want to infer is a probability, so it must live between $0$ and $1$. The <a href="https://en.wikipedia.org/wiki/Beta_distribution">Beta distribution</a> is a distribution over such probabilities. It lets us describe which values of the unknown probability seem plausible before or after seeing binary data.</p>
+<p>We'll build that idea by moving through four steps:</p>
+<ul>
+<li>model binary feedback with Bernoulli and Binomial distributions,</li>
+<li>turn the Binomial view around: after seeing successes and failures, ask which success probabilities are plausible,</li>
+<li>illustrate why the binary likelihood has the same shape as a Beta density,</li>
+<li>use the same shape to update Beta priors by adding observed successes and failures.</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered" id="cell-id=fe5c2c44">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.layouts</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.models</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.plotting</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.stats</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bokeh.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">CustomJS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bokeh.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Resources</span>
+
+<span class="n">bokeh</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">output_notebook</span><span class="p">(</span>
+    <span class="n">resources</span><span class="o">=</span><span class="n">Resources</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"cdn"</span><span class="p">,</span> <span class="n">components</span><span class="o">=</span><span class="p">[</span><span class="s2">"bokeh"</span><span class="p">,</span> <span class="s2">"bokeh-widgets"</span><span class="p">]),</span>
+    <span class="n">hide_banner</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">sns</span><span class="o">.</span><span class="n">set_theme</span><span class="p">(</span><span class="n">style</span><span class="o">=</span><span class="s2">"whitegrid"</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="s2">"notebook"</span><span class="p">)</span>
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">17</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_javascript" id="abb55cd3-b0b4-4477-b982-c33a9fbc2ba6">
+
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=a7affbb9"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="The-Setting">The Setting<a class="anchor-link" href="#The-Setting"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>We'll start with a repeated binary experiment. Each observation $Y_t$ can take one of two values:</p>
+<p>$$
+Y_t \in \{0, 1\}.
+$$
+Here, $1$ means success and $0$ means failure. What counts as success depends on the application: a click, a conversion, a purchase, heads in a coin flip, a positive diagnostic result, or a passed quality check.</p>
+<p>The unknown quantity is the success probability $\theta$:</p>
+<p>$$
+\theta = P(Y_t = 1).
+$$</p>
+<p>The observed outcome $Y_t$ is binary, but $\theta$ is not an outcome. It is the unknown probability of success. That means the parameter space for $\theta$ is the interval $[0,1]$, and a prior over $\theta$ should put its probability mass on that interval. A Beta distribution has exactly the support we need:</p>
+<p>$$
+0 \leq \theta \leq 1.
+$$</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=1f9be128"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Bernoulli-and-Binomial-Feedback">Bernoulli and Binomial Feedback<a class="anchor-link" href="#Bernoulli-and-Binomial-Feedback"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>We usually model a single binary observation as a <a href="https://en.wikipedia.org/wiki/Bernoulli_distribution">Bernoulli random variable</a>:</p>
+<p>$$
+Y_t \sim \mathrm{Bernoulli}(\theta),
+$$</p>
+<p>where $Y_t = 1$ with probability $\theta$ and $Y_t = 0$ with probability $1-\theta$.</p>
+<p>If we repeat the same kind of interaction $n$ times, keep the success probability fixed, and let $K = \sum_{t=1}^n Y_t$ be the random number of successes, then $K$ follows a <a href="https://en.wikipedia.org/wiki/Binomial_distribution">Binomial distribution</a>:</p>
+<p>$$
+K \sim \mathrm{Binomial}(n, \theta).
+$$</p>
+<p>These are two views of the same binary process. The Bernoulli view is the one-at-a-time view. The Binomial view is the summary view: after $n$ binary observations, the observed data can be summarized by the number of successes and failures. When $n=1$, the Binomial distribution reduces to the Bernoulli distribution.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=9924bcfc"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The widget below illustrates the Binomial view. It plots the probability of observing each possible number of successes $k$ after $n$ repeated binary trials with success probability $\theta$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered celltag_lazy-bokeh celltag_lazy-bokeh-height=410 celltag_lazy-bokeh-title=Interactive Binomial probability explorer" id="cell-id=1d7e4dc2">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Interactive Binomial distribution</span>
+
+<span class="c1"># Precompute an initial PMF so the static page has a visible starting state.</span>
+<span class="n">binomial_initial_n</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">binomial_initial_theta</span> <span class="o">=</span> <span class="mf">0.35</span>
+<span class="n">binomial_k</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">binomial_initial_n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">binomial_probability</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">binom</span><span class="o">.</span><span class="n">pmf</span><span class="p">(</span>
+    <span class="n">binomial_k</span><span class="p">,</span>
+    <span class="n">n</span><span class="o">=</span><span class="n">binomial_initial_n</span><span class="p">,</span>
+    <span class="n">p</span><span class="o">=</span><span class="n">binomial_initial_theta</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Bokeh stores plotted data in a ColumnDataSource that the browser can update.</span>
+<span class="n">source_binomial_pmf</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">k</span><span class="o">=</span><span class="n">binomial_k</span><span class="p">,</span> <span class="n">probability</span><span class="o">=</span><span class="n">binomial_probability</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">figure_binomial_pmf</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="n">binomial_initial_n</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mf">0.2</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">binomial_probability</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">*</span> <span class="mf">1.15</span><span class="p">))),</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">620</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">320</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Binomial PMF: n=</span><span class="si">{</span><span class="n">binomial_initial_n</span><span class="si">}</span><span class="s2">, theta=</span><span class="si">{</span><span class="n">binomial_initial_theta</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="n">x_axis_label</span><span class="o">=</span><span class="s2">"number of successes k"</span><span class="p">,</span>
+    <span class="n">y_axis_label</span><span class="o">=</span><span class="s2">"probability"</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">figure_binomial_pmf</span><span class="o">.</span><span class="n">vbar</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"k"</span><span class="p">,</span>
+    <span class="n">top</span><span class="o">=</span><span class="s2">"probability"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">source_binomial_pmf</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mf">0.85</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"navy"</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">figure_binomial_pmf</span><span class="o">.</span><span class="n">add_tools</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[(</span><span class="s2">"successes"</span><span class="p">,</span> <span class="s2">"@k"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"probability"</span><span class="p">,</span> <span class="s2">"@probability</span><span class="si">{0.000}</span><span class="s2">"</span><span class="p">)],</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">"vline"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">figure_binomial_pmf</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">ticker</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">SingleIntervalTicker</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="n">slider_binomial_theta</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Slider</span><span class="p">(</span>
+    <span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">end</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="n">binomial_initial_theta</span><span class="p">,</span>
+    <span class="n">step</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"success probability theta"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">280</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Probability of success on each binary trial."</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">slider_binomial_n</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Slider</span><span class="p">(</span>
+    <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">end</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="n">binomial_initial_n</span><span class="p">,</span>
+    <span class="n">step</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"number of repeated trials n"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">280</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Number of independent binary trials summarized by the count k."</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="c1"># CustomJS keeps the widget fully embedded: slider changes run in the browser,</span>
+<span class="c1"># without needing a live Python or Bokeh server behind the blog post.</span>
+<span class="n">callback_binomial_pmf_code</span> <span class="o">=</span> <span class="s2">"""</span>
+<span class="s2">function binomialCoefficient(n, k) {</span>
+<span class="s2">    if (k &lt; 0 || k &gt; n) {</span>
+<span class="s2">        return 0;</span>
+<span class="s2">    }</span>
+<span class="s2">    if (k === 0 || k === n) {</span>
+<span class="s2">        return 1;</span>
+<span class="s2">    }</span>
+<span class="s2">    k = Math.min(k, n - k);</span>
+<span class="s2">    let coefficient = 1;</span>
+<span class="s2">    for (let i = 1; i &lt;= k; i++) {</span>
+<span class="s2">        coefficient = (coefficient * (n - k + i)) / i;</span>
+<span class="s2">    }</span>
+<span class="s2">    return coefficient;</span>
+<span class="s2">}</span>
+
+<span class="s2">function binomialProbability(n, k, theta) {</span>
+<span class="s2">    if (theta === 0) {</span>
+<span class="s2">        return k === 0 ? 1 : 0;</span>
+<span class="s2">    }</span>
+<span class="s2">    if (theta === 1) {</span>
+<span class="s2">        return k === n ? 1 : 0;</span>
+<span class="s2">    }</span>
+<span class="s2">    return binomialCoefficient(n, k) * Math.pow(theta, k) * Math.pow(1 - theta, n - k);</span>
+<span class="s2">}</span>
+
+<span class="s2">    const theta = thetaSlider.value;</span>
+<span class="s2">    const n = Math.round(nSlider.value);</span>
+
+<span class="s2">    // Recompute the full PMF for the current slider values.</span>
+<span class="s2">    const ks = [];</span>
+<span class="s2">    const probabilities = [];</span>
+<span class="s2">    let maxProbability = 0;</span>
+
+<span class="s2">    for (let k = 0; k &lt;= n; k++) {</span>
+<span class="s2">        const probability = binomialProbability(n, k, theta);</span>
+<span class="s2">        ks.push(k);</span>
+<span class="s2">        probabilities.push(probability);</span>
+<span class="s2">        if (probability &gt; maxProbability) {</span>
+<span class="s2">            maxProbability = probability;</span>
+<span class="s2">        }</span>
+<span class="s2">    }</span>
+
+<span class="s2">    // Replace the data and ranges, then ask Bokeh to redraw the bars.</span>
+<span class="s2">    source.data = {k: ks, probability: probabilities};</span>
+<span class="s2">    figure.x_range.start = -0.5;</span>
+<span class="s2">    figure.x_range.end = n + 0.5;</span>
+<span class="s2">    figure.y_range.end = Math.max(0.2, maxProbability * 1.15);</span>
+<span class="s2">    figure.title.text = "Binomial PMF: n=" + n + ", theta=" + theta.toFixed(2);</span>
+<span class="s2">    source.change.emit();</span>
+<span class="s2">"""</span>
+
+<span class="n">callback_binomial_pmf</span> <span class="o">=</span> <span class="n">CustomJS</span><span class="p">(</span>
+    <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+        <span class="n">source</span><span class="o">=</span><span class="n">source_binomial_pmf</span><span class="p">,</span>
+        <span class="n">figure</span><span class="o">=</span><span class="n">figure_binomial_pmf</span><span class="p">,</span>
+        <span class="n">thetaSlider</span><span class="o">=</span><span class="n">slider_binomial_theta</span><span class="p">,</span>
+        <span class="n">nSlider</span><span class="o">=</span><span class="n">slider_binomial_n</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">code</span><span class="o">=</span><span class="n">callback_binomial_pmf_code</span><span class="p">,</span>
+    <span class="n">module</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">slider_binomial_theta</span><span class="o">.</span><span class="n">js_on_change</span><span class="p">(</span><span class="s2">"value"</span><span class="p">,</span> <span class="n">callback_binomial_pmf</span><span class="p">)</span>
+<span class="n">slider_binomial_n</span><span class="o">.</span><span class="n">js_on_change</span><span class="p">(</span><span class="s2">"value"</span><span class="p">,</span> <span class="n">callback_binomial_pmf</span><span class="p">)</span>
+
+<span class="n">layout_binomial_pmf</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">column</span><span class="p">(</span>
+    <span class="n">figure_binomial_pmf</span><span class="p">,</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">row</span><span class="p">(</span><span class="n">slider_binomial_theta</span><span class="p">,</span> <span class="n">slider_binomial_n</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">layout_binomial_pmf</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="notebook-bokeh-lazy" data-bokeh-bundles='["/js/bokeh/3.9.1/bokeh.min.js","/js/bokeh/3.9.1/bokeh-widgets.min.js"]' data-bokeh-script="/images/notebook_outputs/ab_to_rl/beta-distribution-probabilities/interactive-0000-5f7a86f48716.js" data-bokeh-title="Interactive Binomial probability explorer" style="min-height: 410px;"><p aria-live="polite" class="notebook-bokeh-lazy-status">Interactive visualization loading&hellip;</p><div data-root-id="p1047" id="a4a4ebc1-6551-4ce4-8312-ebcf45a40b0b" style="display: contents;"></div></div></div>
+<div class="output_area">
+<div class="prompt"></div>
+
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=65f840ba"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="A-Distribution-Over-Probabilities">A Distribution Over Probabilities<a class="anchor-link" href="#A-Distribution-Over-Probabilities"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The Binomial distribution is about possible observed counts when the success probability $\theta$ is fixed. The Beta distribution turns the question around: after seeing binary data, which success probabilities $\theta$ are plausible?</p>
+<p>This inverse question sits near the origin of Bayesian inference. Thomas Bayes's <em><a href="https://en.wikipedia.org/wiki/An_Essay_Towards_Solving_a_Problem_in_the_Doctrine_of_Chances">An Essay towards Solving a Problem in the Doctrine of Chances</a></em>, published posthumously, asked: after an event has happened some number of times and failed some number of times, how plausible is each possible value of its unknown probability? The section below follows the same idea in modern notation, using <a href="https://en.wikipedia.org/wiki/Bayes%27_theorem">Bayes' rule</a> to reverse the conditioning.</p>
+<p>The <a href="https://en.wikipedia.org/wiki/Beta_distribution">Beta distribution</a> has two positive parameters, $\alpha$ and $\beta$:</p>
+<p>$$
+\theta \sim \mathrm{Beta}(\alpha, \beta)
+$$</p>
+<p>with density</p>
+<p>$$
+p(\theta \mid \alpha, \beta)
+= \frac{\theta^{\alpha - 1}(1-\theta)^{\beta - 1}}{B(\alpha,\beta)}
+$$</p>
+<p>where $B(\alpha,\beta)$ is the <a href="https://en.wikipedia.org/wiki/Beta_function">Beta function</a> and acts as the normalizing constant that makes the density integrate to $1$ over the interval $[0,1]$. Because this curve is nonnegative on $[0,1]$, normalizing it to integrate to $1$ lets us interpret it as a probability density over $\theta$.</p>
+<p>A practical way to read the parameters is to treat $\alpha$ as evidence for success and $\beta$ as evidence for failure. Their relative size controls where the distribution puts most of its mass. Their total size controls how concentrated the distribution is.</p>
+<p>For example:</p>
+<ul>
+<li>$\mathrm{Beta}(1, 1)$ is uniform: every success probability starts equally plausible.</li>
+<li>$\mathrm{Beta}(8, 2)$ puts more mass on high success probabilities.</li>
+<li>$\mathrm{Beta}(2, 8)$ puts more mass on low success probabilities.</li>
+<li>$\mathrm{Beta}(20, 20)$ is centered near $0.5$ but more concentrated than, say, $\mathrm{Beta}(5, 5)$.</li>
+</ul>
+<p>The curves below show those densities:</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered" id="cell-id=7d27cd86">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Some examples of Beta distributions</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">beta_density_grid</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">nb_points</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">500</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return a grid and Beta density values for plotting."""</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1e-4</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="mf">1e-4</span><span class="p">,</span> <span class="n">nb_points</span><span class="p">)</span>
+    <span class="n">density</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">theta</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">theta</span><span class="p">,</span> <span class="n">density</span>
+
+
+<span class="n">beta_examples</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"$Beta(1, 1)$"</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">5.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"$Beta(5, 5)$"</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">8.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"$Beta(8, 2)$"</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"$Beta(2, 8)$"</span><span class="p">),</span>
+    <span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">20.0</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"$Beta(20, 20)$"</span><span class="p">),</span>
+<span class="p">]</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">beta_examples</span><span class="p">:</span>
+    <span class="n">theta</span><span class="p">,</span> <span class="n">density</span> <span class="o">=</span> <span class="n">beta_density_grid</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">theta</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">label</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Beta distributions describe uncertainty over a probability"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s2">"success probability $\theta$"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"density"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">sns</span><span class="o">.</span><span class="n">despine</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Beta density curves for several parameter choices, illustrating different beliefs about an unknown success probability."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Beta density curves for several parameter choices, illustrating different beliefs about an unknown success probability." decoding="async" height="402" loading="lazy" src="/images/notebook_outputs/ab_to_rl/beta-distribution-probabilities/figure-0007-00-d9897f755d9f.png" width="682"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=9f1676c2"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The following interactive widget lets you explore how the Beta distribution changes as you vary $\alpha$ and $\beta$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered celltag_lazy-bokeh celltag_lazy-bokeh-height=410 celltag_lazy-bokeh-title=Interactive Beta distribution explorer" id="cell-id=e3b0439a">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Interactive Beta distribution</span>
+
+<span class="c1"># Start with one concrete Beta density so the app has an initial state.</span>
+<span class="n">beta_explorer_alpha</span> <span class="o">=</span> <span class="mf">4.0</span>
+<span class="n">beta_explorer_beta</span> <span class="o">=</span> <span class="mf">2.0</span>
+<span class="n">beta_explorer_theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1e-4</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="mf">1e-4</span><span class="p">,</span> <span class="mi">300</span><span class="p">)</span>
+<span class="n">beta_explorer_density</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">beta_explorer_theta</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">beta_explorer_alpha</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">beta_explorer_beta</span><span class="p">)</span>
+<span class="n">beta_explorer_y_max</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">beta_explorer_density</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">*</span> <span class="mf">1.12</span><span class="p">))</span>
+
+<span class="c1"># ColumnDataSource is the shared data model Bokeh can update in the browser.</span>
+<span class="n">source_beta_explorer_params</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="p">[</span><span class="n">beta_explorer_alpha</span><span class="p">],</span> <span class="n">beta</span><span class="o">=</span><span class="p">[</span><span class="n">beta_explorer_beta</span><span class="p">])</span>
+<span class="p">)</span>
+<span class="n">source_beta_explorer_density</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">theta</span><span class="o">=</span><span class="n">beta_explorer_theta</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="n">beta_explorer_density</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="c1"># Draw the density as a line with a light filled band to emphasize area.</span>
+<span class="n">figure_beta_explorer</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="n">beta_explorer_y_max</span><span class="p">),</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">520</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">320</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Beta density: alpha=</span><span class="si">{</span><span class="n">beta_explorer_alpha</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">, beta=</span><span class="si">{</span><span class="n">beta_explorer_beta</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="n">x_axis_label</span><span class="o">=</span><span class="s2">"success probability theta"</span><span class="p">,</span>
+    <span class="n">y_axis_label</span><span class="o">=</span><span class="s2">"density"</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">renderer_beta_explorer_density</span> <span class="o">=</span> <span class="n">figure_beta_explorer</span><span class="o">.</span><span class="n">line</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"theta"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"density"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">source_beta_explorer_density</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"navy"</span><span class="p">,</span>
+    <span class="n">line_width</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">figure_beta_explorer</span><span class="o">.</span><span class="n">add_tools</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">renderer_beta_explorer_density</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[</span>
+            <span class="p">(</span><span class="s2">"theta"</span><span class="p">,</span> <span class="s2">"@theta</span><span class="si">{0.000}</span><span class="s2">"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"density"</span><span class="p">,</span> <span class="s2">"@density</span><span class="si">{0.000}</span><span class="s2">"</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">"vline"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">figure_beta_explorer</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Band</span><span class="p">(</span>
+        <span class="n">base</span><span class="o">=</span><span class="s2">"theta"</span><span class="p">,</span>
+        <span class="n">lower</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">upper</span><span class="o">=</span><span class="s2">"density"</span><span class="p">,</span>
+        <span class="n">source</span><span class="o">=</span><span class="n">source_beta_explorer_density</span><span class="p">,</span>
+        <span class="n">level</span><span class="o">=</span><span class="s2">"underlay"</span><span class="p">,</span>
+        <span class="n">fill_color</span><span class="o">=</span><span class="s2">"navy"</span><span class="p">,</span>
+        <span class="n">fill_alpha</span><span class="o">=</span><span class="mf">0.18</span><span class="p">,</span>
+        <span class="n">line_alpha</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="c1"># Sliders expose alpha and beta as evidence-like shape controls.</span>
+<span class="n">slider_beta_explorer_alpha</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Slider</span><span class="p">(</span>
+    <span class="n">start</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+    <span class="n">end</span><span class="o">=</span><span class="mf">25.0</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="n">beta_explorer_alpha</span><span class="p">,</span>
+    <span class="n">step</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"alpha: success evidence"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">250</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Larger alpha shifts mass toward higher success probabilities."</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">slider_beta_explorer_beta</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Slider</span><span class="p">(</span>
+    <span class="n">start</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+    <span class="n">end</span><span class="o">=</span><span class="mf">25.0</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="n">beta_explorer_beta</span><span class="p">,</span>
+    <span class="n">step</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"beta: failure evidence"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">250</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Larger beta shifts mass toward lower success probabilities."</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="c1"># CustomJS recomputes the density in the browser, keeping the post fully static.</span>
+<span class="n">callback_beta_explorer_code</span> <span class="o">=</span> <span class="s2">"""</span>
+<span class="s2">const LOG_SQRT_TWO_PI = 0.9189385332046727;</span>
+<span class="s2">const LANCZOS_COEFFICIENTS = [</span>
+<span class="s2">    676.5203681218851,</span>
+<span class="s2">    -1259.1392167224028,</span>
+<span class="s2">    771.32342877765313,</span>
+<span class="s2">    -176.61502916214059,</span>
+<span class="s2">    12.507343278686905,</span>
+<span class="s2">    -0.13857109526572012,</span>
+<span class="s2">    9.9843695780195716e-6,</span>
+<span class="s2">    1.5056327351493116e-7,</span>
+<span class="s2">];</span>
+
+<span class="s2">function logGamma(z) {</span>
+<span class="s2">    if (z &lt; 0.5) {</span>
+<span class="s2">        return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);</span>
+<span class="s2">    }</span>
+
+<span class="s2">    z -= 1;</span>
+<span class="s2">    let x = 0.99999999999980993;</span>
+<span class="s2">    for (let i = 0; i &lt; LANCZOS_COEFFICIENTS.length; i++) {</span>
+<span class="s2">        x += LANCZOS_COEFFICIENTS[i] / (z + i + 1);</span>
+<span class="s2">    }</span>
+<span class="s2">    const t = z + LANCZOS_COEFFICIENTS.length - 0.5;</span>
+<span class="s2">    return LOG_SQRT_TWO_PI + (z + 0.5) * Math.log(t) - t + Math.log(x);</span>
+<span class="s2">}</span>
+
+<span class="s2">function betaPdf(theta, alpha, beta) {</span>
+<span class="s2">    const logDensity =</span>
+<span class="s2">        (alpha - 1) * Math.log(theta)</span>
+<span class="s2">        + (beta - 1) * Math.log(1 - theta)</span>
+<span class="s2">        + logGamma(alpha + beta)</span>
+<span class="s2">        - logGamma(alpha)</span>
+<span class="s2">        - logGamma(beta);</span>
+<span class="s2">    return Math.exp(logDensity);</span>
+<span class="s2">}</span>
+
+<span class="s2">// Read the current slider values and store them for the displayed app state.</span>
+<span class="s2">    const alpha = alphaSlider.value;</span>
+<span class="s2">    const beta = betaSlider.value;</span>
+
+<span class="s2">    paramsSource.data["alpha"][0] = alpha;</span>
+<span class="s2">    paramsSource.data["beta"][0] = beta;</span>
+
+<span class="s2">    const theta = densitySource.data["theta"];</span>
+<span class="s2">    const density = densitySource.data["density"];</span>
+<span class="s2">    let maxDensity = 0;</span>
+
+<span class="s2">    // Recompute the whole curve so the plot responds immediately to sliders.</span>
+<span class="s2">    for (let i = 0; i &lt; theta.length; i++) {</span>
+<span class="s2">        density[i] = betaPdf(theta[i], alpha, beta);</span>
+<span class="s2">        if (density[i] &gt; maxDensity) {</span>
+<span class="s2">            maxDensity = density[i];</span>
+<span class="s2">        }</span>
+<span class="s2">    }</span>
+
+<span class="s2">    // Rescale the y-axis and notify Bokeh that the data changed.</span>
+<span class="s2">    figure.y_range.end = Math.max(2.0, maxDensity * 1.12);</span>
+<span class="s2">    figure.title.text = "Beta density: alpha=" + alpha.toFixed(1) + ", beta=" + beta.toFixed(1);</span>
+<span class="s2">    paramsSource.change.emit();</span>
+<span class="s2">    densitySource.change.emit();</span>
+<span class="s2">"""</span>
+
+<span class="n">callback_beta_explorer</span> <span class="o">=</span> <span class="n">CustomJS</span><span class="p">(</span>
+    <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+        <span class="n">paramsSource</span><span class="o">=</span><span class="n">source_beta_explorer_params</span><span class="p">,</span>
+        <span class="n">densitySource</span><span class="o">=</span><span class="n">source_beta_explorer_density</span><span class="p">,</span>
+        <span class="n">figure</span><span class="o">=</span><span class="n">figure_beta_explorer</span><span class="p">,</span>
+        <span class="n">alphaSlider</span><span class="o">=</span><span class="n">slider_beta_explorer_alpha</span><span class="p">,</span>
+        <span class="n">betaSlider</span><span class="o">=</span><span class="n">slider_beta_explorer_beta</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">code</span><span class="o">=</span><span class="n">callback_beta_explorer_code</span><span class="p">,</span>
+    <span class="n">module</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># Both sliders drive the same callback because either parameter changes the curve.</span>
+<span class="n">slider_beta_explorer_alpha</span><span class="o">.</span><span class="n">js_on_change</span><span class="p">(</span><span class="s2">"value"</span><span class="p">,</span> <span class="n">callback_beta_explorer</span><span class="p">)</span>
+<span class="n">slider_beta_explorer_beta</span><span class="o">.</span><span class="n">js_on_change</span><span class="p">(</span><span class="s2">"value"</span><span class="p">,</span> <span class="n">callback_beta_explorer</span><span class="p">)</span>
+
+<span class="n">layout_beta_explorer</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">column</span><span class="p">(</span>
+    <span class="n">figure_beta_explorer</span><span class="p">,</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">row</span><span class="p">(</span><span class="n">slider_beta_explorer_alpha</span><span class="p">,</span> <span class="n">slider_beta_explorer_beta</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">layout_beta_explorer</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="notebook-bokeh-lazy" data-bokeh-bundles='["/js/bokeh/3.9.1/bokeh.min.js","/js/bokeh/3.9.1/bokeh-widgets.min.js"]' data-bokeh-script="/images/notebook_outputs/ab_to_rl/beta-distribution-probabilities/interactive-0001-40b2402a43bc.js" data-bokeh-title="Interactive Beta distribution explorer" style="min-height: 410px;"><p aria-live="polite" class="notebook-bokeh-lazy-status">Interactive visualization loading&hellip;</p><div data-root-id="p1097" id="c3e4b522-489c-4fa9-9ae9-5439b67078ee" style="display: contents;"></div></div></div>
+<div class="output_area">
+<div class="prompt"></div>
+
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=a925c4ed"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Why-the-Beta-Shape-Appears">Why the Beta Shape Appears<a class="anchor-link" href="#Why-the-Beta-Shape-Appears"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The Beta distribution appears naturally when we look at binary data from the other direction.</p>
+<p>In the Binomial distribution, the probability $\theta$ is treated as fixed and the number of successes is random. After seeing the data, the perspective changes: the observed successes and failures are fixed, and $\theta$ is the unknown quantity. We ask which values of $\theta$ make the observations more or less plausible.</p>
+<p>To compare possible values of $\theta$ after the data are observed, the <a href="https://en.wikipedia.org/wiki/Likelihood_function">likelihood function</a> gives us a data-based score. The observed data stay fixed, and the unknown success probability $\theta$ is what varies. For each candidate value of $\theta$, the likelihood asks: if $\theta$ had this value, how plausible would the observed successes and failures be?</p>
+<p>The shape is easiest to see from one binary observation. A success occurs with probability $\theta$, and a failure occurs with probability $1-\theta$. Assuming <a href="https://en.wikipedia.org/wiki/Independence_%28probability_theory%29">independence</a> across observations, we multiply those factors together. So a sequence with $s$ successes and $f$ failures contributes</p>
+<p>$$
+\theta^s(1-\theta)^f.
+$$</p>
+<p>If we summarize the data by counts rather than by the exact order, the <a href="https://en.wikipedia.org/wiki/Binomial_coefficient">Binomial coefficient</a> counts how many such sequences there are. But that coefficient does not depend on $\theta$. Since likelihood is used as a relative score over possible values of $\theta$, we can ignore constants that do not depend on $\theta$.</p>
+<p>The likelihood of $\theta$, given $s$ successes and $f$ failures, is therefore proportional to</p>
+<p>$$
+\mathcal{L}(\theta \mid s, f)
+\propto
+\theta^s(1-\theta)^f.
+$$</p>
+<p>This is not yet a probability density over $\theta$; it is a relative score for different possible values of $\theta$. The important part is its shape: a power of $\theta$ times a power of $1-\theta$.</p>
+<p>To normalize that shape over the valid parameter space $0 \leq \theta \leq 1$, we divide by its integral over that interval, which corresponds to the <a href="https://en.wikipedia.org/wiki/Beta_function">Beta function</a> $B(s+1, f+1)$:</p>
+<p>$$
+\frac{\theta^s(1-\theta)^f}{\int_0^1 u^s(1-u)^f\,du}
+=
+\frac{\theta^s(1-\theta)^f}{B(s+1, f+1)}.
+$$</p>
+<p>Read as a posterior over $\theta$, this normalized likelihood corresponds to using a uniform $\mathrm{Beta}(1,1)$ prior. The next section makes the prior explicit.</p>
+<p>Now the connection to the Beta distribution is visible. In a Beta density, the exponents are $\alpha-1$ and $\beta-1$. Here the exponents are $s$ and $f$, so the matching Beta parameters are $\alpha = s+1$ and $\beta = f+1$.</p>
+<p>That is the main point of this section: binary evidence creates a Beta-shaped curve over $\theta$. The next section uses Bayes' rule to combine that curve with a prior.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=4df62519"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Beta-Bernoulli-Conjugacy:-Beta-In,-Beta-Out">Beta-Bernoulli Conjugacy: Beta In, Beta Out<a class="anchor-link" href="#Beta-Bernoulli-Conjugacy:-Beta-In,-Beta-Out"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>To turn the likelihood into a posterior belief, <a href="https://en.wikipedia.org/wiki/Bayes%27_theorem">Bayes' rule</a> combines it with a <a href="https://en.wikipedia.org/wiki/Prior_probability">prior distribution</a> over $\theta$ and then normalizes the result:</p>
+<p>$$
+p(\theta \mid \mathrm{data})
+=
+\frac{p(\mathrm{data} \mid \theta)\,p(\theta)}{p(\mathrm{data})}.
+$$</p>
+<p>The denominator $p(\mathrm{data})$ is the normalizing constant. It makes the posterior integrate to $1$, but it does not depend on $\theta$. When we only want the shape of the posterior as a function of $\theta$, we can write</p>
+<p>$$
+p(\theta \mid \mathrm{data})
+\propto
+p(\mathrm{data} \mid \theta)\,p(\theta).
+$$</p>
+<p>So, apart from normalization, the posterior is the likelihood multiplied by the prior.</p>
+<p>Start with a Beta prior:</p>
+<p>$$
+\theta \sim \mathrm{Beta}(\alpha, \beta).
+$$</p>
+<p>After observing $s$ successes and $f$ failures, the previous section gave the likelihood shape. Ignoring constants that do not depend on $\theta$, the two pieces are</p>
+<p>$$
+p(\mathrm{data} \mid \theta)
+\propto
+\theta^s(1-\theta)^f,
+\qquad
+p(\theta)
+\propto
+\theta^{\alpha-1}(1-\theta)^{\beta-1}.
+$$</p>
+<p>Bayes' rule multiplies these two shapes. The matching powers of $\theta$ and $1-\theta$ add together:</p>
+<p>$$
+p(\theta \mid \mathrm{data})
+\propto
+\theta^s(1-\theta)^f\,\theta^{\alpha-1}(1-\theta)^{\beta-1}
+=
+\theta^{\alpha+s-1}(1-\theta)^{\beta+f-1}.
+$$</p>
+<p>The right-hand side has the Beta density shape, so after normalization the posterior is</p>
+<p>$$
+\theta \mid \mathrm{data}
+\sim
+\mathrm{Beta}(\alpha + s,\; \beta + f).
+$$</p>
+<p>The <a href="https://en.wikipedia.org/wiki/Conjugate_prior">conjugacy property</a> of the Beta-Bernoulli model is the useful part here: the prior and posterior have the same family form. Updating only means adding success evidence to $\alpha$ and failure evidence to $\beta$.</p>
+<p>The counts $s$ and $f$ are enough for this update. Once we know how many successes and failures we observed, the order of the observations no longer changes the posterior. In statistical terms, these counts are <a href="https://en.wikipedia.org/wiki/Sufficient_statistic">sufficient statistics</a> for the Beta-Bernoulli model.</p>
+<p>In other words: a $\mathrm{Beta}(\alpha,\beta)$ prior behaves like prior success and failure evidence. After observing $s$ successes and $f$ failures, the posterior is $\mathrm{Beta}(\alpha+s,\beta+f)$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=posterior-update-widget-intro"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The widget below starts from a uniform $\mathrm{Beta}(1,1)$ prior. Press <strong>Add success</strong> or <strong>Add failure</strong> to see the posterior update by adding one count to $\alpha$ or $\beta$. Reset returns to the prior.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered celltag_lazy-bokeh celltag_lazy-bokeh-height=430 celltag_lazy-bokeh-title=Interactive Beta-Bernoulli posterior update" id="cell-id=1f28d1b4">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Interactive Beta-Bernoulli posterior update</span>
+
+<span class="n">posterior_initial_alpha</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">posterior_initial_beta</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">posterior_theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1e-4</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="mf">1e-4</span><span class="p">,</span> <span class="mi">400</span><span class="p">)</span>
+<span class="n">posterior_density</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span>
+    <span class="n">posterior_theta</span><span class="p">,</span>
+    <span class="n">a</span><span class="o">=</span><span class="n">posterior_initial_alpha</span><span class="p">,</span>
+    <span class="n">b</span><span class="o">=</span><span class="n">posterior_initial_beta</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">posterior_y_max</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">posterior_density</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">*</span> <span class="mf">1.12</span><span class="p">))</span>
+
+<span class="n">source_posterior_state</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+        <span class="n">successes</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">failures</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="p">[</span><span class="n">posterior_initial_alpha</span><span class="p">],</span>
+        <span class="n">beta</span><span class="o">=</span><span class="p">[</span><span class="n">posterior_initial_beta</span><span class="p">],</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">source_posterior_density</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">theta</span><span class="o">=</span><span class="n">posterior_theta</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="n">posterior_density</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">figure_posterior_update</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="n">posterior_y_max</span><span class="p">),</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">620</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">340</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"Beta posterior: alpha=1, beta=1"</span><span class="p">,</span>
+    <span class="n">x_axis_label</span><span class="o">=</span><span class="s2">"success probability theta"</span><span class="p">,</span>
+    <span class="n">y_axis_label</span><span class="o">=</span><span class="s2">"density"</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">renderer_posterior_density</span> <span class="o">=</span> <span class="n">figure_posterior_update</span><span class="o">.</span><span class="n">line</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"theta"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"density"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">source_posterior_density</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"navy"</span><span class="p">,</span>
+    <span class="n">line_width</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">figure_posterior_update</span><span class="o">.</span><span class="n">add_tools</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">renderer_posterior_density</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[</span>
+            <span class="p">(</span><span class="s2">"theta"</span><span class="p">,</span> <span class="s2">"@theta</span><span class="si">{0.000}</span><span class="s2">"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"density"</span><span class="p">,</span> <span class="s2">"@density</span><span class="si">{0.000}</span><span class="s2">"</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">"vline"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">figure_posterior_update</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Band</span><span class="p">(</span>
+        <span class="n">base</span><span class="o">=</span><span class="s2">"theta"</span><span class="p">,</span>
+        <span class="n">lower</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">upper</span><span class="o">=</span><span class="s2">"density"</span><span class="p">,</span>
+        <span class="n">source</span><span class="o">=</span><span class="n">source_posterior_density</span><span class="p">,</span>
+        <span class="n">level</span><span class="o">=</span><span class="s2">"underlay"</span><span class="p">,</span>
+        <span class="n">fill_color</span><span class="o">=</span><span class="s2">"navy"</span><span class="p">,</span>
+        <span class="n">fill_alpha</span><span class="o">=</span><span class="mf">0.18</span><span class="p">,</span>
+        <span class="n">line_alpha</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">button_posterior_success</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Button</span><span class="p">(</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"Add success"</span><span class="p">,</span>
+    <span class="n">button_type</span><span class="o">=</span><span class="s2">"success"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">130</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">button_posterior_failure</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Button</span><span class="p">(</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"Add failure"</span><span class="p">,</span>
+    <span class="n">button_type</span><span class="o">=</span><span class="s2">"danger"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">130</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">button_posterior_reset</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Button</span><span class="p">(</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"Reset"</span><span class="p">,</span>
+    <span class="n">button_type</span><span class="o">=</span><span class="s2">"default"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">div_posterior_status</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Div</span><span class="p">(</span>
+    <span class="n">text</span><span class="o">=</span><span class="p">(</span>
+        <span class="s2">"Observed evidence: &lt;b&gt;0&lt;/b&gt; successes, &lt;b&gt;0&lt;/b&gt; failures. "</span>
+        <span class="s2">"Posterior: &lt;b&gt;Beta(1, 1)&lt;/b&gt;."</span>
+    <span class="p">),</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">620</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">callback_posterior_update_template</span> <span class="o">=</span> <span class="s2">"""</span>
+<span class="s2">const LOG_SQRT_TWO_PI = 0.9189385332046727;</span>
+<span class="s2">const LANCZOS_COEFFICIENTS = [</span>
+<span class="s2">    676.5203681218851,</span>
+<span class="s2">    -1259.1392167224028,</span>
+<span class="s2">    771.32342877765313,</span>
+<span class="s2">    -176.61502916214059,</span>
+<span class="s2">    12.507343278686905,</span>
+<span class="s2">    -0.13857109526572012,</span>
+<span class="s2">    9.9843695780195716e-6,</span>
+<span class="s2">    1.5056327351493116e-7,</span>
+<span class="s2">];</span>
+
+<span class="s2">function logGamma(z) {</span>
+<span class="s2">    if (z &lt; 0.5) {</span>
+<span class="s2">        return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);</span>
+<span class="s2">    }</span>
+
+<span class="s2">    z -= 1;</span>
+<span class="s2">    let x = 0.99999999999980993;</span>
+<span class="s2">    for (let i = 0; i &lt; LANCZOS_COEFFICIENTS.length; i++) {</span>
+<span class="s2">        x += LANCZOS_COEFFICIENTS[i] / (z + i + 1);</span>
+<span class="s2">    }</span>
+<span class="s2">    const t = z + LANCZOS_COEFFICIENTS.length - 0.5;</span>
+<span class="s2">    return LOG_SQRT_TWO_PI + (z + 0.5) * Math.log(t) - t + Math.log(x);</span>
+<span class="s2">}</span>
+
+<span class="s2">function betaPdf(theta, alpha, beta) {</span>
+<span class="s2">    const logDensity =</span>
+<span class="s2">        (alpha - 1) * Math.log(theta)</span>
+<span class="s2">        + (beta - 1) * Math.log(1 - theta)</span>
+<span class="s2">        + logGamma(alpha + beta)</span>
+<span class="s2">        - logGamma(alpha)</span>
+<span class="s2">        - logGamma(beta);</span>
+<span class="s2">    return Math.exp(logDensity);</span>
+<span class="s2">}</span>
+
+<span class="s2">function formatNumber(value) {</span>
+<span class="s2">    if (Math.abs(value - Math.round(value)) &lt; 1e-9) {</span>
+<span class="s2">        return Math.round(value).toString();</span>
+<span class="s2">    }</span>
+<span class="s2">    return value.toFixed(1);</span>
+<span class="s2">}</span>
+
+<span class="s2">    const action = "__ACTION__";</span>
+
+<span class="s2">    if (action === "success") {</span>
+<span class="s2">        stateSource.data["successes"][0] += 1;</span>
+<span class="s2">    } else if (action === "failure") {</span>
+<span class="s2">        stateSource.data["failures"][0] += 1;</span>
+<span class="s2">    } else if (action === "reset") {</span>
+<span class="s2">        stateSource.data["successes"][0] = 0;</span>
+<span class="s2">        stateSource.data["failures"][0] = 0;</span>
+<span class="s2">    }</span>
+
+<span class="s2">    const successes = stateSource.data["successes"][0];</span>
+<span class="s2">    const failures = stateSource.data["failures"][0];</span>
+<span class="s2">    const alpha = 1 + successes;</span>
+<span class="s2">    const beta = 1 + failures;</span>
+<span class="s2">    stateSource.data["alpha"][0] = alpha;</span>
+<span class="s2">    stateSource.data["beta"][0] = beta;</span>
+
+<span class="s2">    const theta = densitySource.data["theta"];</span>
+<span class="s2">    const density = densitySource.data["density"];</span>
+<span class="s2">    let maxDensity = 0;</span>
+
+<span class="s2">    for (let i = 0; i &lt; theta.length; i++) {</span>
+<span class="s2">        density[i] = betaPdf(theta[i], alpha, beta);</span>
+<span class="s2">        if (density[i] &gt; maxDensity) {</span>
+<span class="s2">            maxDensity = density[i];</span>
+<span class="s2">        }</span>
+<span class="s2">    }</span>
+
+<span class="s2">    figure.y_range.end = Math.max(2.0, maxDensity * 1.12);</span>
+<span class="s2">    figure.title.text = "Beta posterior: alpha=" + formatNumber(alpha) + ", beta=" + formatNumber(beta);</span>
+<span class="s2">    statusDiv.text =</span>
+<span class="s2">        "Observed evidence: &lt;b&gt;" + successes + "&lt;/b&gt; successes, &lt;b&gt;" + failures + "&lt;/b&gt; failures. "</span>
+<span class="s2">        + "Posterior: &lt;b&gt;Beta(" + formatNumber(alpha) + ", " + formatNumber(beta) + ")&lt;/b&gt;.";</span>
+
+<span class="s2">    stateSource.change.emit();</span>
+<span class="s2">    densitySource.change.emit();</span>
+<span class="s2">"""</span>
+
+<span class="n">callback_posterior_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+    <span class="n">stateSource</span><span class="o">=</span><span class="n">source_posterior_state</span><span class="p">,</span>
+    <span class="n">densitySource</span><span class="o">=</span><span class="n">source_posterior_density</span><span class="p">,</span>
+    <span class="n">figure</span><span class="o">=</span><span class="n">figure_posterior_update</span><span class="p">,</span>
+    <span class="n">statusDiv</span><span class="o">=</span><span class="n">div_posterior_status</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">button_posterior_success</span><span class="o">.</span><span class="n">js_on_click</span><span class="p">(</span>
+    <span class="n">CustomJS</span><span class="p">(</span>
+        <span class="n">args</span><span class="o">=</span><span class="n">callback_posterior_args</span><span class="p">,</span>
+        <span class="n">code</span><span class="o">=</span><span class="n">callback_posterior_update_template</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"__ACTION__"</span><span class="p">,</span> <span class="s2">"success"</span><span class="p">),</span>
+        <span class="n">module</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">button_posterior_failure</span><span class="o">.</span><span class="n">js_on_click</span><span class="p">(</span>
+    <span class="n">CustomJS</span><span class="p">(</span>
+        <span class="n">args</span><span class="o">=</span><span class="n">callback_posterior_args</span><span class="p">,</span>
+        <span class="n">code</span><span class="o">=</span><span class="n">callback_posterior_update_template</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"__ACTION__"</span><span class="p">,</span> <span class="s2">"failure"</span><span class="p">),</span>
+        <span class="n">module</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">button_posterior_reset</span><span class="o">.</span><span class="n">js_on_click</span><span class="p">(</span>
+    <span class="n">CustomJS</span><span class="p">(</span>
+        <span class="n">args</span><span class="o">=</span><span class="n">callback_posterior_args</span><span class="p">,</span>
+        <span class="n">code</span><span class="o">=</span><span class="n">callback_posterior_update_template</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"__ACTION__"</span><span class="p">,</span> <span class="s2">"reset"</span><span class="p">),</span>
+        <span class="n">module</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">layout_posterior_update</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">column</span><span class="p">(</span>
+    <span class="n">figure_posterior_update</span><span class="p">,</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">row</span><span class="p">(</span>
+        <span class="n">button_posterior_success</span><span class="p">,</span>
+        <span class="n">button_posterior_failure</span><span class="p">,</span>
+        <span class="n">button_posterior_reset</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">div_posterior_status</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">layout_posterior_update</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="notebook-bokeh-lazy" data-bokeh-bundles='["/js/bokeh/3.9.1/bokeh.min.js","/js/bokeh/3.9.1/bokeh-widgets.min.js"]' data-bokeh-script="/images/notebook_outputs/ab_to_rl/beta-distribution-probabilities/interactive-0002-3e0921d84be5.js" data-bokeh-title="Interactive Beta-Bernoulli posterior update" style="min-height: 430px;"><p aria-live="polite" class="notebook-bokeh-lazy-status">Interactive visualization loading&hellip;</p><div data-root-id="p1151" id="a47d5df2-f23a-498d-8f48-196d9b2bb61e" style="display: contents;"></div></div></div>
+<div class="output_area">
+<div class="prompt"></div>
+
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=0173001b"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Choosing-Alpha-and-Beta">Choosing Alpha and Beta<a class="anchor-link" href="#Choosing-Alpha-and-Beta"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The parameters $\alpha$ and $\beta$ describe what we believe about the success probability before the current data arrive. Sometimes that belief is deliberately weak; sometimes it comes from earlier experiments or domain knowledge.</p>
+<p>A few choices come up often:</p>
+<ul>
+<li>$\mathrm{Beta}(1,1)$ is uniform over $[0,1]$. It gives the same density to every success probability before seeing data.</li>
+<li>$\mathrm{Beta}(1/2,1/2)$ is a standard non-informative prior known as <a href="https://en.wikipedia.org/wiki/Jeffreys_prior">Jeffreys' prior</a> for a Bernoulli probability.</li>
+<li>Larger values such as $\mathrm{Beta}(20,5)$ express stronger prior evidence. They should be used when that evidence has a real source, such as previous experiments or domain knowledge.</li>
+</ul>
+<p>The pseudo-count interpretation helps, but it should not be taken too literally. A $\mathrm{Beta}(20,5)$ prior behaves like prior evidence with a high success rate, but it is still a modelling choice, not observed data from the current experiment.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=b84dc717"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="What-the-Beta-Distribution-Is-Not-Saying">What the Beta Distribution Is Not Saying<a class="anchor-link" href="#What-the-Beta-Distribution-Is-Not-Saying"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The Beta distribution models uncertainty about one stable binary probability. It is a good fit when the feedback can be reduced to success versus failure, but that reduction is also its main limitation.</p>
+<p>It assumes:</p>
+<ul>
+<li>the unknown quantity is a probability between $0$ and $1$,</li>
+<li>each immediate outcome is binary, such as success or failure,</li>
+<li>the success probability is stable for the situation being modeled,</li>
+<li>counts of successes and failures are enough to summarize what we have learned.</li>
+</ul>
+<p>Those assumptions fit many A/B testing, diagnostic, quality-control, and binary-feedback examples. They are too narrow when outcomes have several categories, outcomes have different values, rewards are continuous, actions affect future states, or the environment changes over time. In those cases, the Beta distribution can still be a useful reference point, but the model needs to become richer.</p>
+<p>For problems with more than two mutually exclusive outcomes, the same idea becomes a <a href="https://en.wikipedia.org/wiki/Dirichlet_distribution">Dirichlet distribution</a> over category probabilities. The Beta distribution is the two-outcome special case.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=d0a5ed3a"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Summary">Summary<a class="anchor-link" href="#Summary"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The Beta distribution is a good fit when we are uncertain about one stable binary probability. It has the right support, $0 \leq \theta \leq 1$, and the normalized likelihood from binary data is itself a Beta density.</p>
+<p>Its two parameters have a concrete interpretation: $\alpha$ behaves like success evidence and $\beta$ behaves like failure evidence. Because the Beta prior is conjugate to Bernoulli and Binomial feedback, those parameters update by addition:</p>
+<p>$$
+\alpha \leftarrow \alpha + s,
+\qquad
+\beta \leftarrow \beta + f.
+$$</p>
+<p>That makes the Beta distribution both mathematically convenient and readable as a model of uncertainty about a binary probability. When the outcome is not binary, or when actions affect future states, we need a richer model.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=886dde6e"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Further-Reading">Further Reading<a class="anchor-link" href="#Further-Reading"><i class="fa-solid fa-sm fa-link"></i></a></h2><ul>
+<li>Follow-up post: <a href="{% post_url /blog/ab_to_rl/2026-05-17-beta-prior-sequential-binary-decisions %}">Beta Priors and P&oacute;lya Urns for Binary Decisions</a> connects the Beta distribution to online binary feedback, self-reinforcement, and multi-armed bandits.</li>
+<li>Historical source: <a href="https://doi.org/10.1098/rstl.1763.0053">An Essay towards Solving a Problem in the Doctrine of Chances</a> by Thomas Bayes and Richard Price studies inference about an unknown binomial success probability; in modern terms, it leads to the Beta-Bernoulli posterior update.</li>
+<li>Practical example: <a href="http://varianceexplained.org/statistics/beta_distribution_and_baseball/">Understanding the beta distribution using baseball statistics</a> by David Robinson gives a reader-friendly example of using Beta distributions to reason about uncertain rates.</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered" id="cell-id=b173fa77">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.metadata</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">platform</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"python: </span><span class="si">{</span><span class="n">platform</span><span class="o">.</span><span class="n">python_version</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">package_name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"numpy"</span><span class="p">,</span> <span class="s2">"scipy"</span><span class="p">,</span> <span class="s2">"matplotlib"</span><span class="p">,</span> <span class="s2">"seaborn"</span><span class="p">,</span> <span class="s2">"bokeh"</span><span class="p">,</span> <span class="s2">"jupyter-bokeh"</span><span class="p">]:</span>
+    <span class="n">version</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">version</span><span class="p">(</span><span class="n">package_name</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">package_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>python: 3.13.12
+numpy: 2.4.4
+scipy: 1.17.1
+matplotlib: 3.10.9
+seaborn: 0.13.2
+bokeh: 3.9.1
+jupyter-bokeh: 4.0.5
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script defer="" src="/js/notebook_bokeh_lazy.js?v=fe477ba95ce9"></script><div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt"></div><div class="inner_cell"><div class="text_cell_render border-box-sizing rendered_html"><p>This post is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/ab_to_rl/beta-distribution-probabilities.ipynb">Link to the full IPython notebook file</a></p></div></div></div>

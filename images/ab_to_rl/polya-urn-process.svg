@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="690" viewBox="0 0 1200 690" role="img" aria-labelledby="polya-title polya-description">
+  <title id="polya-title">The Pólya urn draw, replace, and reinforce loop</title>
+  <desc id="polya-description">An example urn starts with alpha equal to two red balls and beta equal to two blue balls. One ball is drawn at random. A red draw is returned with one new red ball, giving three red balls and two blue balls. A blue draw is returned with one new blue ball, giving two red balls and three blue balls. The updated urn is used for the next draw.</desc>
+
+  <defs>
+    <marker id="arrow-ink" viewBox="0 0 12 12" refX="7.5" refY="6" markerWidth="15" markerHeight="15" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0.5 0.75 L 11.5 6 L 0.5 11.25 Z" fill="#53616c"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 12 12" refX="7.5" refY="6" markerWidth="15" markerHeight="15" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0.5 0.75 L 11.5 6 L 0.5 11.25 Z" fill="#c44e52"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 12 12" refX="7.5" refY="6" markerWidth="15" markerHeight="15" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0.5 0.75 L 11.5 6 L 0.5 11.25 Z" fill="#4c72b0"/>
+    </marker>
+    <filter id="ball-shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#18232d" flood-opacity="0.22"/>
+    </filter>
+    <clipPath id="large-urn-clip">
+      <path d="M 90 198 C 99 252 105 400 132 458 C 153 504 267 504 288 458 C 315 400 321 252 330 198 Z"/>
+    </clipPath>
+    <clipPath id="red-result-urn-clip">
+      <path d="M 1004 215 C 1008 241 1011 284 1024 310 C 1036 332 1094 332 1106 310 C 1119 284 1122 241 1126 215 Z"/>
+    </clipPath>
+    <clipPath id="blue-result-urn-clip">
+      <path d="M 1004 455 C 1008 481 1011 524 1024 550 C 1036 572 1094 572 1106 550 C 1119 524 1122 481 1126 455 Z"/>
+    </clipPath>
+  </defs>
+
+  <rect x="1" y="1" width="1198" height="688" rx="20" fill="#ffffff" stroke="#d9dee2" stroke-width="2"/>
+
+  <!-- Step headings. -->
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="700" fill="#26343e">
+    <circle cx="78" cy="62" r="24" fill="#26343e"/>
+    <text x="78" y="70" text-anchor="middle" font-size="22" fill="#ffffff">1</text>
+    <text x="116" y="69" font-size="22" letter-spacing="0.8">CURRENT URN</text>
+
+    <circle cx="445" cy="62" r="24" fill="#26343e"/>
+    <text x="445" y="70" text-anchor="middle" font-size="22" fill="#ffffff">2</text>
+    <text x="483" y="69" font-size="22" letter-spacing="0.8">DRAW AT RANDOM</text>
+
+    <circle cx="760" cy="62" r="24" fill="#26343e"/>
+    <text x="760" y="70" text-anchor="middle" font-size="22" fill="#ffffff">3</text>
+    <text x="798" y="69" font-size="22" letter-spacing="0.8">RETURN + REINFORCE</text>
+  </g>
+
+  <!-- Starting urn. -->
+  <g>
+    <path d="M 90 198 C 99 252 105 400 132 458 C 153 504 267 504 288 458 C 315 400 321 252 330 198 Z" fill="#f2eadf"/>
+    <g clip-path="url(#large-urn-clip)" filter="url(#ball-shadow)">
+      <circle cx="171" cy="402" r="30" fill="#c44e52" stroke="#963b3f" stroke-width="3"/>
+      <circle cx="249" cy="402" r="30" fill="#4c72b0" stroke="#385989" stroke-width="3"/>
+      <circle cx="171" cy="337" r="30" fill="#4c72b0" stroke="#385989" stroke-width="3"/>
+      <circle cx="249" cy="337" r="30" fill="#c44e52" stroke="#963b3f" stroke-width="3"/>
+    </g>
+    <path d="M 90 198 C 99 252 105 400 132 458 C 153 504 267 504 288 458 C 315 400 321 252 330 198" fill="none" stroke="#53616c" stroke-width="6" stroke-linecap="round"/>
+    <ellipse cx="210" cy="198" rx="120" ry="29" fill="#e6dbcc" stroke="#53616c" stroke-width="6"/>
+    <path d="M 105 203 Q 210 236 315 203" fill="none" stroke="#9b8e7c" stroke-width="3"/>
+  </g>
+
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="21" font-weight="650">
+    <circle cx="75" cy="545" r="13" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+    <text x="99" y="552" fill="#c44e52">α = 2 red</text>
+    <circle cx="225" cy="545" r="13" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+    <text x="249" y="552" fill="#4c72b0">β = 2 blue</text>
+  </g>
+
+  <!-- One random draw, with both possible color branches. -->
+  <path d="M 332 260 C 385 260 405 300 446 300" fill="none" stroke="#53616c" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow-ink)"/>
+  <circle cx="480" cy="300" r="29" fill="#ffffff" stroke="#53616c" stroke-width="4"/>
+  <text x="480" y="311" text-anchor="middle" font-family="Georgia, serif" font-size="34" font-weight="700" fill="#53616c">?</text>
+  <path d="M 506 287 C 538 270 549 226 574 212" fill="none" stroke="#c44e52" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow-red)"/>
+  <path d="M 506 313 C 538 330 549 374 574 388" fill="none" stroke="#4c72b0" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow-blue)"/>
+
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" text-anchor="middle">
+    <circle cx="615" cy="195" r="34" fill="#c44e52" stroke="#963b3f" stroke-width="4" filter="url(#ball-shadow)"/>
+    <circle cx="604" cy="184" r="8" fill="#ffffff" opacity="0.28"/>
+    <text x="615" y="256" font-size="20" font-weight="700" fill="#c44e52">RED</text>
+    <text x="545" y="290" text-anchor="start" font-size="18" fill="#5b6670">probability</text>
+    <text x="680" y="277" font-size="16" fill="#5b6670">α</text>
+    <line x1="654" y1="284" x2="706" y2="284" stroke="#5b6670" stroke-width="1.8"/>
+    <text x="680" y="303" font-size="16" fill="#5b6670">α + β</text>
+
+    <circle cx="615" cy="405" r="34" fill="#4c72b0" stroke="#385989" stroke-width="4" filter="url(#ball-shadow)"/>
+    <circle cx="604" cy="394" r="8" fill="#ffffff" opacity="0.28"/>
+    <text x="615" y="466" font-size="20" font-weight="700" fill="#4c72b0">BLUE</text>
+    <text x="545" y="500" text-anchor="start" font-size="18" fill="#5b6670">probability</text>
+    <text x="680" y="487" font-size="16" fill="#5b6670">β</text>
+    <line x1="654" y1="494" x2="706" y2="494" stroke="#5b6670" stroke-width="1.8"/>
+    <text x="680" y="513" font-size="16" fill="#5b6670">α + β</text>
+  </g>
+
+  <!-- Red branch. -->
+  <path d="M 650 195 H 733" fill="none" stroke="#c44e52" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow-red)"/>
+  <rect x="750" y="113" width="400" height="218" rx="18" fill="#fbf1f1" stroke="#e4bfc1" stroke-width="2"/>
+  <text x="780" y="151" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="750" fill="#963b3f" letter-spacing="0.7">IF RED IS DRAWN</text>
+  <text text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="700">
+    <tspan x="1065" y="155" fill="#963b3f">α + 1 = 3 red</tspan>
+    <tspan x="1065" y="177" fill="#385989">β = 2 blue</tspan>
+  </text>
+
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" text-anchor="middle">
+    <circle cx="803" cy="214" r="24" fill="#c44e52" stroke="#963b3f" stroke-width="3"/>
+    <circle cx="795" cy="206" r="6" fill="#ffffff" opacity="0.28"/>
+    <text x="803" y="257" font-size="16" fill="#5b6670">return</text>
+    <text x="855" y="223" font-size="30" font-weight="500" fill="#7b858d">+</text>
+    <circle cx="905" cy="214" r="24" fill="#c44e52" stroke="#963b3f" stroke-width="3"/>
+    <circle cx="897" cy="206" r="6" fill="#ffffff" opacity="0.28"/>
+    <text x="905" y="257" font-size="16" fill="#5b6670">new ball</text>
+  </g>
+  <path d="M 941 214 H 978" fill="none" stroke="#c44e52" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-red)"/>
+  <g>
+    <path d="M 1004 215 C 1008 241 1011 284 1024 310 C 1036 332 1094 332 1106 310 C 1119 284 1122 241 1126 215 Z" fill="#f2eadf"/>
+    <g clip-path="url(#red-result-urn-clip)">
+      <circle cx="1032" cy="291" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+      <circle cx="1066" cy="299" r="16" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+      <circle cx="1098" cy="288" r="16" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+      <circle cx="1048" cy="263" r="16" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+      <circle cx="1083" cy="261" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+    </g>
+    <path d="M 1004 215 C 1008 241 1011 284 1024 310 C 1036 332 1094 332 1106 310 C 1119 284 1122 241 1126 215" fill="none" stroke="#53616c" stroke-width="4" stroke-linecap="round"/>
+    <ellipse cx="1065" cy="215" rx="61" ry="15" fill="#e6dbcc" stroke="#53616c" stroke-width="4"/>
+  </g>
+
+  <!-- Blue branch. -->
+  <path d="M 650 405 H 733" fill="none" stroke="#4c72b0" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow-blue)"/>
+  <rect x="750" y="353" width="400" height="218" rx="18" fill="#f0f3f9" stroke="#bdcae0" stroke-width="2"/>
+  <text x="780" y="391" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="750" fill="#385989" letter-spacing="0.7">IF BLUE IS DRAWN</text>
+  <text text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="700">
+    <tspan x="1065" y="395" fill="#963b3f">α = 2 red</tspan>
+    <tspan x="1065" y="417" fill="#385989">β + 1 = 3 blue</tspan>
+  </text>
+
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" text-anchor="middle">
+    <circle cx="803" cy="454" r="24" fill="#4c72b0" stroke="#385989" stroke-width="3"/>
+    <circle cx="795" cy="446" r="6" fill="#ffffff" opacity="0.28"/>
+    <text x="803" y="497" font-size="16" fill="#5b6670">return</text>
+    <text x="855" y="463" font-size="30" font-weight="500" fill="#7b858d">+</text>
+    <circle cx="905" cy="454" r="24" fill="#4c72b0" stroke="#385989" stroke-width="3"/>
+    <circle cx="897" cy="446" r="6" fill="#ffffff" opacity="0.28"/>
+    <text x="905" y="497" font-size="16" fill="#5b6670">new ball</text>
+  </g>
+  <path d="M 941 454 H 978" fill="none" stroke="#4c72b0" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-blue)"/>
+  <g>
+    <path d="M 1004 455 C 1008 481 1011 524 1024 550 C 1036 572 1094 572 1106 550 C 1119 524 1122 481 1126 455 Z" fill="#f2eadf"/>
+    <g clip-path="url(#blue-result-urn-clip)">
+      <circle cx="1032" cy="531" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+      <circle cx="1066" cy="539" r="16" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+      <circle cx="1098" cy="528" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+      <circle cx="1048" cy="503" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+      <circle cx="1083" cy="501" r="16" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+    </g>
+    <path d="M 1004 455 C 1008 481 1011 524 1024 550 C 1036 572 1094 572 1106 550 C 1119 524 1122 481 1126 455" fill="none" stroke="#53616c" stroke-width="4" stroke-linecap="round"/>
+    <ellipse cx="1065" cy="455" rx="61" ry="15" fill="#e6dbcc" stroke="#53616c" stroke-width="4"/>
+  </g>
+
+  <!-- Repeat loop. -->
+  <path d="M 1150 222 H 1160 Q 1175 222 1175 237 V 616 C 1175 638 1156 650 1135 650 H 264 C 230 650 210 629 210 600 V 580" fill="none" stroke="#53616c" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-ink)"/>
+  <path d="M 1150 462 H 1175" fill="none" stroke="#53616c" stroke-width="5" stroke-linecap="round"/>
+  <rect x="426" y="622" width="420" height="54" rx="27" fill="#ffffff" stroke="#b9c0c6" stroke-width="2"/>
+  <circle cx="455" cy="649" r="20" fill="#26343e"/>
+  <text x="455" y="656" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="19" font-weight="700" fill="#ffffff">4</text>
+  <text x="489" y="656" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="19" font-weight="700" fill="#26343e" letter-spacing="0.5">REPEAT WITH UPDATED COUNTS</text>
+</svg>

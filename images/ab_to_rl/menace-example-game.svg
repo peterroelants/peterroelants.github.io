@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 420" role="img" aria-labelledby="menace-title menace-description" color="#20242b">
+  <title id="menace-title">A MENACE game played with matchboxes and colored beads</title>
+  <desc id="menace-description">A sequence of tic-tac-toe board states. At each MENACE turn, the current state identifies a matchbox and a colored bead selects the next move. MENACE's colored crosses and the opponent's noughts accumulate until the opponent completes a diagonal.</desc>
+
+  <defs>
+    <marker id="arrowhead" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="18" markerHeight="18" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M 1 1 L 11 6 L 1 11 Z" fill="#20242b"/>
+    </marker>
+
+    <g id="board-grid" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round">
+      <path d="M 36 0 V 108 M 72 0 V 108 M 0 36 H 108 M 0 72 H 108"/>
+    </g>
+
+    <g id="mark-x" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
+      <path d="M -10 -10 L 10 10 M 10 -10 L -10 10"/>
+    </g>
+
+    <circle id="mark-o" cx="0" cy="0" r="10" fill="none" stroke="currentColor" stroke-width="5"/>
+  </defs>
+
+  <rect width="1500" height="420" fill="#ffffff"/>
+
+  <!-- Empty board. -->
+  <g transform="translate(40 30)">
+    <use href="#board-grid"/>
+  </g>
+
+  <path d="M 165 84 H 220" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+
+  <!-- Empty-board matchbox; a red bead selects the bottom-left cross. -->
+  <g transform="translate(240 12)">
+    <rect x="0" y="0" width="112" height="132" rx="4" fill="#ffffff" stroke="#20242b" stroke-width="6"/>
+    <path d="M 0 88 H 112 M 0 88 L 56 132 L 112 88" fill="none" stroke="#20242b" stroke-width="5" stroke-linejoin="round"/>
+    <g transform="translate(21 10) scale(0.65)">
+      <use href="#board-grid"/>
+    </g>
+    <circle cx="56" cy="108" r="13" fill="#df3b2f" stroke="#b8261d" stroke-width="3"/>
+  </g>
+
+  <path d="M 375 84 H 430" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+
+  <!-- MENACE plays a red cross in the bottom-left square. -->
+  <g transform="translate(450 30)">
+    <use href="#board-grid"/>
+    <g transform="translate(18 90)" color="#df3b2f"><use href="#mark-x"/></g>
+  </g>
+
+  <path d="M 575 84 H 635" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+
+  <!-- The opponent replies with a nought in the center. -->
+  <g transform="translate(655 30)">
+    <use href="#board-grid"/>
+    <g transform="translate(18 90)" color="#df3b2f"><use href="#mark-x"/></g>
+    <g transform="translate(54 54)"><use href="#mark-o"/></g>
+  </g>
+
+  <path d="M 780 84 H 840" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+
+  <!-- The corresponding matchbox; a blue bead selects the bottom-center cross. -->
+  <g transform="translate(860 12)">
+    <rect x="0" y="0" width="112" height="132" rx="4" fill="#ffffff" stroke="#20242b" stroke-width="6"/>
+    <path d="M 0 88 H 112 M 0 88 L 56 132 L 112 88" fill="none" stroke="#20242b" stroke-width="5" stroke-linejoin="round"/>
+    <g transform="translate(21 10) scale(0.65)">
+      <use href="#board-grid"/>
+      <g transform="translate(18 90)" color="#df3b2f"><use href="#mark-x"/></g>
+      <g transform="translate(54 54)"><use href="#mark-o"/></g>
+    </g>
+    <circle cx="56" cy="108" r="13" fill="#244cc8" stroke="#153299" stroke-width="3"/>
+  </g>
+
+  <path d="M 995 84 H 1050" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+
+  <!-- MENACE plays a blue cross in the bottom-center square. -->
+  <g transform="translate(1070 30)">
+    <use href="#board-grid"/>
+    <g transform="translate(18 90)" color="#df3b2f"><use href="#mark-x"/></g>
+    <g transform="translate(54 90)" color="#244cc8"><use href="#mark-x"/></g>
+    <g transform="translate(54 54)"><use href="#mark-o"/></g>
+  </g>
+
+  <!-- Wrap to the second row after the opponent plays a nought at bottom-right. -->
+  <path d="M 1195 84 H 1325 Q 1385 84 1385 144 V 176 Q 1385 230 1325 230 H 145 Q 95 230 95 278 L 142 305" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowhead)"/>
+
+  <g transform="translate(180 265)">
+    <use href="#board-grid"/>
+    <g transform="translate(18 90)" color="#df3b2f"><use href="#mark-x"/></g>
+    <g transform="translate(54 90)" color="#244cc8"><use href="#mark-x"/></g>
+    <g transform="translate(54 54)"><use href="#mark-o"/></g>
+    <g transform="translate(90 90)"><use href="#mark-o"/></g>
+  </g>
+
+  <path d="M 305 319 H 390" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+
+  <!-- The corresponding matchbox; an orange bead selects the middle-left cross. -->
+  <g transform="translate(410 247)">
+    <rect x="0" y="0" width="112" height="132" rx="4" fill="#ffffff" stroke="#20242b" stroke-width="6"/>
+    <path d="M 0 88 H 112 M 0 88 L 56 132 L 112 88" fill="none" stroke="#20242b" stroke-width="5" stroke-linejoin="round"/>
+    <g transform="translate(21 10) scale(0.65)">
+      <use href="#board-grid"/>
+      <g transform="translate(18 90)" color="#df3b2f"><use href="#mark-x"/></g>
+      <g transform="translate(54 90)" color="#244cc8"><use href="#mark-x"/></g>
+      <g transform="translate(54 54)"><use href="#mark-o"/></g>
+      <g transform="translate(90 90)"><use href="#mark-o"/></g>
+    </g>
+    <circle cx="56" cy="108" r="13" fill="#e57818" stroke="#b6530b" stroke-width="3"/>
+  </g>
+
+  <path d="M 545 319 H 625" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+
+  <!-- MENACE plays an orange cross in the middle-left square. -->
+  <g transform="translate(640 265)">
+    <use href="#board-grid"/>
+    <g transform="translate(18 54)" color="#e57818"><use href="#mark-x"/></g>
+    <g transform="translate(18 90)" color="#df3b2f"><use href="#mark-x"/></g>
+    <g transform="translate(54 90)" color="#244cc8"><use href="#mark-x"/></g>
+    <g transform="translate(54 54)"><use href="#mark-o"/></g>
+    <g transform="translate(90 90)"><use href="#mark-o"/></g>
+  </g>
+
+  <path d="M 765 319 H 850" fill="none" stroke="#20242b" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+
+  <!-- The opponent completes a nought diagonal from top-left to bottom-right. -->
+  <g transform="translate(870 265)">
+    <use href="#board-grid"/>
+    <g transform="translate(18 54)" color="#e57818"><use href="#mark-x"/></g>
+    <g transform="translate(18 90)" color="#df3b2f"><use href="#mark-x"/></g>
+    <g transform="translate(54 90)" color="#244cc8"><use href="#mark-x"/></g>
+    <g transform="translate(18 18)"><use href="#mark-o"/></g>
+    <g transform="translate(54 54)"><use href="#mark-o"/></g>
+    <g transform="translate(90 90)"><use href="#mark-o"/></g>
+  </g>
+</svg>

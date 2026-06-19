@@ -1,0 +1,1052 @@
+---
+layout: post
+title: 'Gaussian processes (2/3): Fitting a kernel'
+description: Fit a parameterized Gaussian process kernel on the Mauna Loa CO₂ dataset. We'll use JAX and Optax to implement the model and fit the kernel parameters.
+tags:
+- Gaussian Process
+- Kernel
+- JAX
+- Machine Learning
+- Notebook
+image: /images/social/2019-01-06-gaussian-process-kernel-fitting-preview.png
+updates:
+- date: '2026-05-04'
+  title: Reimplemented with JAX
+  description: Replaced the TensorFlow Probability implementation with explicit JAX code
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Gaussian-processes-(2/3):-Fitting-a-kernel">Gaussian processes (2/3): Fitting a kernel<a class="anchor-link" href="#Gaussian-processes-(2/3):-Fitting-a-kernel"><i class="fa-solid fa-sm fa-link"></i></a></h1><p>In the <a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">previous post</a> we introduced the Gaussian process model with the exponentiated quadratic covariance function. In this post we will introduce parametrized covariance functions (kernels), fit them to real world data, and use them to make posterior predictions. This post is the second part of a series on Gaussian processes:</p>
+<ol>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">Understanding Gaussian processes</a></li>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-06-gaussian-process-kernel-fitting %}">Fitting a kernel (this)</a></li>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}">Gaussian process kernels</a></li>
+</ol>
+<p>We will implement the Gaussian process model in <a href="https://jax.dev/">JAX</a>, keeping the kernel and likelihood calculations explicit so the model details remain visible.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">"ignore"</span><span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NamedTuple</span><span class="p">,</span> <span class="n">TypeAlias</span><span class="p">,</span> <span class="n">cast</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+
+<span class="n">jax</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">"jax_enable_x64"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax.scipy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jsp</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">optax</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">tqdm.notebook</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.plotting</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.models</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span><span class="p">,</span> <span class="n">HTML</span>
+
+<span class="n">bokeh</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">output_notebook</span><span class="p">(</span><span class="n">hide_banner</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">Array</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span>
+<span class="n">Scalar</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Array</span>
+
+
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_javascript" id="6077d3ab-f662-4b7c-9767-99607e21811b">
+
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Mauna-Loa-CO%E2%82%82-data">Mauna Loa CO₂ data<a class="anchor-link" href="#Mauna-Loa-CO%E2%82%82-data"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The dataset used in this example is the monthly average <a href="https://en.wikipedia.org/wiki/Carbon_dioxide_in_Earth%27s_atmosphere">atmospheric CO₂</a> concentrations (in parts per million (ppm)) collected at the <a href="https://en.wikipedia.org/wiki/Mauna_Loa_Observatory">Mauna Loa Observatory</a> in Hawaii. The observatory has been collecting these CO₂ concentrations since 1958 and <a href="https://en.wikipedia.org/wiki/Keeling_Curve">showed</a> the first significant evidence of rapidly increasing CO₂ levels in the atmosphere.</p>
+<p>These measures of atmospheric CO₂ concentrations show different characteristics such as a long term rising trend, variation with the seasons, and smaller irregularities. This made it into a canonical example in Gaussian process modelling<a href="#References">⁽&sup1;⁾</a>.</p>
+<p>In this post the data is downloaded as a CSV file from the <a href="https://scrippsco2.ucsd.edu/data/atmospheric_co2/primary_mlo_co2_record.html">Scripps CO₂ Program website</a>. This data is loaded in a pandas dataframe and plotted below.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Load the data</span>
+<span class="c1"># Load the data from the Scripps CO2 program website.</span>
+<span class="n">co2_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span>  <span class="c1"># ty: ignore[no-matching-overload] - pandas stub mismatch</span>
+    <span class="c1"># Source: https://scrippsco2.ucsd.edu/assets/data/atmospheric/stations/in_situ_co2/monthly/monthly_in_situ_co2_mlo.csv</span>
+    <span class="n">filepath_or_buffer</span><span class="o">=</span><span class="s2">"./monthly_in_situ_co2_mlo.csv"</span><span class="p">,</span>
+    <span class="n">header</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Data starts here</span>
+    <span class="n">skiprows</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>  <span class="c1"># Headers consist of multiple rows</span>
+    <span class="n">usecols</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>  <span class="c1"># Only keep the 'Date' and 'CO2' columns</span>
+    <span class="n">na_values</span><span class="o">=</span><span class="s2">"-99.99"</span><span class="p">,</span>  <span class="c1"># NaNs are denoted as '-99.99'</span>
+<span class="p">)</span>
+
+<span class="c1"># Drop missing values</span>
+<span class="n">co2_df</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># Remove whitespace from column names</span>
+<span class="n">co2_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered celltag_lazy-bokeh celltag_lazy-bokeh-height=360 celltag_lazy-bokeh-title=Atmospheric carbon dioxide concentrations at Mauna Loa">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot data</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">1958</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">2021</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">310</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">420</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"Date"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"CO₂ (ppm)"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span>
+        <span class="n">text</span><span class="o">=</span><span class="s2">"In situ air measurements at Mauna Loa, Observatory, Hawaii"</span><span class="p">,</span>
+        <span class="n">text_font_style</span><span class="o">=</span><span class="s2">"italic"</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Atmospheric CO₂ concentrations"</span><span class="p">,</span> <span class="n">text_font_size</span><span class="o">=</span><span class="s2">"14pt"</span><span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">observed_source</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">co2_df</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="s2">"co2"</span><span class="p">:</span> <span class="n">co2_df</span><span class="o">.</span><span class="n">CO2</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()}</span>
+<span class="p">)</span>
+<span class="n">observed_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">line</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"co2"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">observed_source</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"All data"</span><span class="p">,</span>
+    <span class="n">line_width</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"midnightblue"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_tools</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">observed_renderer</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[(</span><span class="s2">"Date"</span><span class="p">,</span> <span class="s2">"@date</span><span class="si">{0.00}</span><span class="s2">"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"CO₂"</span><span class="p">,</span> <span class="s2">"@co2</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">)],</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">"vline"</span><span class="p">,</span>
+        <span class="n">line_policy</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="o">.</span><span class="n">location</span> <span class="o">=</span> <span class="s2">"top_left"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">toolbar</span><span class="o">.</span><span class="n">autohide</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="notebook-bokeh-lazy" data-bokeh-bundles='["/js/bokeh/3.9.1/bokeh.min.js","/js/bokeh/3.9.1/bokeh-gl.min.js","/js/bokeh/3.9.1/bokeh-widgets.min.js","/js/bokeh/3.9.1/bokeh-tables.min.js","/js/bokeh/3.9.1/bokeh-mathjax.min.js"]' data-bokeh-script="/images/notebook_outputs/gaussian_process/gaussian-process-kernel-fitting/interactive-0000-313426c4ab78.js" data-bokeh-title="Atmospheric carbon dioxide concentrations at Mauna Loa" style="min-height: 360px;"><p aria-live="polite" class="notebook-bokeh-lazy-status">Interactive visualization loading&hellip;</p><div data-root-id="p1010" id="c063a6f8-e409-41e8-8f13-89e809d18b90" style="display: contents;"></div></div></div>
+<div class="output_area">
+<div class="prompt"></div>
+
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Split the data into observed and to predict</span>
+<span class="n">date_split_predict</span> <span class="o">=</span> <span class="mi">2010</span>
+<span class="n">df_observed</span> <span class="o">=</span> <span class="n">co2_df</span><span class="p">[</span><span class="n">co2_df</span><span class="o">.</span><span class="n">Date</span> <span class="o">&lt;</span> <span class="n">date_split_predict</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df_observed</span><span class="p">)</span><span class="si">}</span><span class="s2"> measurements in the observed set"</span><span class="p">)</span>
+<span class="n">df_predict</span> <span class="o">=</span> <span class="n">co2_df</span><span class="p">[</span><span class="n">co2_df</span><span class="o">.</span><span class="n">Date</span> <span class="o">&gt;=</span> <span class="n">date_split_predict</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df_predict</span><span class="p">)</span><span class="si">}</span><span class="s2"> measurements in the test set"</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>617 measurements in the observed set
+133 measurements in the test set
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Gaussian-process-model">Gaussian process model<a class="anchor-link" href="#Gaussian-process-model"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>We're going to use a Gaussian process model to make posterior predictions of the atmospheric CO₂ concentrations for 2010 and after based on the observed data from before 2010.</p>
+<p>A Gaussian process is uniquely defined by its mean function $m(x)$ and covariance function $k(x,x')$:</p>
+<p>$$f(x) \sim \mathcal{GP}(m(x),k(x,x'))$$</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Mean-function">Mean function<a class="anchor-link" href="#Mean-function"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>Since most interesting effects will be modelled by the kernel function we will keep the mean function simple. In this example the mean function is going to be modelled as a function that always returns the mean of the observations.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define mean function which is the mean of observations</span>
+<span class="n">observations_mean</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">df_observed</span><span class="o">.</span><span class="n">CO2</span><span class="o">.</span><span class="n">values</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">mean_fn</span><span class="p">(</span><span class="n">index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Use the empirical CO2 mean as the GP prior mean."""</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">index_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],),</span> <span class="n">fill_value</span><span class="o">=</span><span class="n">observations_mean</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span>
+    <span class="p">)</span>
+
+
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Kernel-function">Kernel function<a class="anchor-link" href="#Kernel-function"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>To model the different characteristics of our dataset we will create a covariance (kernel) function by combining a few small JAX kernel functions. The different data characteristics will be modelled as:</p>
+<ul>
+<li>Long term smooth change in CO₂ levels over time modelled by an exponentiated quadratic kernel defined in the code below as <code>smooth_kernel</code>.</li>
+<li>Seasonality based on a local periodic kernel, which consists of a periodic kernel multiplied with an exponentiated quadratic to make the seasonality decay as it gets farther from the observations. This seasonal periodic kernel is defined in the code below as <code>local_periodic_kernel</code>.</li>
+<li>Short to medium term irregularities modelled by a rational quadratic kernel, which is defined in the code below as <code>irregular_kernel</code>.</li>
+<li>Observational noise which will be modelled directly by adding <code>observation_noise_variance</code> to the kernel matrix diagonal.</li>
+</ul>
+<p>These different kernels will be summed into one single kernel function $k_{\theta}(x_a, x_b)$ that will allow for all these effects to occur together. This kernel is defined as <code>kernel</code> in the code below. Each of the kernels has hyperparameters $\theta$ that can be tuned, they will be defined as unconstrained log-parameters and transformed to positive values before use. <a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}">This post</a> provides more insight on the kernels used here and the effect of their hyperparameters.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define the parameters for the kernel function we're fitting</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">KernelParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Named GP hyperparameters that remain a JAX pytree."""</span>
+
+    <span class="n">smooth_amplitude</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">smooth_length_scale</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">periodic_amplitude</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">periodic_length_scale</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">periodic_period</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">periodic_local_length_scale</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">irregular_amplitude</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">irregular_length_scale</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">irregular_scale_mixture</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">observation_noise_variance</span><span class="p">:</span> <span class="n">Array</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define the kernel with trainable parameters.</span>
+<span class="c1"># We optimize unconstrained log-parameters and exponentiate them so</span>
+<span class="c1"># kernel hyperparameters stay positive.</span>
+
+<span class="c1"># Use float64 to reduce numerical issues when computing the</span>
+<span class="c1"># Cholesky decomposition of the kernel matrix.</span>
+<span class="n">JITTER</span> <span class="o">=</span> <span class="mf">1e-6</span>
+<span class="n">TINY</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">tiny</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">log_param</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Initialize a positive hyperparameter in unconstrained log space."""</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
+
+
+<span class="c1"># Initial unconstrained values</span>
+<span class="n">params</span> <span class="o">=</span> <span class="n">KernelParams</span><span class="p">(</span>
+    <span class="n">smooth_amplitude</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">10.0</span><span class="p">),</span>
+    <span class="n">smooth_length_scale</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">10.0</span><span class="p">),</span>
+    <span class="n">periodic_amplitude</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">5.0</span><span class="p">),</span>
+    <span class="n">periodic_length_scale</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">periodic_period</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">periodic_local_length_scale</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">irregular_amplitude</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">irregular_length_scale</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">irregular_scale_mixture</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">observation_noise_variance</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Map unconstrained optimizer values to positive hyperparameters."""</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">raw_value</span><span class="p">)</span> <span class="o">+</span> <span class="n">TINY</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">transform_params</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Convert learned log-parameters into valid kernel hyperparameters."""</span>
+    <span class="k">return</span> <span class="n">KernelParams</span><span class="p">(</span>
+        <span class="n">smooth_amplitude</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">smooth_amplitude</span><span class="p">),</span>
+        <span class="n">smooth_length_scale</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">smooth_length_scale</span><span class="p">),</span>
+        <span class="n">periodic_amplitude</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">periodic_amplitude</span><span class="p">),</span>
+        <span class="n">periodic_length_scale</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">periodic_length_scale</span><span class="p">),</span>
+        <span class="n">periodic_period</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">periodic_period</span><span class="p">),</span>
+        <span class="n">periodic_local_length_scale</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span>
+            <span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">periodic_local_length_scale</span>
+        <span class="p">),</span>
+        <span class="n">irregular_amplitude</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">irregular_amplitude</span><span class="p">),</span>
+        <span class="n">irregular_length_scale</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">irregular_length_scale</span><span class="p">),</span>
+        <span class="n">irregular_scale_mixture</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">irregular_scale_mixture</span><span class="p">),</span>
+        <span class="n">observation_noise_variance</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span>
+            <span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">observation_noise_variance</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define kernel functions</span>
+
+<span class="c1"># The inputs in this post are one-dimensional dates. Keeping them as</span>
+<span class="c1"># explicit column vectors makes the pairwise covariance shapes visible.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">as_column</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Represent one-dimensional inputs as column vectors."""</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">squared_distance</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compute pairwise squared distances for stationary kernels."""</span>
+    <span class="n">xa</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xa</span><span class="p">)</span>
+    <span class="n">xb</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xb</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">xa</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">xb</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">exponentiated_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">amplitude</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Model long-term smooth variation with an RBF covariance."""</span>
+    <span class="k">return</span> <span class="n">amplitude</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span>
+        <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">squared_distance</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">)</span> <span class="o">/</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">scale_mixture</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Model variation across several length scales."""</span>
+    <span class="k">return</span> <span class="n">amplitude</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="p">(</span>
+        <span class="mf">1.0</span> <span class="o">+</span> <span class="n">squared_distance</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">scale_mixture</span> <span class="o">*</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+    <span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="n">scale_mixture</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">periodic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">period</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Model repeating structure with a periodic covariance."""</span>
+    <span class="n">xa</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xa</span><span class="p">)</span>
+    <span class="n">xb</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xb</span><span class="p">)</span>
+    <span class="n">distance</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">xa</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">xb</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+    <span class="n">sine_squared</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">distance</span> <span class="o">/</span> <span class="n">period</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">amplitude</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">sine_squared</span> <span class="o">/</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">periodic_length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">period</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">local_length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Model periodic structure that fades with distance."""</span>
+    <span class="k">return</span> <span class="n">periodic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+        <span class="n">amplitude</span><span class="o">=</span><span class="n">amplitude</span><span class="p">,</span>
+        <span class="n">length_scale</span><span class="o">=</span><span class="n">periodic_length_scale</span><span class="p">,</span>
+        <span class="n">period</span><span class="o">=</span><span class="n">period</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">*</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="n">local_length_scale</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">smooth_kernel</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">positive_params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Extract the long-term smooth component of the CO2 model."""</span>
+    <span class="k">return</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+        <span class="n">amplitude</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">smooth_amplitude</span><span class="p">,</span>
+        <span class="n">length_scale</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">smooth_length_scale</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">irregular_kernel</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">positive_params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Extract the medium-scale irregular component of the CO2 model."""</span>
+    <span class="k">return</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+        <span class="n">amplitude</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">irregular_amplitude</span><span class="p">,</span>
+        <span class="n">length_scale</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">irregular_length_scale</span><span class="p">,</span>
+        <span class="n">scale_mixture</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">irregular_scale_mixture</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define the combined kernel we're going to be fitting</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">combined_kernel</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">positive_params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Combine smooth, seasonal, and irregular CO2 covariance components."""</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">smooth_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span> <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">)</span>
+        <span class="o">+</span> <span class="n">local_periodic_kernel</span><span class="p">(</span>
+            <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+            <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+            <span class="n">amplitude</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">periodic_amplitude</span><span class="p">,</span>
+            <span class="n">periodic_length_scale</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">periodic_length_scale</span><span class="p">,</span>
+            <span class="n">period</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">periodic_period</span><span class="p">,</span>
+            <span class="n">local_length_scale</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">periodic_local_length_scale</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="o">+</span> <span class="n">irregular_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span> <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">)</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Tuning-the-hyperparameters">Tuning the hyperparameters<a class="anchor-link" href="#Tuning-the-hyperparameters"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>We can tune the hyperparameters $\theta$ of our Gaussian process model based on the data. This post uses JAX to fit the parameters by maximizing the marginal likelihood  $p(\mathbf{y} \mid X, \theta)$ of the Gaussian process distribution based on the observed data $(X, \mathbf{y})$.</p>
+<p>$$\hat{\theta}  = \underset{\theta}{\text{argmax}} \left( p(\mathbf{y} \mid X, \theta) \right)$$</p>
+<p>The marginal likelihood of the Gaussian process is the likelihood of a <a href="{% post_url /blog/misc/2018-09-28-multivariate-normal-primer %}">Gaussian distribution</a> which is defined as:</p>
+<p>$$p(\mathbf{y} \mid \mu, \Sigma) = \frac{1}{\sqrt{(2\pi)^d \lvert\Sigma\rvert}} \exp{ \left( -\frac{1}{2}(\mathbf{y} - \mu)^{\top} \Sigma^{-1} (\mathbf{y} - \mu) \right)}$$</p>
+<p>The mean is calculated from the parameterized mean function using the observed data $X$ as input: $\mu_{\theta} = m_{\theta}(X)$. For the observed targets, the covariance also includes observation noise on the diagonal: $\Sigma_{\theta} = k_{\theta}(X, X) + \sigma_n^2 I$. We can then write the marginal likelihood as:</p>
+<p>$$
+p(\mathbf{y} \mid X, \theta) =
+\frac{1}{\sqrt{(2\pi)^d \lvert \Sigma_{\theta} \rvert}} \exp{ \left( -\frac{1}{2}(\mathbf{y} - \mu_{\theta})^\top \Sigma_{\theta}^{-1} (\mathbf{y} - \mu_{\theta}) \right)}$$</p>
+<p>With $d$ the dimensionality of the marginal and $\lvert \Sigma_{\theta} \rvert$ the determinant of the observed-data covariance matrix. We can get rid of the exponent by taking the log and maximizing the log marginal likelihood:</p>
+<p>$$ \log{p(\mathbf{y} \mid X, \theta)} =
+-\frac{1}{2}(\mathbf{y} - \mu_{\theta})^\top \Sigma_{\theta}^{-1} (\mathbf{y} - \mu_{\theta}) - \frac{1}{2} \log{\lvert \Sigma_{\theta} \rvert} - \frac{d}{2} \log{2 \pi}$$</p>
+<p>The first term ($-0.5 (\mathbf{y} - \mu_{\theta})^\top \Sigma_{\theta}^{-1} (\mathbf{y} - \mu_{\theta})$) is the data-fit while the rest ($-0.5(\log{\lvert \Sigma_{\theta} \rvert} + d\log{2 \pi})$) is a complexity penalty, also known as <a href="https://en.wikipedia.org/wiki/Differential_entropy">differential entropy</a><a href="#Sidenotes">⁽&sup1;⁾</a>.</p>
+<p>The optimal parameters $\hat{\theta}$ can then be found by minimizing the negative of the log marginal likelihood:</p>
+<p>$$
+\hat{\theta}  = \underset{\theta}{\text{argmax}} \left( p(\mathbf{y} \mid X, \theta) \right) = \underset{\theta}{\text{argmin}} { \;-\log{ p(\mathbf{y} \mid X, \theta)}}$$</p>
+<p>Since in this case the log marginal likelihood is differentiable with respect to the kernel hyperparameters, we can use a <a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">gradient-based approach</a> to minimize the negative log marginal likelihood (NLL). In this post we will use JAX automatic differentiation and Optax to train the hyperparameters on the full observed dataset.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Convert observed and prediction data to JAX arrays</span>
+<span class="n">X_observed</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">df_observed</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="n">y_observed</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">df_observed</span><span class="o">.</span><span class="n">CO2</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="n">X_predict</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">df_predict</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>We will implement the Gaussian process marginal likelihood directly from the Gaussian distribution formula above. <a href="https://docs.jax.dev/en/latest/_autosummary/jax.value_and_grad.html"><code>jax.value_and_grad</code></a> evaluates the negative marginal log likelihood and its gradient, while <a href="https://optax.readthedocs.io/"><code>optax.adam</code></a> is used to update the unconstrained log-parameters.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Implement the Gaussian process marginal likelihood</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">solve_cholesky</span><span class="p">(</span><span class="n">cholesky</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">rhs</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Solve GP linear systems stably through a Cholesky factor."""</span>
+    <span class="k">return</span> <span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve_triangular</span><span class="p">(</span>
+        <span class="n">a</span><span class="o">=</span><span class="n">cholesky</span><span class="o">.</span><span class="n">T</span><span class="p">,</span>
+        <span class="n">b</span><span class="o">=</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve_triangular</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">cholesky</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">rhs</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="n">lower</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gp_negative_log_marginal_likelihood</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">,</span> <span class="n">index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">observations</span><span class="p">:</span> <span class="n">Array</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Score how well hyperparameters explain the observed CO2 data."""</span>
+    <span class="c1"># Convert unconstrained optimizer values to valid positive hyperparameters.</span>
+    <span class="n">positive_params</span> <span class="o">=</span> <span class="n">transform_params</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
+    <span class="c1"># Build the prior covariance over observations.</span>
+    <span class="n">covariance</span> <span class="o">=</span> <span class="n">combined_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">index_points</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">index_points</span><span class="p">,</span> <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span>
+    <span class="p">)</span>
+    <span class="c1"># Add observation noise and jitter for a stable Cholesky decomposition.</span>
+    <span class="n">covariance</span> <span class="o">=</span> <span class="n">covariance</span> <span class="o">+</span> <span class="p">(</span>
+        <span class="n">positive_params</span><span class="o">.</span><span class="n">observation_noise_variance</span> <span class="o">+</span> <span class="n">JITTER</span>
+    <span class="p">)</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">index_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="c1"># Center observations around the prior mean before evaluating the likelihood.</span>
+    <span class="n">centered_observations</span> <span class="o">=</span> <span class="n">observations</span> <span class="o">-</span> <span class="n">mean_fn</span><span class="p">(</span><span class="n">index_points</span><span class="o">=</span><span class="n">index_points</span><span class="p">)</span>
+
+    <span class="c1"># Factor the covariance once and reuse it for solves and the log determinant.</span>
+    <span class="n">cholesky</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cholesky</span><span class="p">(</span><span class="n">covariance</span><span class="p">)</span>
+    <span class="c1"># Compute K^-1 y without forming the inverse explicitly.</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">solve_cholesky</span><span class="p">(</span><span class="n">cholesky</span><span class="o">=</span><span class="n">cholesky</span><span class="p">,</span> <span class="n">rhs</span><span class="o">=</span><span class="n">centered_observations</span><span class="p">)</span>
+
+    <span class="c1"># Combine data fit, model complexity, and Gaussian normalization terms.</span>
+    <span class="n">data_fit</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">centered_observations</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+    <span class="n">complexity_penalty</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">cholesky</span><span class="p">)))</span>
+    <span class="n">constant</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">index_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">data_fit</span> <span class="o">+</span> <span class="n">complexity_penalty</span> <span class="o">+</span> <span class="n">constant</span>
+
+
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Fit hyperparameters</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.01</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">optax</span><span class="o">.</span><span class="n">adam</span><span class="p">(</span><span class="n">learning_rate</span><span class="o">=</span><span class="n">learning_rate</span><span class="p">)</span>
+<span class="n">opt_state</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+<span class="c1"># Define loss and gradients</span>
+<span class="n">loss_and_grad</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">value_and_grad</span><span class="p">(</span><span class="n">gp_negative_log_marginal_likelihood</span><span class="p">)</span>
+
+
+<span class="nd">@jax</span><span class="o">.</span><span class="n">jit</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">optimization_step</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">,</span>
+    <span class="n">opt_state</span><span class="p">:</span> <span class="n">optax</span><span class="o">.</span><span class="n">OptState</span><span class="p">,</span>
+    <span class="n">index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">KernelParams</span><span class="p">,</span> <span class="n">optax</span><span class="o">.</span><span class="n">OptState</span><span class="p">,</span> <span class="n">Array</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Take one step toward lower full-data GP marginal likelihood."""</span>
+    <span class="n">loss</span><span class="p">,</span> <span class="n">grads</span> <span class="o">=</span> <span class="n">loss_and_grad</span><span class="p">(</span>
+        <span class="n">params</span><span class="p">,</span> <span class="n">index_points</span><span class="o">=</span><span class="n">index_points</span><span class="p">,</span> <span class="n">observations</span><span class="o">=</span><span class="n">observations</span>
+    <span class="p">)</span>
+    <span class="n">updates</span><span class="p">,</span> <span class="n">opt_state</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">grads</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">KernelParams</span><span class="p">,</span> <span class="n">optax</span><span class="o">.</span><span class="n">apply_updates</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">updates</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">params</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">loss</span>
+
+
+<span class="c1"># Training loop</span>
+<span class="n">full_nlls</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Full data NLL for plotting</span>
+<span class="n">nb_iterations</span> <span class="o">=</span> <span class="mi">2500</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">nb_iterations</span><span class="p">)):</span>
+    <span class="n">params</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">loss</span> <span class="o">=</span> <span class="n">optimization_step</span><span class="p">(</span>
+        <span class="n">params</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">index_points</span><span class="o">=</span><span class="n">X_observed</span><span class="p">,</span> <span class="n">observations</span><span class="o">=</span><span class="n">y_observed</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">10</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">i</span> <span class="o">==</span> <span class="n">nb_iterations</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">full_nlls</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">i</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">loss</span><span class="p">)))</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_widget_view" id="4a14d85d-87df-4e7a-81a1-42b7249c733e">
+<script type="text/javascript">
+var element = $('#4a14d85d-87df-4e7a-81a1-42b7249c733e');
+</script>
+<script type="application/vnd.jupyter.widget-view+json">
+{"model_id": "89939fd5426e44a28fa65afe32334364", "version_major": 2, "version_minor": 0}
+</script>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered celltag_lazy-bokeh celltag_lazy-bokeh-height=390 celltag_lazy-bokeh-title=Gaussian process training negative log-likelihood">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[13]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot NLL over iterations</span>
+<span class="n">nll_source</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">"iteration"</span><span class="p">:</span> <span class="p">[</span><span class="n">iteration</span> <span class="k">for</span> <span class="n">iteration</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">full_nlls</span><span class="p">],</span>
+        <span class="s2">"nll"</span><span class="p">:</span> <span class="p">[</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">full_nlls</span><span class="p">],</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="n">nll_values</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">full_nlls</span><span class="p">]</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">350</span><span class="p">,</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="n">nb_iterations</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">nll_values</span><span class="p">)</span> <span class="o">-</span> <span class="mi">20</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">nll_values</span><span class="p">)</span> <span class="o">+</span> <span class="mi">20</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span>
+        <span class="n">text</span><span class="o">=</span><span class="s2">"Negative Log-Likelihood (NLL) during training"</span><span class="p">,</span> <span class="n">text_font_size</span><span class="o">=</span><span class="s2">"14pt"</span>
+    <span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"iteration"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"NLL all observed data"</span>
+<span class="n">nll_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">line</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"iteration"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"nll"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">nll_source</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"All observed data"</span><span class="p">,</span>
+    <span class="n">line_width</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"midnightblue"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_tools</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">nll_renderer</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[(</span><span class="s2">"Iteration"</span><span class="p">,</span> <span class="s2">"@iteration"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"NLL"</span><span class="p">,</span> <span class="s2">"@nll</span><span class="si">{0.00}</span><span class="s2">"</span><span class="p">)],</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">"vline"</span><span class="p">,</span>
+        <span class="n">line_policy</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="o">.</span><span class="n">location</span> <span class="o">=</span> <span class="s2">"top_right"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">toolbar</span><span class="o">.</span><span class="n">autohide</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="notebook-bokeh-lazy" data-bokeh-bundles='["/js/bokeh/3.9.1/bokeh.min.js","/js/bokeh/3.9.1/bokeh-gl.min.js","/js/bokeh/3.9.1/bokeh-widgets.min.js","/js/bokeh/3.9.1/bokeh-tables.min.js","/js/bokeh/3.9.1/bokeh-mathjax.min.js"]' data-bokeh-script="/images/notebook_outputs/gaussian_process/gaussian-process-kernel-fitting/interactive-0001-1e0d340f0bee.js" data-bokeh-title="Gaussian process training negative log-likelihood" style="min-height: 390px;"><p aria-live="polite" class="notebook-bokeh-lazy-status">Interactive visualization loading&hellip;</p><div data-root-id="p1067" id="e6b3d78d-d41c-4909-891d-fd6190c5dfd1" style="display: contents;"></div></div></div>
+<div class="output_area">
+<div class="prompt"></div>
+
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Despite the complexity term in the log marginal likelihood it is still possible to overfit to the data. While we didn't prevent further overfitting in this post, you could prevent overfitting by adding a regularization term on the hyperparameters<a href="#Sidenotes">⁽&sup2;⁾</a>, or split the observations in training an validation sets and select the best fit on your validation data from models trained on the training data.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Show values of parameters found</span>
+<span class="n">fitted_params</span> <span class="o">=</span> <span class="n">transform_params</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="p">[(</span><span class="n">name</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">fitted_params</span><span class="p">,</span> <span class="n">name</span><span class="p">)))</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">KernelParams</span><span class="o">.</span><span class="n">_fields</span><span class="p">]</span>
+<span class="n">df_variables</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">Index</span><span class="p">([</span><span class="s2">"Hyperparameters"</span><span class="p">,</span> <span class="s2">"Value"</span><span class="p">]))</span>
+<span class="n">display</span><span class="p">(</span><span class="n">HTML</span><span class="p">(</span><span class="n">df_variables</span><span class="o">.</span><span class="n">to_html</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">float_format</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">x</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)))</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_html rendered_html output_subarea contains-table"><table border="1" class="dataframe table table-sm table-hover w-auto text-right">
+<thead>
+<tr style="text-align: right;">
+<th>Hyperparameters</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>smooth_amplitude</td>
+<td>124.2312</td>
+</tr>
+<tr>
+<td>smooth_length_scale</td>
+<td>99.9519</td>
+</tr>
+<tr>
+<td>periodic_amplitude</td>
+<td>2.1911</td>
+</tr>
+<tr>
+<td>periodic_length_scale</td>
+<td>1.3563</td>
+</tr>
+<tr>
+<td>periodic_period</td>
+<td>0.9998</td>
+</tr>
+<tr>
+<td>periodic_local_length_scale</td>
+<td>92.2914</td>
+</tr>
+<tr>
+<td>irregular_amplitude</td>
+<td>2.1255</td>
+</tr>
+<tr>
+<td>irregular_length_scale</td>
+<td>1.4964</td>
+</tr>
+<tr>
+<td>irregular_scale_mixture</td>
+<td>0.0089</td>
+</tr>
+<tr>
+<td>observation_noise_variance</td>
+<td>0.0404</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The fitted kernel and its components are illustrated in more detail in a <a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}#Atmospheric-CO%E2%82%82-kernel">follow-up post</a>.</p>
+<h3 id="Posterior-predictions">Posterior predictions<a class="anchor-link" href="#Posterior-predictions"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>With the fitted kernel we can use the Gaussian process conditioning equations directly to make posterior predictions on points after 2010.</p>
+<p>The posterior predictions conditioned on the observed data before 2010 are plotted in the figure below together with their 95% prediction interval.</p>
+<p>Notice that our model captures the different dataset characteristics such as the trend and seasonality quite well. The predictions start deviating the further away from the observed data the model was conditioned on, together with widening prediction interval.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[15]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Posterior predictions</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gp_posterior_predict</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">,</span>
+    <span class="n">observation_index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">prediction_index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="n">Array</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Predict fitted GP mean and uncertainty at new input locations."""</span>
+    <span class="c1"># Convert learned log-space parameters to positive kernel hyperparameters.</span>
+    <span class="n">positive_params</span> <span class="o">=</span> <span class="n">transform_params</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
+    <span class="c1"># Build the noisy covariance among observed points.</span>
+    <span class="n">observation_covariance</span> <span class="o">=</span> <span class="n">combined_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">observation_index_points</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">observation_index_points</span><span class="p">,</span>
+        <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">observation_covariance</span> <span class="o">=</span> <span class="n">observation_covariance</span> <span class="o">+</span> <span class="p">(</span>
+        <span class="n">positive_params</span><span class="o">.</span><span class="n">observation_noise_variance</span> <span class="o">+</span> <span class="n">JITTER</span>
+    <span class="p">)</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">observation_index_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="c1"># Build the cross-covariance between observations and predictions.</span>
+    <span class="n">cross_covariance</span> <span class="o">=</span> <span class="n">combined_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">observation_index_points</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">prediction_index_points</span><span class="p">,</span>
+        <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># Build the prior covariance among prediction points.</span>
+    <span class="n">prediction_covariance</span> <span class="o">=</span> <span class="n">combined_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">prediction_index_points</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">prediction_index_points</span><span class="p">,</span>
+        <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Center observations around the prior mean before conditioning.</span>
+    <span class="n">centered_observations</span> <span class="o">=</span> <span class="n">observations</span> <span class="o">-</span> <span class="n">mean_fn</span><span class="p">(</span>
+        <span class="n">index_points</span><span class="o">=</span><span class="n">observation_index_points</span>
+    <span class="p">)</span>
+    <span class="c1"># Factor the observed covariance and solve K^-1 y stably.</span>
+    <span class="n">cholesky</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cholesky</span><span class="p">(</span><span class="n">observation_covariance</span><span class="p">)</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">solve_cholesky</span><span class="p">(</span><span class="n">cholesky</span><span class="o">=</span><span class="n">cholesky</span><span class="p">,</span> <span class="n">rhs</span><span class="o">=</span><span class="n">centered_observations</span><span class="p">)</span>
+    <span class="c1"># Add the conditional correction to the prior mean.</span>
+    <span class="n">posterior_mean</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">mean_fn</span><span class="p">(</span><span class="n">index_points</span><span class="o">=</span><span class="n">prediction_index_points</span><span class="p">)</span> <span class="o">+</span> <span class="n">cross_covariance</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">alpha</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Remove explained variance from the prediction prior covariance.</span>
+    <span class="n">v</span> <span class="o">=</span> <span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve_triangular</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">cholesky</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">cross_covariance</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">posterior_covariance</span> <span class="o">=</span> <span class="n">prediction_covariance</span> <span class="o">-</span> <span class="n">v</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">v</span>
+    <span class="c1"># Keep tiny numerical negatives from becoming invalid standard deviations.</span>
+    <span class="n">posterior_variance</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">posterior_covariance</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">posterior_std</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">posterior_variance</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">posterior_mean</span><span class="p">,</span> <span class="n">posterior_std</span>
+
+
+<span class="n">posterior_mean_predict</span><span class="p">,</span> <span class="n">posterior_std_predict</span> <span class="o">=</span> <span class="n">gp_posterior_predict</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">,</span>
+    <span class="n">observation_index_points</span><span class="o">=</span><span class="n">X_observed</span><span class="p">,</span>
+    <span class="n">observations</span><span class="o">=</span><span class="n">y_observed</span><span class="p">,</span>
+    <span class="n">prediction_index_points</span><span class="o">=</span><span class="n">X_predict</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered celltag_lazy-bokeh celltag_lazy-bokeh-height=440 celltag_lazy-bokeh-title=Gaussian process posterior predictions for atmospheric carbon dioxide">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[16]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot posterior predictions</span>
+
+<span class="c1"># Get posterior predictions</span>
+<span class="n">&mu;</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">posterior_mean_predict</span><span class="p">)</span>
+<span class="n">&sigma;</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">posterior_std_predict</span><span class="p">)</span>
+<span class="n">prediction_source</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">"date"</span><span class="p">:</span> <span class="n">df_predict</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
+        <span class="s2">"mean"</span><span class="p">:</span> <span class="n">&mu;</span><span class="p">,</span>
+        <span class="s2">"lower"</span><span class="p">:</span> <span class="n">&mu;</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">&sigma;</span><span class="p">,</span>
+        <span class="s2">"upper"</span><span class="p">:</span> <span class="n">&mu;</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">&sigma;</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="n">reference_source</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">co2_df</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="s2">"co2"</span><span class="p">:</span> <span class="n">co2_df</span><span class="o">.</span><span class="n">CO2</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()}</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">400</span><span class="p">,</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">2010</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mf">2021.3</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">384</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">418</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"Date"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"CO₂ (ppm)"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span>
+        <span class="n">text</span><span class="o">=</span><span class="s2">"Posterior predictions conditioned on observations before 2010."</span><span class="p">,</span>
+        <span class="n">text_font_style</span><span class="o">=</span><span class="s2">"italic"</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Atmospheric CO₂ concentrations"</span><span class="p">,</span> <span class="n">text_font_size</span><span class="o">=</span><span class="s2">"14pt"</span><span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">reference_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"co2"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">reference_source</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"True data (reference)"</span><span class="p">,</span>
+    <span class="n">size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">marker</span><span class="o">=</span><span class="s2">"circle"</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"midnightblue"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">mean_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">line</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"mean"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">prediction_source</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"&mu; (predictions)"</span><span class="p">,</span>
+    <span class="n">line_width</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"firebrick"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># Prediction interval</span>
+<span class="n">interval_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">varea</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span>
+    <span class="n">y1</span><span class="o">=</span><span class="s2">"lower"</span><span class="p">,</span>
+    <span class="n">y2</span><span class="o">=</span><span class="s2">"upper"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">prediction_source</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"firebrick"</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"2&sigma;"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_tools</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">reference_renderer</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[(</span><span class="s2">"Date"</span><span class="p">,</span> <span class="s2">"@date</span><span class="si">{0.00}</span><span class="s2">"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"CO₂"</span><span class="p">,</span> <span class="s2">"@co2</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">)],</span>
+    <span class="p">),</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">mean_renderer</span><span class="p">,</span> <span class="n">interval_renderer</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[</span>
+            <span class="p">(</span><span class="s2">"Date"</span><span class="p">,</span> <span class="s2">"@date</span><span class="si">{0.00}</span><span class="s2">"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"&mu;"</span><span class="p">,</span> <span class="s2">"@mean</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"lower 2&sigma;"</span><span class="p">,</span> <span class="s2">"@lower</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"upper 2&sigma;"</span><span class="p">,</span> <span class="s2">"@upper</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">"vline"</span><span class="p">,</span>
+        <span class="n">line_policy</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="o">.</span><span class="n">location</span> <span class="o">=</span> <span class="s2">"top_left"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">toolbar</span><span class="o">.</span><span class="n">autohide</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="notebook-bokeh-lazy" data-bokeh-bundles='["/js/bokeh/3.9.1/bokeh.min.js","/js/bokeh/3.9.1/bokeh-gl.min.js","/js/bokeh/3.9.1/bokeh-widgets.min.js","/js/bokeh/3.9.1/bokeh-tables.min.js","/js/bokeh/3.9.1/bokeh-mathjax.min.js"]' data-bokeh-script="/images/notebook_outputs/gaussian_process/gaussian-process-kernel-fitting/interactive-0002-b61a47fa2e22.js" data-bokeh-title="Gaussian process posterior predictions for atmospheric carbon dioxide" style="min-height: 440px;"><p aria-live="polite" class="notebook-bokeh-lazy-status">Interactive visualization loading&hellip;</p><div data-root-id="p1121" id="cdbf287e-5e01-4910-a0d0-de47130ad598" style="display: contents;"></div></div></div>
+<div class="output_area">
+<div class="prompt"></div>
+
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This post illustrated using JAX to combine multiple kernels and fit their hyperparameters on observed data. The fitted model was then used to make posterior predictions.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This post was the second part of a series on Gaussian processes:</p>
+<ol>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">Understanding Gaussian processes</a></li>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-06-gaussian-process-kernel-fitting %}">Fitting a kernel (this)</a></li>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}">Gaussian process kernels</a></li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Sidenotes">Sidenotes<a class="anchor-link" href="#Sidenotes"><i class="fa-solid fa-sm fa-link"></i></a></h2><ol>
+<li>Note that the <a href="https://en.wikipedia.org/wiki/Determinant">determinant</a> $\lvert \Sigma \rvert$ is equal to the product of its <a href="https://en.wikipedia.org/wiki/Eigenvalues_and_eigenvectors">eigenvalues</a>, and that $\lvert \Sigma \rvert$ can be interpreted as the <a href="https://en.wikipedia.org/wiki/Determinant#Volume_and_Jacobian_determinant">volume spanned by</a> the covariance matrix $\Sigma$. Reducing $\lvert \Sigma \rvert$ will thus decrease the dispersion of the points coming from the distribution with covariance matrix $\Sigma$ and reduce the complexity.</li>
+<li>A fully Bayesian extension could define prior distributions for the hyperparameters and sample from the posterior with a JAX-based probabilistic programming library such as <a href="https://num.pyro.ai/">NumPyro</a>.</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="References">References<a class="anchor-link" href="#References"><i class="fa-solid fa-sm fa-link"></i></a></h2><ol>
+<li><a href="http://www.gaussianprocess.org/gpml/chapters/RW5.pdf">Gaussian Processes for Machine Learning. Chapter 5: Model Selection and Adaptation of Hyperparameters</a> by Carl Edward Rasmussen and Christopher K. I. Williams.</li>
+<li><a href="https://papers.nips.cc/paper/1048-gaussian-processes-for-regression.pdf">Gaussian Processes for Regression</a> by Christopher K. I. Williams and Carl Edward Rasmussen.</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[17]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python implementation: CPython
+Python version       : 3.13.12
+IPython version      : 9.13.0
+
+IPython: 9.13.0
+bokeh  : 3.9.1
+jax    : 0.8.3
+numpy  : 2.4.4
+optax  : 0.2.8
+pandas : 2.3.3
+tqdm   : 4.67.3
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script type="application/vnd.jupyter.widget-state+json">
+{"state": {"473c62bddb4d4de0b26a771d6d0bd2a6": {"model_module": "@jupyter-widgets\/controls", "model_module_version": "2.0.0", "model_name": "HTMLModel", "state": {"_dom_classes": [], "_model_module": "@jupyter-widgets\/controls", "_model_module_version": "2.0.0", "_model_name": "HTMLModel", "_view_count": null, "_view_module": "@jupyter-widgets\/controls", "_view_module_version": "2.0.0", "_view_name": "HTMLView", "description": "", "description_allow_html": false, "layout": "IPY_MODEL_d248212c2468457aaf867a778b3a5989", "placeholder": "\u200b", "style": "IPY_MODEL_fd9fa9a2ff3e4a2f918355ada75b38b8", "tabbable": null, "tooltip": null, "value": "\u20072500\/2500\u2007[00:24&lt;00:00,\u2007100.22it\/s]"}}, "5f49dd97fd6c40f4a03e0fe163a01e61": {"model_module": "@jupyter-widgets\/controls", "model_module_version": "2.0.0", "model_name": "HTMLModel", "state": {"_dom_classes": [], "_model_module": "@jupyter-widgets\/controls", "_model_module_version": "2.0.0", "_model_name": "HTMLModel", "_view_count": null, "_view_module": "@jupyter-widgets\/controls", "_view_module_version": "2.0.0", "_view_name": "HTMLView", "description": "", "description_allow_html": false, "layout": "IPY_MODEL_e48d487124e144fa84a962cbab133a5f", "placeholder": "\u200b", "style": "IPY_MODEL_a927584d52b246269e17bc849dcc6176", "tabbable": null, "tooltip": null, "value": "100%"}}, "651575cd9e4b4f9a99844dc7d049efd1": {"model_module": "@jupyter-widgets\/base", "model_module_version": "2.0.0", "model_name": "LayoutModel", "state": {"_model_module": "@jupyter-widgets\/base", "_model_module_version": "2.0.0", "_model_name": "LayoutModel", "_view_count": null, "_view_module": "@jupyter-widgets\/base", "_view_module_version": "2.0.0", "_view_name": "LayoutView", "align_content": null, "align_items": null, "align_self": null, "border_bottom": null, "border_left": null, "border_right": null, "border_top": null, "bottom": null, "display": null, "flex": null, "flex_flow": null, "grid_area": null, "grid_auto_columns": null, "grid_auto_flow": null, "grid_auto_rows": null, "grid_column": null, "grid_gap": null, "grid_row": null, "grid_template_areas": null, "grid_template_columns": null, "grid_template_rows": null, "height": null, "justify_content": null, "justify_items": null, "left": null, "margin": null, "max_height": null, "max_width": null, "min_height": null, "min_width": null, "object_fit": null, "object_position": null, "order": null, "overflow": null, "padding": null, "right": null, "top": null, "visibility": null, "width": null}}, "778f4b4f8d7c4e369983dd7cd8f42e97": {"model_module": "@jupyter-widgets\/controls", "model_module_version": "2.0.0", "model_name": "ProgressStyleModel", "state": {"_model_module": "@jupyter-widgets\/controls", "_model_module_version": "2.0.0", "_model_name": "ProgressStyleModel", "_view_count": null, "_view_module": "@jupyter-widgets\/base", "_view_module_version": "2.0.0", "_view_name": "StyleView", "bar_color": null, "description_width": ""}}, "7d7cbb77311b4b91ae4a8decd06beaa1": {"model_module": "@jupyter-widgets\/base", "model_module_version": "2.0.0", "model_name": "LayoutModel", "state": {"_model_module": "@jupyter-widgets\/base", "_model_module_version": "2.0.0", "_model_name": "LayoutModel", "_view_count": null, "_view_module": "@jupyter-widgets\/base", "_view_module_version": "2.0.0", "_view_name": "LayoutView", "align_content": null, "align_items": null, "align_self": null, "border_bottom": null, "border_left": null, "border_right": null, "border_top": null, "bottom": null, "display": null, "flex": null, "flex_flow": null, "grid_area": null, "grid_auto_columns": null, "grid_auto_flow": null, "grid_auto_rows": null, "grid_column": null, "grid_gap": null, "grid_row": null, "grid_template_areas": null, "grid_template_columns": null, "grid_template_rows": null, "height": null, "justify_content": null, "justify_items": null, "left": null, "margin": null, "max_height": null, "max_width": null, "min_height": null, "min_width": null, "object_fit": null, "object_position": null, "order": null, "overflow": null, "padding": null, "right": null, "top": null, "visibility": null, "width": null}}, "89939fd5426e44a28fa65afe32334364": {"model_module": "@jupyter-widgets\/controls", "model_module_version": "2.0.0", "model_name": "HBoxModel", "state": {"_dom_classes": [], "_model_module": "@jupyter-widgets\/controls", "_model_module_version": "2.0.0", "_model_name": "HBoxModel", "_view_count": null, "_view_module": "@jupyter-widgets\/controls", "_view_module_version": "2.0.0", "_view_name": "HBoxView", "box_style": "", "children": ["IPY_MODEL_5f49dd97fd6c40f4a03e0fe163a01e61", "IPY_MODEL_935b37f85e4240b7832892c48edcc662", "IPY_MODEL_473c62bddb4d4de0b26a771d6d0bd2a6"], "layout": "IPY_MODEL_651575cd9e4b4f9a99844dc7d049efd1", "tabbable": null, "tooltip": null}}, "935b37f85e4240b7832892c48edcc662": {"model_module": "@jupyter-widgets\/controls", "model_module_version": "2.0.0", "model_name": "FloatProgressModel", "state": {"_dom_classes": [], "_model_module": "@jupyter-widgets\/controls", "_model_module_version": "2.0.0", "_model_name": "FloatProgressModel", "_view_count": null, "_view_module": "@jupyter-widgets\/controls", "_view_module_version": "2.0.0", "_view_name": "ProgressView", "bar_style": "success", "description": "", "description_allow_html": false, "layout": "IPY_MODEL_7d7cbb77311b4b91ae4a8decd06beaa1", "max": 2500.0, "min": 0.0, "orientation": "horizontal", "style": "IPY_MODEL_778f4b4f8d7c4e369983dd7cd8f42e97", "tabbable": null, "tooltip": null, "value": 2500.0}}, "a927584d52b246269e17bc849dcc6176": {"model_module": "@jupyter-widgets\/controls", "model_module_version": "2.0.0", "model_name": "HTMLStyleModel", "state": {"_model_module": "@jupyter-widgets\/controls", "_model_module_version": "2.0.0", "_model_name": "HTMLStyleModel", "_view_count": null, "_view_module": "@jupyter-widgets\/base", "_view_module_version": "2.0.0", "_view_name": "StyleView", "background": null, "description_width": "", "font_size": null, "text_color": null}}, "d248212c2468457aaf867a778b3a5989": {"model_module": "@jupyter-widgets\/base", "model_module_version": "2.0.0", "model_name": "LayoutModel", "state": {"_model_module": "@jupyter-widgets\/base", "_model_module_version": "2.0.0", "_model_name": "LayoutModel", "_view_count": null, "_view_module": "@jupyter-widgets\/base", "_view_module_version": "2.0.0", "_view_name": "LayoutView", "align_content": null, "align_items": null, "align_self": null, "border_bottom": null, "border_left": null, "border_right": null, "border_top": null, "bottom": null, "display": null, "flex": null, "flex_flow": null, "grid_area": null, "grid_auto_columns": null, "grid_auto_flow": null, "grid_auto_rows": null, "grid_column": null, "grid_gap": null, "grid_row": null, "grid_template_areas": null, "grid_template_columns": null, "grid_template_rows": null, "height": null, "justify_content": null, "justify_items": null, "left": null, "margin": null, "max_height": null, "max_width": null, "min_height": null, "min_width": null, "object_fit": null, "object_position": null, "order": null, "overflow": null, "padding": null, "right": null, "top": null, "visibility": null, "width": null}}, "e48d487124e144fa84a962cbab133a5f": {"model_module": "@jupyter-widgets\/base", "model_module_version": "2.0.0", "model_name": "LayoutModel", "state": {"_model_module": "@jupyter-widgets\/base", "_model_module_version": "2.0.0", "_model_name": "LayoutModel", "_view_count": null, "_view_module": "@jupyter-widgets\/base", "_view_module_version": "2.0.0", "_view_name": "LayoutView", "align_content": null, "align_items": null, "align_self": null, "border_bottom": null, "border_left": null, "border_right": null, "border_top": null, "bottom": null, "display": null, "flex": null, "flex_flow": null, "grid_area": null, "grid_auto_columns": null, "grid_auto_flow": null, "grid_auto_rows": null, "grid_column": null, "grid_gap": null, "grid_row": null, "grid_template_areas": null, "grid_template_columns": null, "grid_template_rows": null, "height": null, "justify_content": null, "justify_items": null, "left": null, "margin": null, "max_height": null, "max_width": null, "min_height": null, "min_width": null, "object_fit": null, "object_position": null, "order": null, "overflow": null, "padding": null, "right": null, "top": null, "visibility": null, "width": null}}, "fd9fa9a2ff3e4a2f918355ada75b38b8": {"model_module": "@jupyter-widgets\/controls", "model_module_version": "2.0.0", "model_name": "HTMLStyleModel", "state": {"_model_module": "@jupyter-widgets\/controls", "_model_module_version": "2.0.0", "_model_name": "HTMLStyleModel", "_view_count": null, "_view_module": "@jupyter-widgets\/base", "_view_module_version": "2.0.0", "_view_name": "StyleView", "background": null, "description_width": "", "font_size": null, "text_color": null}}}, "version_major": 2, "version_minor": 0}
+</script>
+<script defer="" src="/js/notebook_bokeh_lazy.js?v=fe477ba95ce9"></script><div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt"></div><div class="inner_cell"><div class="text_cell_render border-box-sizing rendered_html"><p>This post is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/gaussian_process/gaussian-process-kernel-fitting.ipynb">Link to the full IPython notebook file</a></p></div></div></div>

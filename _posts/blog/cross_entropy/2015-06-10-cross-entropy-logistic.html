@@ -1,0 +1,335 @@
+---
+layout: post
+title: Logistic classification with cross-entropy (1/2)
+description: Description of the logistic function used to model binary classification problems. Contains derivations of the gradients used for optimizing any parameters with regards to the cross-entropy loss function.
+tags:
+- Logistic Function
+- Logistic Regression
+- Machine Learning
+- Cross-Entropy
+- Classification
+- Gradient Descent
+- Neural Networks
+- Notebook
+image: /images/social/2015-06-10-cross-entropy-logistic-preview.png
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Logistic-classification-with-cross-entropy-(1/2)">Logistic classification with cross-entropy (1/2)<a class="anchor-link" href="#Logistic-classification-with-cross-entropy-(1/2)"><i class="fa-solid fa-sm fa-link"></i></a></h1>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This tutorial will describe the <a href="#Logistic-function">logistic function</a> used to model binary classification problems. We will provide derivations of the gradients used for optimizing any parameters with regards to the <a href="#Cross-entropy-loss-function-for-the-logistic-function">cross-entropy</a>.</p>
+<p>To output discrete classes with neural networks, we can model a probability distribution over the output classes $t$. For the classification of 2 classes $t=1$ or $t=0$ we can use the <a href="http://en.wikipedia.org/wiki/Logistic_function">logistic function</a> used in <a href="http://en.wikipedia.org/wiki/Logistic_regression">logistic regression</a>. For multiclass classification there exists an extension of this logistic function called the <a href="http://en.wikipedia.org/wiki/Softmax_function">softmax function</a>, which is used in <a href="http://en.wikipedia.org/wiki/Multinomial_logistic_regression">multinomial logistic regression</a>. The <a href="{% post_url /blog/cross_entropy/2015-06-11-cross-entropy-softmax %}">following section</a> will explain the softmax function and how to derive it. What follows here will explain the logistic function and how to optimize it.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This is the first part of a 2-part tutorial on classification models trained by cross-entropy:</p>
+<ul>
+<li><a href="{% post_url /blog/cross_entropy/2015-06-10-cross-entropy-logistic %}">Part 1: Logistic classification with cross-entropy (this)</a></li>
+<li><a href="{% post_url /blog/cross_entropy/2015-06-11-cross-entropy-softmax %}">Part 2: Softmax classification with cross-entropy</a></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python imports</span>
+<span class="o">%</span><span class="k">matplotlib</span> inline
+<span class="o">%</span><span class="k">config</span> InlineBackend.figure_format = 'svg'
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>  <span class="c1"># Fancier plots</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+
+<span class="c1"># Set matplotlib and seaborn plotting style</span>
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s1">'darkgrid'</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Logistic-function">Logistic function<a class="anchor-link" href="#Logistic-function"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The goal is to predict the target class $t$ from an input $z$. The probability $P(t=1 | z)$ that input $z$ is classified as class $t=1$ is represented by the output $y$ of the logistic function computed as $y = \sigma(z)$. The <a href="http://en.wikipedia.org/wiki/Logistic_function">logistic function</a> $\sigma$ is defined as:
+$$ \sigma(z) = \frac{1}{1+e^{-z}} $$</p>
+<p>This logistic function, implemented below as <code>logistic(z)</code>, maps the input $z$ to an output between $0$ and $1$ as is illustrated in the figure below.</p>
+<p>We can write the probabilities that the class is $t=1$ or $t=0$ given input $z$ as:</p>
+<p>$$\begin{split}
+P(t=1| z) &amp; = \sigma(z) = \frac{1}{1+e^{-z}} \\
+P(t=0| z) &amp; = 1 - \sigma(z) = \frac{e^{-z}}{1+e^{-z}}
+\end{split}$$</p>
+<p>Note that input $z$ to the logistic function corresponds to the log <a href="https://en.wikipedia.org/wiki/Odds_ratio">odds ratio</a> of $P(t=1|z)$ over $P(t=0|z)$.</p>
+<p>$$\begin{split}
+\log \frac{P(t=1|z)}{P(t=0|z)} &amp; = \log \frac{\frac{1}{1+e^{-z}}}{\frac{e^{-z}}{1+e^{-z}}} = \log \frac{1}{e^{-z}} \\
+&amp; = \log(1) - \log(e^{-z}) = z
+\end{split}$$</p>
+<p>This means that the log-odds $\log(P(t=1|z)/P(t=0|z))$ changes linearly with $z$. If $z = x \cdot w$, as in a typical neural network linear layer, then as a result, the log-odds will change linearly with the parameters $w$ and input samples $x$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Logistic function."""</span>
+    <span class="k">return</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the logistic function</span>
+<span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="s1">'b-'</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$z$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$\sigma(z)$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'logistic function'</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">gcf</span><span class="p">(),</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Logistic function mapping input z to a probability between zero and one."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Logistic function mapping input z to a probability between zero and one." decoding="async" height="227" loading="lazy" src="/images/notebook_outputs/cross_entropy/cross-entropy-logistic/figure-0006-01-a74464f2049a.svg" width="333"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Derivative-of-the-logistic-function">Derivative of the logistic function<a class="anchor-link" href="#Derivative-of-the-logistic-function"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>Since neural networks typically use <a href="http://en.wikipedia.org/wiki/Gradient">gradient</a> based opimization techniques such as <a href="http://en.wikipedia.org/wiki/Gradient_descent">gradient descent</a> it is important to define the <a href="http://en.wikipedia.org/wiki/Derivative">derivative</a> of the output $y$ of the logistic function with respect to its input $z$. ${\partial y}/{\partial z}$ can be calculated as:</p>
+<p>$$
+\frac{\partial y}{\partial z} = \frac{\partial \sigma(z)}{\partial z}
+= \frac{\partial \frac{1}{1+e^{-z}}}{\partial z}
+= \frac{-1}{(1+e^{-z})^2} \cdot e^{-z} \cdot -1
+= \frac{1}{1+e^{-z}} \frac{e^{-z}}{1+e^{-z}}
+$$</p>
+<p>And since $1 - \sigma(z)) = 1 - {1}/(1+e^{-z}) = {e^{-z}}/(1+e^{-z})$ this can be rewritten as:</p>
+<p>$$
+\frac{\partial y}{\partial z}
+= \frac{1}{1+e^{-z}} \frac{e^{-z}}{1+e^{-z}}
+= \sigma(z) \cdot (1- \sigma(z)) =  y (1-y)
+$$</p>
+<p>This derivative is implemented as <code>logistic_derivative(z)</code> and is plotted below.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">logistic_derivative</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Derivative of the logistic function."""</span>
+    <span class="k">return</span> <span class="n">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the derivative of the logistic function</span>
+<span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">logistic_derivative</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="s1">'r-'</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$z$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">frac{</span><span class="se">\\</span><span class="s1">partial </span><span class="se">\\</span><span class="s1">sigma(z)}{</span><span class="se">\\</span><span class="s1">partial z}$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'derivative of the logistic function'</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">gcf</span><span class="p">(),</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Derivative of the logistic function across input z."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Derivative of the logistic function across input z." decoding="async" height="227" loading="lazy" src="/images/notebook_outputs/cross_entropy/cross-entropy-logistic/figure-0009-00-143ed24e56ef.svg" width="342"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Cross-entropy-loss-function-for-the-logistic-function">Cross-entropy loss function for the logistic function<a class="anchor-link" href="#Cross-entropy-loss-function-for-the-logistic-function"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The output of the model $y = \sigma(z)$ can be interpreted as a probability $y$ that input $z$ belongs to one class $(t=1)$, or probability $1-y$ that $z$ belongs to the other class $(t=0)$ in a two class classification problem. We note this down as: $P(t=1| z) = \sigma(z) = y$.</p>
+<p>The neural network model will be optimized by maximizing the <a href="http://en.wikipedia.org/wiki/Likelihood_function">likelihood</a> that a given set of parameters $\theta$ of the model can result in a prediction of the correct class of each input sample. The parameters $\theta$ transform each input sample $i$ into an input to the logistic function $z_{i}$. The likelihood maximization can be written as:</p>
+<p>$$
+\underset{\theta}{\text{argmax}}\; \mathcal{L}(\theta|t,z) = \underset{\theta}{\text{argmax}} \prod_{i=1}^{n} \mathcal{L}(\theta|t_i,z_i)
+$$</p>
+<p>The likelihood $\mathcal{L}(\theta|t,z)$ can be rewritten as the <a href="http://en.wikipedia.org/wiki/Joint_probability_distribution">joint probability</a> of generating $t$ and $z$ given the parameters $\theta$: $P(t,z|\theta)$. Since $P(A,B) = P(A|B)P(B)$ this can be written as:</p>
+<p>$$
+P(t,z|\theta) = P(t|z,\theta)P(z|\theta)
+$$</p>
+<p>Since we are not interested in the probability of $z$ we can reduce this to: $\mathcal{L}(\theta|t,z) = P(t|z,\theta) = \prod_{i=1}^{n} P(t_i|z_i,\theta)$.
+Since $t_i$ is a <a href="http://en.wikipedia.org/wiki/Bernoulli_distribution">Bernoulli variable</a>, and the probability $P(t| z) = y$ is fixed for a given $\theta$ we can rewrite this as:</p>
+<p>$$
+\begin{split}
+P(t|z) &amp; = \prod_{i=1}^{n} P(t_i=1|z_i)^{t_i} \cdot (1 - P(t_i=1|z_i))^{1-t_i} \\
+&amp; = \prod_{i=1}^{n} y_i^{t_i} \cdot (1 - y_i)^{1-t_i} \end{split}
+$$</p>
+<p>Since the logarithmic function is a monotone increasing function we can optimize the log-likelihood function $\underset{\theta}{\text{argmax}}\; \log \mathcal{L}(\theta|t,z)$. This maximum will be the same as the maximum from the regular likelihood function. The benefit of using the log-likelihood is that it can prevent numerical <a href="https://en.wikipedia.org/wiki/Arithmetic_underflow">underflow</a> when the probabilities are low. The log-likelihood function can be written as:</p>
+<p>$$
+\begin{split} \log \mathcal{L}(\theta|t,z) &amp; = \log \prod_{i=1}^{n} y_i^{t_i} \cdot (1 - y_i)^{1-t_i} \\
+&amp; = \sum_{i=1}^{n} t_i \log(y_i) + (1-t_i) \log(1 - y_i)
+\end{split}
+$$</p>
+<p>Minimizing the negative of this function (minimizing the negative log likelihood) corresponds to maximizing the likelihood. This error function $\xi(t,y)$ is typically known as the <a href="http://en.wikipedia.org/wiki/Cross_entropy">cross-entropy error function</a> (also known as log-loss):</p>
+<p>$$
+\begin{split}
+\xi(t,y) &amp; = - \log \mathcal{L}(\theta|t,z) \\
+&amp; = - \sum_{i=1}^{n} \left[ t_i \log(y_i) + (1-t_i)\log(1-y_i) \right] \\
+&amp; = - \sum_{i=1}^{n} \left[ t_i \log(\sigma(z)) + (1-t_i)\log(1-\sigma(z)) \right]
+\end{split}
+$$</p>
+<p>This function looks complicated but besides the previous derivation there are a couple of intuitions why this function is used as a <a href="https://en.wikipedia.org/wiki/Loss_function">loss function</a> for logistic regression. First of all it can be rewritten as:</p>
+<p>$$
+\xi(t_i,y_i) =
+\begin{cases}
+    -\log(y_i) &amp; \text{if } t_i = 1 \\
+    -\log(1-y_i) &amp; \text{if } t_i = 0
+\end{cases}
+$$</p>
+<p>Which in the case of $t_i=1$ is $0$ if $y_i=1$ $(-\log(1)=0)$ and goes to infinity as $y_i \rightarrow 0$ $(\underset{y \rightarrow 0}{\text{lim}}{(-\log(y))} = +\infty)$. The reverse effect is happening if $t_i=0$.<br/>
+So what we end up with is a loss function that is $0$ if the probability to predict the correct class is $1$ and goes to infinity as the probability to predict the correct class goes to $0$.</p>
+<p>Notice that the loss function $\xi(t,y)$ is equal to the negative <a href="http://en.wikipedia.org/wiki/Log_probability">log probability</a> that $z$ is classified as its correct class:<br/>
+$$
+\begin{split}
+-\log(P(t=1| z)) &amp;= -\log(y) \\
+-\log(P(t=0| z)) &amp;= -\log(1-y)
+\end{split}
+$$</p>
+<p>By minimizing the negative log probability, we will maximize the log probability. And since $t$ can only be $0$ or $1$, we can write $\xi(t,y)$ as:</p>
+<p>$$
+\xi(t,y) = -t \log(y) - (1-t) \log(1-y)
+$$</p>
+<p>Which will give $\xi(t,y) = - \sum_{i=1}^{n} \left[ t_i \log(y_i) + (1-t_i)\log(1-y_i) \right]$ if we sum over all $n$ samples.</p>
+<p>Another reason to use the cross-entropy function is that in simple logistic regression this results in a <a href="http://en.wikipedia.org/wiki/Convex_function">convex</a> loss function, of which the global minimum will be easy to find. Note that this is not necessarily the case anymore in multilayer neural networks.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h4 id="Derivative-of-the-cross-entropy-loss-function-for-the-logistic-function">Derivative of the cross-entropy loss function for the logistic function<a class="anchor-link" href="#Derivative-of-the-cross-entropy-loss-function-for-the-logistic-function"><i class="fa-solid fa-sm fa-link"></i></a></h4><p>The derivative ${\partial \xi}/{\partial y}$ of the loss function with respect to its input can be calculated as:</p>
+<p>$$
+\begin{split}
+\frac{\partial \xi}{\partial y}
+&amp;= \frac{\partial (-t \log(y) - (1-t) \log(1-y))}{\partial y}
+= \frac{\partial (-t \log(y))}{\partial y} +  \frac{\partial (- (1-t)  \log(1-y))}{\partial y} \\
+&amp; = -\frac{t}{y} + \frac{1-t}{1-y} = \frac{y-t}{y(1-y)}
+\end{split}
+$$</p>
+<p>This derivative will give a nice formula if it is used to calculate the derivative of the loss function with respect to the inputs of the classifier ${\partial \xi}/{\partial z}$ since the derivative of the logistic function is ${\partial y}/{\partial z} =  y (1-y)$:</p>
+<p>$$
+\frac{\partial \xi}{\partial z} = \frac{\partial y}{\partial z} \frac{\partial \xi}{\partial y} = y (1-y) \frac{y-t}{y(1-y)} = y-t
+$$</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This was the first part of a 2-part tutorial on classification models trained by cross-entropy:</p>
+<ul>
+<li><a href="{% post_url /blog/cross_entropy/2015-06-10-cross-entropy-logistic %}">Part 1: Logistic classification with cross-entropy (this)</a></li>
+<li><a href="{% post_url /blog/cross_entropy/2015-06-11-cross-entropy-softmax %}">Part 2: Softmax classification with cross-entropy</a></li>
+</ul>
+<p>To see the logistic function in action on a minimal neural network, please read <a href="{% post_url /blog/neural_net_implementation/2015-06-13-neural-network-implementation-part02 %}">part 2</a> of <a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">this series</a> on how to implement a neural network in NumPy.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python implementation: CPython
+Python version       : 3.13.12
+IPython version      : 9.17.1
+
+IPython   : 9.17.1
+matplotlib: 3.11.1
+numpy     : 2.5.2
+seaborn   : 0.13.2
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This post at <a href="https://peterroelants.github.io/posts/cross-entropy-logistic/" rel="canonical">peterroelants.github.io</a> is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/cross_entropy/cross-entropy-logistic.ipynb">Link to the full IPython notebook file</a></p>
+</div>
+</div>
+</div>

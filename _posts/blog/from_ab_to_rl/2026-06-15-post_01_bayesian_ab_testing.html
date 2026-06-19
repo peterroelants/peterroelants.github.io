@@ -1,0 +1,892 @@
+---
+layout: post
+title: 'From A/B to RL (1/3): Bayesian A/B Testing'
+description: Connect fixed A/B testing to Bayesian posterior uncertainty over click-through rates, and use that uncertainty to make one final decision.
+tags:
+- A/B-testing
+- Bayesian Inference
+- Beta Distribution
+- Bernoulli Distribution
+- Binomial Distribution
+- Probability
+- Notebook
+image: /images/social/2026-06-15-post_01_bayesian_ab_testing-preview.png
+last_modified_at: '2026-08-20'
+updates:
+- date: '2026-08-20'
+  title: Clarified Bayesian A/B testing foundations
+  description: Clarified the model assumptions, observed CTRs, simulation design, posterior comparison, and transition to online policies.
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="From-A/B-to-RL-(1/3):-Bayesian-A/B-Testing">From A/B to RL (1/3): Bayesian A/B Testing<a class="anchor-link" href="#From-A/B-to-RL-(1/3):-Bayesian-A/B-Testing"><i class="fa-solid fa-sm fa-link"></i></a></h1><p><em>Before policies learn, experiments assign.</em></p>
+<p>This series connects <a href="https://en.wikipedia.org/wiki/A/B_testing">A/B testing</a> (randomized comparisons between variants A and B) with <a href="https://en.wikipedia.org/wiki/Reinforcement_learning">reinforcement learning</a> (RL) through a Bayesian view of decision-making. We start with a fixed experiment, then follow what changes when feedback begins to affect future choices: assignment becomes a <strong>policy</strong>, and the learner chooses actions online.</p>
+<p>The aim is not to give a complete introduction to RL. Instead, we use a sequence of small examples to build up the ideas of action, reward, policy, state, episode, and delayed feedback.</p>
+<p>This is the first post in a 3-part series:</p>
+<ul>
+<li><strong>Part 1: Bayesian A/B Testing (this post)</strong></li>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_02_multi_armed_bandits %}">Part 2: Bandits and Thompson Sampling</a></li>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_03_delayed_feedback_menace %}">Part 3: MENACE and Delayed Rewards</a></li>
+</ul>
+<h2 id="Bayesian-A/B-Testing">Bayesian A/B Testing<a class="anchor-link" href="#Bayesian-A/B-Testing"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>We start with a fixed <a href="https://en.wikipedia.org/wiki/Randomized_experiment">randomized experiment</a>: two options, an immediate binary outcome, and one decision at the end.</p>
+<p>In RL terms, showing A or B is an action, a click is an immediate reward, and the randomized assignment rule is a fixed policy chosen before the data arrives. There is no evolving state yet, and the policy never changes during the experiment.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>An <a href="https://en.wikipedia.org/wiki/A/B_testing">A/B test</a> compares two variants of a system or intervention: two webpages, two button labels, two recommendation policies, or two treatments in a <a href="https://en.wikipedia.org/wiki/Randomized_controlled_trial">randomized controlled trial</a>. We assign users or other experimental units to A or B, observe an outcome, and then decide which variant to keep or ship.</p>
+<p>This post uses the simplest version of that setup:</p>
+<ul>
+<li>users or experimental units are randomly assigned to one of two fixed variants,</li>
+<li>every assignment produces one binary outcome, which we can also read as a one-step reward,</li>
+<li>we collect a fixed batch of data,</li>
+<li>then we make one final decision.</li>
+</ul>
+<p>This small setup keeps two questions separate:</p>
+<ol>
+<li>how to model uncertainty about each variant's unknown click-through rate, or expected immediate reward,</li>
+<li>how to turn posterior uncertainty into a concrete decision.</li>
+</ol>
+<p>The randomization is what gives the comparison its causal interpretation. In <a href="https://en.wikipedia.org/wiki/Causal_inference">causal inference</a>, it lets us treat the assigned variant as an intervention rather than as a characteristic of the user. It also protects against <a href="https://en.wikipedia.org/wiki/Confounding">confounding</a>: when A and B are assigned at random, a difference in clicks is less likely to be explained by pre-existing differences between the groups. We are therefore doing more than comparing two columns after the fact. For each user, the experiment chooses an action using a fixed rule; the environment returns an outcome; and those outcomes provide evidence about each action's expected reward. The loop is already agent-environment interaction in miniature, but the policy is fixed instead of learned.</p>
+<p>From this point on, <strong>variant</strong> and <strong>action</strong> mean the same thing. I'll use variant when discussing the A/B test and action when making the RL connection.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports and setup</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.metadata</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">platform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">lru_cache</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.axes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.patches</span><span class="w"> </span><span class="kn">import</span> <span class="n">Patch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">stats</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.special</span><span class="w"> </span><span class="kn">import</span> <span class="n">betaln</span>
+
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s2">"darkgrid"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s2">"figure.figsize"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+
+<span class="c1"># Some common types</span>
+<span class="n">FloatArray</span> <span class="o">=</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+<span class="n">IntArray</span> <span class="o">=</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="The-Toy-Problem">The Toy Problem<a class="anchor-link" href="#The-Toy-Problem"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Suppose we compare two versions of a page in this setting:</p>
+<ul>
+<li><strong>Variant A:</strong> the current baseline</li>
+<li><strong>Variant B:</strong> a new design</li>
+</ul>
+<p>The question is which version produces more clicks on an action we care about, such as a buy or subscribe button. In this toy example, a click is the immediate reward: $1$ for a click and $0$ otherwise. The <a href="https://en.wikipedia.org/wiki/Click-through_rate">click-through rate (CTR)</a> is therefore the expected immediate reward from showing a variant. Because this is a one-step problem, that expected immediate reward is also the action value. We will still call it CTR when the A/B-testing meaning matters.</p>
+<p>We run a randomized experiment: each user is assigned to A or B by the test before any click is observed. That random assignment is what lets us interpret differences in outcomes as being caused by the variant, rather than just associated with it.</p>
+<p>Each exposure is a single interaction: choose A or B, observe a click or no click, and stop. Because every exposure has the same decision context, the state is trivial. The assignment rule is therefore a fixed policy over two actions in one state. We can represent one outcome with a binary variable $x$:</p>
+<ul>
+<li>$x = 1$ if the user clicks</li>
+<li>$x = 0$ if the user does not click</li>
+</ul>
+<p>The causal question is whether one page causes more clicks than the other. For this post, the key constraint is that the assignment policy stays fixed: we make one final ship decision rather than adapting traffic as the experiment runs.</p>
+<p>At the end, we want to answer one question:</p>
+<p><strong>Which variant should we ship?</strong></p>
+<p>We will simulate one randomized experiment. The true CTRs, or expected rewards, are fixed but hidden from the inference procedure. We keep them only so we can check later whether the posterior behaves sensibly.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define a small container for the simulated A/B test outcomes.</span>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ABTestData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Observed outcomes from one fixed randomized A/B test."""</span>
+
+    <span class="n">observations_a</span><span class="p">:</span> <span class="n">IntArray</span>
+    <span class="n">observations_b</span><span class="p">:</span> <span class="n">IntArray</span>
+    <span class="n">true_rate_a</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">true_rate_b</span><span class="p">:</span> <span class="nb">float</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">trials_per_variant</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the number of observed users assigned to each variant."""</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observations_a</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clicks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return observed click counts for A and B."""</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observations_a</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observations_b</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">no_clicks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return observed non-click counts for A and B."""</span>
+        <span class="n">clicks_a</span><span class="p">,</span> <span class="n">clicks_b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clicks</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">trials_per_variant</span> <span class="o">-</span> <span class="n">clicks_a</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">trials_per_variant</span> <span class="o">-</span> <span class="n">clicks_b</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The next cell generates one randomized experiment. For simplicity, the simulation generates an equal number of outcomes for each arm; the randomization is represented by the experimental design rather than simulated user by user.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Simulate one fixed randomized A/B test.</span>
+<span class="n">TRUE_RATE_A</span> <span class="o">=</span> <span class="mf">0.12</span>  <span class="c1"># Hidden from the learner</span>
+<span class="n">TRUE_RATE_B</span> <span class="o">=</span> <span class="mf">0.15</span>  <span class="c1"># Hidden from the learner</span>
+<span class="n">NB_TRIALS</span> <span class="o">=</span> <span class="mi">200</span>
+<span class="n">experiment_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">20260425</span><span class="p">)</span>
+
+<span class="c1"># Simulate user outcomes for each variant. Each user either clicks (1) or doesn't click (0).</span>
+<span class="n">observations_a</span> <span class="o">=</span> <span class="n">experiment_rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">TRUE_RATE_A</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">NB_TRIALS</span><span class="p">)</span>
+<span class="n">observations_b</span> <span class="o">=</span> <span class="n">experiment_rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">TRUE_RATE_B</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">NB_TRIALS</span><span class="p">)</span>
+
+<span class="n">experiment</span> <span class="o">=</span> <span class="n">ABTestData</span><span class="p">(</span>
+    <span class="n">observations_a</span><span class="o">=</span><span class="n">observations_a</span><span class="p">,</span>
+    <span class="n">observations_b</span><span class="o">=</span><span class="n">observations_b</span><span class="p">,</span>
+    <span class="n">true_rate_a</span><span class="o">=</span><span class="n">TRUE_RATE_A</span><span class="p">,</span>
+    <span class="n">true_rate_b</span><span class="o">=</span><span class="n">TRUE_RATE_B</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">clicks_a</span><span class="p">,</span> <span class="n">clicks_b</span> <span class="o">=</span> <span class="n">experiment</span><span class="o">.</span><span class="n">clicks</span>
+<span class="n">no_clicks_a</span><span class="p">,</span> <span class="n">no_clicks_b</span> <span class="o">=</span> <span class="n">experiment</span><span class="o">.</span><span class="n">no_clicks</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Variant A: </span><span class="si">{</span><span class="n">clicks_a</span><span class="si">}</span><span class="s2"> clicks, </span><span class="si">{</span><span class="n">no_clicks_a</span><span class="si">}</span><span class="s2"> non-clicks, observed CTR = </span><span class="si">{</span><span class="n">clicks_a</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">NB_TRIALS</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Variant B: </span><span class="si">{</span><span class="n">clicks_b</span><span class="si">}</span><span class="s2"> clicks, </span><span class="si">{</span><span class="n">no_clicks_b</span><span class="si">}</span><span class="s2"> non-clicks, observed CTR = </span><span class="si">{</span><span class="n">clicks_b</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">NB_TRIALS</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Variant A: 23 clicks, 177 non-clicks, observed CTR = 0.115
+Variant B: 32 clicks, 168 non-clicks, observed CTR = 0.160
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This chart shows the noisy click counts that the Bayesian model will use as evidence about the two unknown CTRs.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the simulated A/B test outcomes.</span>
+<span class="n">true_rate_a</span> <span class="o">=</span> <span class="n">experiment</span><span class="o">.</span><span class="n">true_rate_a</span>
+<span class="n">true_rate_b</span> <span class="o">=</span> <span class="n">experiment</span><span class="o">.</span><span class="n">true_rate_b</span>
+<span class="n">nb_trials</span> <span class="o">=</span> <span class="n">experiment</span><span class="o">.</span><span class="n">trials_per_variant</span>
+<span class="n">clicks_a</span><span class="p">,</span> <span class="n">clicks_b</span> <span class="o">=</span> <span class="n">experiment</span><span class="o">.</span><span class="n">clicks</span>
+<span class="n">no_clicks_a</span><span class="p">,</span> <span class="n">no_clicks_b</span> <span class="o">=</span> <span class="n">experiment</span><span class="o">.</span><span class="n">no_clicks</span>
+
+<span class="n">variants</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"A"</span><span class="p">,</span> <span class="s2">"B"</span><span class="p">]</span>
+<span class="n">clicks</span> <span class="o">=</span> <span class="p">[</span><span class="n">clicks_a</span><span class="p">,</span> <span class="n">clicks_b</span><span class="p">]</span>
+<span class="n">no_clicks</span> <span class="o">=</span> <span class="p">[</span><span class="n">no_clicks_a</span><span class="p">,</span> <span class="n">no_clicks_b</span><span class="p">]</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">6.5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">barh</span><span class="p">(</span><span class="n">variants</span><span class="p">,</span> <span class="n">clicks</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"Clicks"</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:green"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">barh</span><span class="p">(</span><span class="n">variants</span><span class="p">,</span> <span class="n">no_clicks</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="n">clicks</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"No Clicks"</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:gray"</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Observed outcomes in the toy experiment"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"user count"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Observed click and no-click counts for variants A and B in the simulated A/B experiment."</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Observed click and no-click counts for variants A and B in the simulated A/B experiment." decoding="async" height="390" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_01_bayesian_ab_testing/figure-0008-00-11dda84a16a9.png" width="640"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="What-Is-Actually-Observed?">What Is Actually Observed?<a class="anchor-link" href="#What-Is-Actually-Observed?"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The important distinction is that we do <strong>not</strong> observe the true click-through rate (CTR), or expected immediate reward, directly. Under randomized assignment, we observe only finite, noisy counts:</p>
+<ul>
+<li>how many users saw A and B,</li>
+<li>how many clicks each variant produced.</li>
+</ul>
+<p>The observed CTR is simply the number of clicks divided by the number of users. The parameter $\theta$ represents the unknown long-run click probability, and the posterior describes our uncertainty about it.</p>
+<p>That leaves us with the real question: how should we reason about an unknown one-step action value from limited data?</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>A <a href="https://en.wikipedia.org/wiki/Bayesian_inference">Bayesian view</a> helps because it turns observed click counts into a posterior distribution over each unknown CTR. Since CTR is the expected immediate reward here, that posterior also describes our uncertainty about each action's one-step value. We can then ask decision questions directly, such as how likely it is that B has the higher expected reward.</p>
+<p>We keep data collection simple: we run a fixed-size experiment, observe the final counts, and make one decision at the end. The traffic-allocation policy is fixed; it does not adapt while the experiment is running.</p>
+<p>This is not the only valid way to analyze an A/B test, but it is a useful place to start.</p>
+<p>To do that, we need a simple probabilistic model that connects user-level rewards to an unknown click-through rate.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="A-Minimal-Bayesian-Model">A Minimal Bayesian Model<a class="anchor-link" href="#A-Minimal-Bayesian-Model"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>For one user, the outcome $x$ is binary, so we model it with a <a href="https://en.wikipedia.org/wiki/Bernoulli_distribution">Bernoulli distribution</a>:</p>
+<p>$$x \sim \mathrm{Bernoulli}(\theta)$$</p>
+<p>Here $x = 1$ means a click and $x = 0$ means no click. We use $\theta$ for the unknown click-through rate of one variant. In decision-making terms, $\theta$ is the expected immediate reward from showing that variant. In this one-step setting, it is also the action value.</p>
+<p>If we group $n_{\mathrm{users}}$ users together and count their clicks, the total $n_{\mathrm{clicks}}$ follows a <a href="https://en.wikipedia.org/wiki/Binomial_distribution">Binomial distribution</a>:</p>
+<p>$$n_{\mathrm{clicks}} \sim \mathrm{Binomial}(n_{\mathrm{users}}, \theta)$$</p>
+<p>This toy model assumes that each variant has a stable click probability and that user outcomes are conditionally independent given that probability.</p>
+<p>This describes how clicks are generated <strong>if</strong> we know $\theta$. In the A/B test, we face the inverse problem: we observe clicks and want to infer the unknown rate.</p>
+<p><a href="https://en.wikipedia.org/wiki/Bayesian_inference">Bayesian inference</a> uses <a href="https://en.wikipedia.org/wiki/Bayes%27_theorem">Bayes' theorem</a> to move from the observed clicks back to the unknown rate.</p>
+<p>For a single observed outcome $x$, that relationship can be written as:</p>
+<p>$$P(\theta \mid x) = \frac{P(x \mid \theta) P(\theta)}{P(x)}$$</p>
+<p>The posterior is proportional to the likelihood times the prior. In practice, we combine the <a href="https://en.wikipedia.org/wiki/Likelihood_function">likelihood</a> of the observed clicks with a <a href="https://en.wikipedia.org/wiki/Prior_probability">prior</a> over $\theta$. The result is a full <a href="https://en.wikipedia.org/wiki/Posterior_probability">posterior distribution</a> over the unknown click-through rate, rather than a single best guess.</p>
+<p>For the prior, we use a <a href="{% post_url /blog/ab_to_rl/2026-05-14-beta-distribution-probabilities %}">Beta distribution</a>:</p>
+<p>$$\theta \sim \mathrm{Beta}(\alpha, \beta)$$</p>
+<p>The Beta distribution describes plausible click-through rates between 0 and 1. For a more in-depth introduction, see <a href="{% post_url /blog/ab_to_rl/2026-05-14-beta-distribution-probabilities %}">Beta distribution: Probabilities and binary data</a>. Here we use the uniform prior $\mathrm{Beta}(1, 1)$, which says that before seeing data we do not favor any particular rate.</p>
+<p>This prior is convenient because the Beta distribution is a <a href="https://en.wikipedia.org/wiki/Conjugate_prior">conjugate prior</a> for the Bernoulli/Binomial likelihood. After observing clicks and non-clicks, the posterior is still a Beta distribution.</p>
+<p>For one observation, the update is simple:</p>
+<ul>
+<li>after a click, $\mathrm{Beta}(\alpha, \beta) \to \mathrm{Beta}(\alpha + 1, \beta)$,</li>
+<li>after a non-click, $\mathrm{Beta}(\alpha, \beta) \to \mathrm{Beta}(\alpha, \beta + 1)$.</li>
+</ul>
+<p>If we summarize the observations by their total number of clicks, the same update becomes:</p>
+<p>$$\theta \mid n_{\mathrm{clicks}}, n_{\mathrm{users}} \sim \mathrm{Beta}(\alpha + n_{\mathrm{clicks}}, \beta + n_{\mathrm{users}} - n_{\mathrm{clicks}})$$</p>
+<p>The update has a simple interpretation: a click adds 1 to the first shape parameter, and a non-click adds 1 to the second. Starting from $\mathrm{Beta}(1, 1)$ and observing $n_{\mathrm{clicks}}$ clicks out of $n_{\mathrm{users}}$ users gives $\mathrm{Beta}(1 + n_{\mathrm{clicks}}, 1 + n_{\mathrm{users}} - n_{\mathrm{clicks}})$. The sequential form is also useful; see <a href="{% post_url /blog/ab_to_rl/2026-05-17-beta-prior-sequential-binary-decisions %}">Beta Priors and P&oacute;lya Urns for Binary Decisions</a> for an update after each observation. Here, however, we update once using the full experiment.</p>
+<p>For the A/B test, we apply this model twice: once to A and once to B. Their unknown rates, $\theta_A$ and $\theta_B$, are the expected immediate rewards of the two actions. We assume independent priors for A and B and independent outcomes within each arm, so the two posterior distributions are independent. We then compare the two posterior distributions to decide which variant to ship.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="From-Observed-Counts-to-Posterior-Distributions">From Observed Counts to Posterior Distributions<a class="anchor-link" href="#From-Observed-Counts-to-Posterior-Distributions"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Let's apply the model to the toy experiment. The only inputs are the observed counts from A and B. The dashed lines mark the hidden true CTRs, or expected rewards, used to generate the simulation; the posterior itself uses only the observed clicks and non-clicks.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Compute Beta posterior parameters from observed click counts.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">beta_posterior_parameters</span><span class="p">(</span>
+    <span class="n">successes</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">trials</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">alpha_prior</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">beta_prior</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the Beta posterior shape parameters after Bernoulli or Binomial observations."""</span>
+    <span class="k">return</span> <span class="n">alpha_prior</span> <span class="o">+</span> <span class="n">successes</span><span class="p">,</span> <span class="n">beta_prior</span> <span class="o">+</span> <span class="n">trials</span> <span class="o">-</span> <span class="n">successes</span>
+
+<span class="n">alpha_a</span><span class="p">,</span> <span class="n">beta_a</span> <span class="o">=</span> <span class="n">beta_posterior_parameters</span><span class="p">(</span><span class="n">successes</span><span class="o">=</span><span class="n">clicks_a</span><span class="p">,</span> <span class="n">trials</span><span class="o">=</span><span class="n">nb_trials</span><span class="p">)</span>
+<span class="n">alpha_b</span><span class="p">,</span> <span class="n">beta_b</span> <span class="o">=</span> <span class="n">beta_posterior_parameters</span><span class="p">(</span><span class="n">successes</span><span class="o">=</span><span class="n">clicks_b</span><span class="p">,</span> <span class="n">trials</span><span class="o">=</span><span class="n">nb_trials</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the Beta distribution's density</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_beta_density</span><span class="p">(</span>
+    <span class="n">ax</span><span class="p">:</span> <span class="n">Axes</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">color</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Plot the density curve of a Beta distribution on an existing Matplotlib axis."""</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.999</span><span class="p">,</span> <span class="mi">400</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">label</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.20</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"click-through rate"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"density"</span><span class="p">)</span>
+
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mf">4.5</span><span class="p">))</span>
+<span class="n">plot_beta_density</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha_a</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta_a</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"posterior of A"</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:blue"</span><span class="p">)</span>
+<span class="n">plot_beta_density</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha_b</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta_b</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"posterior of B"</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:orange"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">true_rate_a</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:blue"</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"true rate of A (unknown)"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">true_rate_b</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:orange"</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"true rate of B (unknown)"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.50</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Posterior distributions after </span><span class="si">{</span><span class="n">nb_trials</span><span class="si">}</span><span class="s2"> observations per variant"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">"upper right"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Beta posterior densities for variants A and B; dashed lines show the true simulated click-through rates hidden from the learner."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Beta posterior densities for variants A and B; dashed lines show the true simulated click-through rates hidden from the learner." decoding="async" height="440" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_01_bayesian_ab_testing/figure-0014-00-eb5a2f160ea5.png" width="790"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Making-the-Decision">Making the Decision<a class="anchor-link" href="#Making-the-Decision"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>With posterior distributions for A and B, we can ask how likely it is that B's true CTR, or expected immediate reward, exceeds A's. In terms of the unknown CTRs:</p>
+<p>$$
+P(B &gt; A \mid \mathrm{data}) = P(\theta_B &gt; \theta_A \mid \mathrm{data}).
+$$</p>
+<p>Here $\theta_A$ and $\theta_B$ are the unknown true CTRs of variants A and B. In the one-step reward interpretation, they are also the unknown one-step action values.</p>
+<p>For this post, $P(B &gt; A \mid \mathrm{data})$ is a <strong>decision quantity</strong>: it helps us make one final ship decision after the experiment. It is not yet a traffic-allocation policy, because the experiment collected its data under a fixed randomized assignment rule. In the <a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_02_multi_armed_bandits %}">next post</a>, a similar posterior probability will become an online policy distribution.</p>
+<p>There are two useful ways to compute this probability:</p>
+<ol>
+<li>approximate it with <a href="https://en.wikipedia.org/wiki/Monte_Carlo_method">Monte Carlo sampling</a>: draw posterior samples from A and B and count how often $\theta_B &gt; \theta_A$,</li>
+<li>compute it exactly for Beta posteriors using a finite-sum identity.</li>
+</ol>
+<p>Monte Carlo is more general because it works whenever we can sample from the posterior. In the Beta-Bernoulli case, we can also compute the same probability directly. The exact calculation integrates over the two independent Beta posteriors rather than relying on Monte Carlo samples.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Estimating-$P(B-%3E-A-%5Cmid-%5Cmathrm%7Bdata%7D)$">Estimating $P(B &gt; A \mid \mathrm{data})$<a class="anchor-link" href="#Estimating-$P(B-%3E-A-%5Cmid-%5Cmathrm%7Bdata%7D)$"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>We can estimate $P(B &gt; A \mid \mathrm{data})$ by <a href="https://en.wikipedia.org/wiki/Monte_Carlo_method">Monte Carlo</a>: repeatedly draw one plausible CTR from each posterior and record whether B's draw is larger. If B wins 90% of the paired draws, our estimate of $P(B &gt; A \mid \mathrm{data})$ is about 0.90.</p>
+<p>Each comparison pairs one draw of $\theta_A$ with one draw of $\theta_B$ and records whether $\theta_B &gt; \theta_A$.</p>
+<p>$$
+P(B &gt; A \mid \mathrm{data})
+=
+P(\theta_B &gt; \theta_A \mid \mathrm{data}).
+$$</p>
+<p>For each pair, we can also compute the <strong>posterior difference</strong> $\Delta$: B's sampled CTR minus A's sampled CTR. In this one-step setting, it is also the sampled difference in expected reward:</p>
+<p>$$
+\Delta = \theta_B - \theta_A.
+$$</p>
+<p>A positive $\Delta$ means that B is higher in that paired draw. When A is a baseline or control, this difference is often called the absolute lift of B over A.</p>
+<p>The figure shows three views of the same paired draws. The scatter plot shows a readable subset. The histogram uses all paired draws to show the posterior differences $\Delta$. The final bar chart reduces each comparison to one event: did B beat A? In all three panels, green marks $\theta_B &gt; \theta_A$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Estimate P(B &gt; A | data) by posterior sampling and by an exact Beta formula.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">sample_beta_posterior</span><span class="p">(</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">rng</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">Generator</span><span class="p">,</span>  <span class="c1"># Random number generator for posterior sampling</span>
+    <span class="n">size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200_000</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FloatArray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Draw posterior samples from a Beta distribution with the given shape parameters."""</span>
+    <span class="k">return</span> <span class="n">rng</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">beta</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">estimate_probability_b_beats_a_by_sampling</span><span class="p">(</span>
+    <span class="n">alpha_a</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">beta_a</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">alpha_b</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">beta_b</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">rng</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">Generator</span><span class="p">,</span>  <span class="c1"># Random number generator for posterior sampling</span>
+    <span class="n">size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200_000</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">FloatArray</span><span class="p">,</span> <span class="n">FloatArray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Estimate P(theta_B &gt; theta_A | data) from posterior samples for both variants."""</span>
+    <span class="n">samples_a</span> <span class="o">=</span> <span class="n">sample_beta_posterior</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="n">alpha_a</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta_a</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">)</span>
+    <span class="n">samples_b</span> <span class="o">=</span> <span class="n">sample_beta_posterior</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="n">alpha_b</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta_b</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">samples_b</span> <span class="o">&gt;</span> <span class="n">samples_a</span><span class="p">)),</span> <span class="n">samples_a</span><span class="p">,</span> <span class="n">samples_b</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">exact_probability_beta_x_exceeds_beta_y</span><span class="p">(</span>
+    <span class="n">alpha_x</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">beta_x</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">alpha_y</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">beta_y</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compute P(X &gt; Y) for independent Beta variables when alpha_x is an integer.</span>
+
+<span class="sd">    Uses the finite-sum Beta-function identity described in</span>
+<span class="sd">    https://www.evanmiller.org/bayesian-ab-testing.html .</span>
+<span class="sd">    """</span>
+    <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">alpha_x</span><span class="p">)</span>
+    <span class="n">log_terms</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">betaln</span><span class="p">(</span><span class="n">alpha_y</span> <span class="o">+</span> <span class="n">indices</span><span class="p">,</span> <span class="n">beta_x</span> <span class="o">+</span> <span class="n">beta_y</span><span class="p">)</span>
+        <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">beta_x</span> <span class="o">+</span> <span class="n">indices</span><span class="p">)</span>
+        <span class="o">-</span> <span class="n">betaln</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">indices</span><span class="p">,</span> <span class="n">beta_x</span><span class="p">)</span>
+        <span class="o">-</span> <span class="n">betaln</span><span class="p">(</span><span class="n">alpha_y</span><span class="p">,</span> <span class="n">beta_y</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">max_log_term</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">log_terms</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">max_log_term</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_terms</span> <span class="o">-</span> <span class="n">max_log_term</span><span class="p">)))</span>
+
+
+<span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">exact_posterior_probability_b_beats_a</span><span class="p">(</span>
+    <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">clicks_a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">clicks_b</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compute P(theta_B &gt; theta_A | data) exactly under the uniform Beta(1, 1) prior."""</span>
+    <span class="k">return</span> <span class="n">exact_probability_beta_x_exceeds_beta_y</span><span class="p">(</span>
+        <span class="n">alpha_x</span><span class="o">=</span><span class="mi">1</span> <span class="o">+</span> <span class="n">clicks_b</span><span class="p">,</span>
+        <span class="n">beta_x</span><span class="o">=</span><span class="mi">1</span> <span class="o">+</span> <span class="n">n</span> <span class="o">-</span> <span class="n">clicks_b</span><span class="p">,</span>
+        <span class="n">alpha_y</span><span class="o">=</span><span class="mi">1</span> <span class="o">+</span> <span class="n">clicks_a</span><span class="p">,</span>
+        <span class="n">beta_y</span><span class="o">=</span><span class="mi">1</span> <span class="o">+</span> <span class="n">n</span> <span class="o">-</span> <span class="n">clicks_a</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="n">posterior_sampling_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">20260425</span><span class="p">)</span>
+<span class="n">prob_b_better_sampling</span><span class="p">,</span> <span class="n">samples_a</span><span class="p">,</span> <span class="n">samples_b</span> <span class="o">=</span> <span class="n">estimate_probability_b_beats_a_by_sampling</span><span class="p">(</span>
+    <span class="n">alpha_a</span><span class="o">=</span><span class="n">alpha_a</span><span class="p">,</span>
+    <span class="n">beta_a</span><span class="o">=</span><span class="n">beta_a</span><span class="p">,</span>
+    <span class="n">alpha_b</span><span class="o">=</span><span class="n">alpha_b</span><span class="p">,</span>
+    <span class="n">beta_b</span><span class="o">=</span><span class="n">beta_b</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="n">posterior_sampling_rng</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">prob_b_better_exact</span> <span class="o">=</span> <span class="n">exact_posterior_probability_b_beats_a</span><span class="p">(</span>
+    <span class="n">n</span><span class="o">=</span><span class="n">nb_trials</span><span class="p">,</span>
+    <span class="n">clicks_a</span><span class="o">=</span><span class="n">clicks_a</span><span class="p">,</span>
+    <span class="n">clicks_b</span><span class="o">=</span><span class="n">clicks_b</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Observed A: </span><span class="si">{</span><span class="n">clicks_a</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">nb_trials</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="n">clicks_a</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">nb_trials</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Observed B: </span><span class="si">{</span><span class="n">clicks_b</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">nb_trials</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="n">clicks_b</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">nb_trials</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"P(B &gt; A | data), posterior sampling: </span><span class="si">{</span><span class="n">prob_b_better_sampling</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"P(B &gt; A | data), exact Beta formula: </span><span class="si">{</span><span class="n">prob_b_better_exact</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="c1"># Visualize P(B &gt; A | data) as joint samples and sampled CTR differences.</span>
+<span class="n">visual_sampling_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">20260426</span><span class="p">)</span>
+<span class="n">nb_visual_samples</span> <span class="o">=</span> <span class="mi">5_000</span>
+<span class="n">visual_indices</span> <span class="o">=</span> <span class="n">visual_sampling_rng</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span>
+    <span class="nb">len</span><span class="p">(</span><span class="n">samples_a</span><span class="p">),</span>
+    <span class="n">size</span><span class="o">=</span><span class="n">nb_visual_samples</span><span class="p">,</span>
+    <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">visual_samples_a</span> <span class="o">=</span> <span class="n">samples_a</span><span class="p">[</span><span class="n">visual_indices</span><span class="p">]</span>
+<span class="n">visual_samples_b</span> <span class="o">=</span> <span class="n">samples_b</span><span class="p">[</span><span class="n">visual_indices</span><span class="p">]</span>
+<span class="n">visual_b_beats_a</span> <span class="o">=</span> <span class="n">visual_samples_b</span> <span class="o">&gt;</span> <span class="n">visual_samples_a</span>
+<span class="c1"># Use all paired posterior samples for a smoother posterior-difference histogram.</span>
+<span class="n">difference_samples</span> <span class="o">=</span> <span class="n">samples_b</span> <span class="o">-</span> <span class="n">samples_a</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span>
+    <span class="mi">1</span><span class="p">,</span>
+    <span class="mi">3</span><span class="p">,</span>
+    <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+    <span class="n">gridspec_kw</span><span class="o">=</span><span class="p">{</span><span class="s2">"width_ratios"</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.3</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">],</span> <span class="s2">"wspace"</span><span class="p">:</span> <span class="mf">0.28</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="n">axis_min</span> <span class="o">=</span> <span class="mf">0.05</span>
+<span class="n">axis_max</span> <span class="o">=</span> <span class="mf">0.20</span>
+<span class="n">axis_min_b</span> <span class="o">=</span> <span class="mf">0.09</span>
+<span class="n">axis_max_b</span> <span class="o">=</span> <span class="mf">0.24</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+    <span class="n">visual_samples_b</span><span class="p">[</span><span class="o">~</span><span class="n">visual_b_beats_a</span><span class="p">],</span>
+    <span class="n">visual_samples_a</span><span class="p">[</span><span class="o">~</span><span class="n">visual_b_beats_a</span><span class="p">],</span>
+    <span class="n">s</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.22</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"tab:gray"</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"A sample &gt; B sample"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+    <span class="n">visual_samples_b</span><span class="p">[</span><span class="n">visual_b_beats_a</span><span class="p">],</span>
+    <span class="n">visual_samples_a</span><span class="p">[</span><span class="n">visual_b_beats_a</span><span class="p">],</span>
+    <span class="n">s</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.22</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"tab:green"</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"B sample &gt; A sample"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">axis_min_b</span><span class="p">,</span> <span class="n">axis_max</span><span class="p">],</span>
+    <span class="p">[</span><span class="n">axis_min_b</span><span class="p">,</span> <span class="n">axis_max</span><span class="p">],</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span>
+    <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span>
+    <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s2">"$\theta_B = \theta_A$"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="n">axis_min_b</span><span class="p">,</span> <span class="n">axis_max_b</span><span class="p">)</span>
+<span class="c1"># Invert the A-axis so B-favoring samples appear in the upper-right region.</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">axis_max</span><span class="p">,</span> <span class="n">axis_min</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s2">"equal"</span><span class="p">,</span> <span class="n">adjustable</span><span class="o">=</span><span class="s2">"box"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_anchor</span><span class="p">(</span><span class="s2">"E"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">r</span><span class="s2">"Joint samples define $P(B &gt; A \mid data)$"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s2">"sampled CTR $\theta_B$"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s2">"sampled CTR $\theta_A$"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+    <span class="mf">0.04</span><span class="p">,</span>
+    <span class="mf">0.96</span><span class="p">,</span>
+    <span class="sa">rf</span><span class="s2">"$P(B &gt; A \mid data) \approx </span><span class="si">{</span><span class="n">prob_b_better_sampling</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">$"</span><span class="p">,</span>
+    <span class="n">transform</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span>
+    <span class="n">va</span><span class="o">=</span><span class="s2">"top"</span><span class="p">,</span>
+    <span class="n">bbox</span><span class="o">=</span><span class="p">{</span><span class="s2">"boxstyle"</span><span class="p">:</span> <span class="s2">"round,pad=0.35"</span><span class="p">,</span> <span class="s2">"facecolor"</span><span class="p">:</span> <span class="s2">"white"</span><span class="p">,</span> <span class="s2">"alpha"</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">"lower right"</span><span class="p">)</span>
+
+<span class="n">difference_density</span><span class="p">,</span> <span class="n">difference_edges</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">histogram</span><span class="p">(</span><span class="n">difference_samples</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="mi">70</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">difference_centers</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">difference_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">difference_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+<span class="n">difference_widths</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">difference_edges</span><span class="p">)</span>
+<span class="n">difference_colors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">difference_centers</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"tab:green"</span><span class="p">,</span> <span class="s2">"tab:gray"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span>
+    <span class="n">difference_centers</span><span class="p">,</span>
+    <span class="n">difference_density</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">difference_widths</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="n">difference_colors</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.55</span><span class="p">,</span>
+    <span class="n">align</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">r</span><span class="s2">"Sampled posterior difference distribution"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s2">"sampled difference $\Delta = \theta_B - \theta_A$"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"posterior sample density"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+    <span class="mf">0.04</span><span class="p">,</span>
+    <span class="mf">0.96</span><span class="p">,</span>
+    <span class="sa">rf</span><span class="s2">"mass right of 0 $\approx </span><span class="si">{</span><span class="n">prob_b_better_sampling</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">$"</span><span class="p">,</span>
+    <span class="n">transform</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span>
+    <span class="n">va</span><span class="o">=</span><span class="s2">"top"</span><span class="p">,</span>
+    <span class="n">bbox</span><span class="o">=</span><span class="p">{</span><span class="s2">"boxstyle"</span><span class="p">:</span> <span class="s2">"round,pad=0.35"</span><span class="p">,</span> <span class="s2">"facecolor"</span><span class="p">:</span> <span class="s2">"white"</span><span class="p">,</span> <span class="s2">"alpha"</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span>
+    <span class="n">handles</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">Patch</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s2">"tab:gray"</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.55</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"A sample &gt; B sample"</span><span class="p">),</span>
+        <span class="n">Patch</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s2">"tab:green"</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.55</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"B sample &gt; A sample"</span><span class="p">),</span>
+    <span class="p">],</span>
+    <span class="n">loc</span><span class="o">=</span><span class="s2">"upper right"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">event_probabilities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">prob_b_better_sampling</span><span class="p">,</span> <span class="n">prob_b_better_sampling</span><span class="p">])</span>
+<span class="n">event_labels</span> <span class="o">=</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"$B \leq A$"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"$B &gt; A$"</span><span class="p">]</span>
+<span class="n">event_colors</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"tab:gray"</span><span class="p">,</span> <span class="s2">"tab:green"</span><span class="p">]</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span><span class="n">event_labels</span><span class="p">,</span> <span class="n">event_probabilities</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">event_colors</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.65</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.05</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">r</span><span class="s2">"Posterior probability of $B &gt; A$"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"posterior probability"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">event_index</span><span class="p">,</span> <span class="n">probability</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">event_probabilities</span><span class="p">):</span>
+    <span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+        <span class="n">event_index</span><span class="p">,</span>
+        <span class="n">probability</span> <span class="o">+</span> <span class="mf">0.03</span><span class="p">,</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">probability</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="n">ha</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+        <span class="n">va</span><span class="o">=</span><span class="s2">"bottom"</span><span class="p">,</span>
+    <span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="sa">r</span><span class="s2">"Visualizing $P(B &gt; A \mid data)$ from posterior samples"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.98</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">top</span><span class="o">=</span><span class="mf">0.82</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Three views of paired posterior samples for variants A and B: their joint samples, the distribution of their difference, and the probability that B exceeds A."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Observed A: 23/200 = 0.115
+Observed B: 32/200 = 0.160
+P(B &gt; A | data), posterior sampling: 0.902
+P(B &gt; A | data), exact Beta formula: 0.903
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Three views of paired posterior samples for variants A and B: their joint samples, the distribution of their difference, and the probability that B exceeds A." decoding="async" height="410" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_01_bayesian_ab_testing/figure-0017-01-ec86ede607bc.png" width="1033"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="How-the-Posterior-Tightens-with-More-Data">How the Posterior Tightens with More Data<a class="anchor-link" href="#How-the-Posterior-Tightens-with-More-Data"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>An A/B test remains a choose-once, fixed-policy problem, so we usually care most about the final posterior. It is still useful to watch the posterior change as data accumulates: the distributions narrow, uncertainty shrinks, and the overlap between A and B becomes easier to interpret.</p>
+<p>The next cell runs a <strong>fresh, longer simulated experiment</strong> and looks at prefixes after 20, 100, 500, and 2,000 observations per variant. This illustrates how the posterior evolves in a new run; it is not a continuation of the toy experiment above.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Explore how the posterior tightens with more data</span>
+
+<span class="n">checkpoints</span> <span class="o">=</span> <span class="p">[</span><span class="mi">20</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mi">2_000</span><span class="p">]</span>
+
+<span class="c1"># Fresh simulated run used only to illustrate how the posterior tightens with more data.</span>
+<span class="n">posterior_tightening_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">20260425</span><span class="p">)</span>
+<span class="n">data_a</span> <span class="o">=</span> <span class="n">posterior_tightening_rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">true_rate_a</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">checkpoints</span><span class="p">))</span>
+<span class="n">data_b</span> <span class="o">=</span> <span class="n">posterior_tightening_rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">true_rate_b</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">checkpoints</span><span class="p">))</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">ax</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axes</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">checkpoints</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="n">a_alpha</span><span class="p">,</span> <span class="n">a_beta</span> <span class="o">=</span> <span class="n">beta_posterior_parameters</span><span class="p">(</span><span class="n">successes</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">data_a</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span> <span class="n">trials</span><span class="o">=</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">b_alpha</span><span class="p">,</span> <span class="n">b_beta</span> <span class="o">=</span> <span class="n">beta_posterior_parameters</span><span class="p">(</span><span class="n">successes</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">data_b</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span> <span class="n">trials</span><span class="o">=</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">plot_beta_density</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">a_alpha</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">a_beta</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"A after </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> trials"</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:blue"</span><span class="p">)</span>
+    <span class="n">plot_beta_density</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">b_alpha</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">b_beta</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"B after </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> trials"</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:orange"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">true_rate_a</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:blue"</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"true rate of A"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">true_rate_b</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:orange"</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"true rate of B"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.50</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Posterior after </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> observations per variant"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">"upper right"</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Beta posterior densities for variants A and B after increasing numbers of observations, showing uncertainty narrowing over time."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Beta posterior densities for variants A and B after increasing numbers of observations, showing uncertainty narrowing over time." decoding="async" height="690" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_01_bayesian_ab_testing/figure-0019-00-808d6292d2ae.png" width="1089"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="How-Much-Evidence-Do-We-Need?">How Much Evidence Do We Need?<a class="anchor-link" href="#How-Much-Evidence-Do-We-Need?"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Here the decision is made offline, so the amount of data matters a lot. The previous section showed how the posterior over expected reward tightens within one experiment. Now we ask what happens across many repetitions of the same experiment.</p>
+<p><strong>If we repeated the same randomized A/B test many times, how often would our decision rule produce strong evidence for B?</strong></p>
+<p>The heatmap answers that question <strong>exactly under the model</strong>. For each sample size and true absolute lift in CTR, equivalently expected reward, we consider all possible observed click counts for A and B, compute <code>P(B &gt; A | data)</code>, and sum the probability mass of the experiments where that posterior probability exceeds 0.95.</p>
+<p>Each cell therefore gives the exact fraction of experiments, under the assumed Binomial model, in which the Bayesian decision rule would conclude that there is strong evidence for B.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Reuse exact P(B &gt; A | data) and plot how often evidence clears a threshold.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">min_clicks_b_for_confident_win</span><span class="p">(</span>
+    <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IntArray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Find the minimum B-click count needed to make P(B &gt; A | data) exceed the threshold.</span>
+
+<span class="sd">    The threshold test uses the exact Beta-Beta posterior probability from</span>
+<span class="sd">    Evan Miller's Formulas for Bayesian A/B Testing:</span>
+<span class="sd">    https://www.evanmiller.org/bayesian-ab-testing.html .</span>
+<span class="sd">    """</span>
+    <span class="n">critical</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">clicks_a</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="n">n</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">while</span> <span class="n">low</span> <span class="o">&lt;=</span> <span class="n">high</span><span class="p">:</span>
+            <span class="n">mid</span> <span class="o">=</span> <span class="p">(</span><span class="n">low</span> <span class="o">+</span> <span class="n">high</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+            <span class="n">prob_b_better</span> <span class="o">=</span> <span class="n">exact_posterior_probability_b_beats_a</span><span class="p">(</span>
+                <span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
+                <span class="n">clicks_a</span><span class="o">=</span><span class="n">clicks_a</span><span class="p">,</span>
+                <span class="n">clicks_b</span><span class="o">=</span><span class="n">mid</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">prob_b_better</span> <span class="o">&gt;</span> <span class="n">threshold</span><span class="p">:</span>
+                <span class="n">found</span> <span class="o">=</span> <span class="n">mid</span>
+                <span class="n">high</span> <span class="o">=</span> <span class="n">mid</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">low</span> <span class="o">=</span> <span class="n">mid</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">critical</span><span class="p">[</span><span class="n">clicks_a</span><span class="p">]</span> <span class="o">=</span> <span class="n">found</span>
+    <span class="k">return</span> <span class="n">critical</span>
+
+<span class="n">baseline_rate</span> <span class="o">=</span> <span class="mf">0.10</span>
+<span class="n">sample_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="mi">20</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">250</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mi">1_000</span><span class="p">,</span> <span class="mi">2_000</span><span class="p">]</span>
+<span class="n">lifts</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.00</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">]</span>
+<span class="n">posterior_threshold</span> <span class="o">=</span> <span class="mf">0.95</span>
+
+<span class="n">critical_clicks_by_sample_size</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">n</span><span class="p">:</span> <span class="n">min_clicks_b_for_confident_win</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">posterior_threshold</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">sample_sizes</span>
+<span class="p">}</span>
+
+<span class="n">heatmap_exact_repeated_experiments</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">lifts</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">sample_sizes</span><span class="p">)))</span>
+
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">lift</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">lifts</span><span class="p">):</span>
+    <span class="n">lifted_rate_b</span> <span class="o">=</span> <span class="n">baseline_rate</span> <span class="o">+</span> <span class="n">lift</span>
+    <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">sample_sizes</span><span class="p">):</span>
+        <span class="n">clicks_a_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">prob_clicks_a</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">binom</span><span class="o">.</span><span class="n">pmf</span><span class="p">(</span><span class="n">k</span><span class="o">=</span><span class="n">clicks_a_values</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">baseline_rate</span><span class="p">)</span>
+        <span class="n">critical_clicks_b</span> <span class="o">=</span> <span class="n">critical_clicks_by_sample_size</span><span class="p">[</span><span class="n">n</span><span class="p">]</span>
+        <span class="n">prob_confident_b_given_clicks_a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+            <span class="n">stats</span><span class="o">.</span><span class="n">binom</span><span class="o">.</span><span class="n">sf</span><span class="p">(</span><span class="n">k</span><span class="o">=</span><span class="n">critical</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">lifted_rate_b</span><span class="p">)</span> <span class="k">if</span> <span class="n">critical</span> <span class="o">&lt;=</span> <span class="n">n</span> <span class="k">else</span> <span class="mf">0.0</span>
+            <span class="k">for</span> <span class="n">critical</span> <span class="ow">in</span> <span class="n">critical_clicks_b</span>
+        <span class="p">])</span>
+        <span class="n">heatmap_exact_repeated_experiments</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span>
+            <span class="n">prob_clicks_a</span> <span class="o">*</span> <span class="n">prob_confident_b_given_clicks_a</span>
+        <span class="p">)</span>
+
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">sns</span><span class="o">.</span><span class="n">heatmap</span><span class="p">(</span>
+    <span class="n">heatmap_exact_repeated_experiments</span><span class="p">,</span>
+    <span class="n">annot</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">fmt</span><span class="o">=</span><span class="s2">".2f"</span><span class="p">,</span>
+    <span class="n">cmap</span><span class="o">=</span><span class="s2">"cividis"</span><span class="p">,</span>
+    <span class="n">xticklabels</span><span class="o">=</span><span class="n">sample_sizes</span><span class="p">,</span>
+    <span class="n">yticklabels</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">"+</span><span class="si">{</span><span class="n">lift</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">lift</span> <span class="ow">in</span> <span class="n">lifts</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">"observations per variant"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">"true absolute lift of B over A"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">"Exact fraction of experiments where posterior P(B &gt; A | data) &gt; 0.95"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Heatmap of the fraction of simulated experiments where the posterior probability that B beats A exceeds 0.95, by sample size and true lift."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Heatmap of the fraction of simulated experiments where the posterior probability that B beats A exceeds 0.95, by sample size and true lift." decoding="async" height="389" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_01_bayesian_ab_testing/figure-0021-00-02db357a3458.png" width="895"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Short-Note-on-Real-World-Use">Short Note on Real-World Use<a class="anchor-link" href="#Short-Note-on-Real-World-Use"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Real A/B tests are messier than this toy example. In practice, we need to consider data quality, sample-ratio mismatches, multiple metrics, stopping rules, and business constraints. We also need to ask whether the measured outcome is a good reward signal for the value we care about, and what the decision means for users and the product.</p>
+<p>The practical summary is short:</p>
+<ul>
+<li>random assignment makes the comparison causal,</li>
+<li>observed outcomes update our uncertainty about each variant's CTR, or expected immediate reward,</li>
+<li>the posterior lets us ask decision questions such as $P(B &gt; A \mid \mathrm{data})$.</li>
+</ul>
+<p>For this series, the important limitation is that the decision happens at the end. We collect the data, analyze it, and choose once. In the <a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_02_multi_armed_bandits %}">next post</a>, we start reallocating traffic as evidence arrives instead of waiting until the end.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Summary">Summary<a class="anchor-link" href="#Summary"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>In this A/B testing setting:</p>
+<ul>
+<li><strong>action</strong>: show variant A or variant B,</li>
+<li><strong>policy</strong>: a fixed randomized assignment rule; in one-state notation, a fixed $\pi(a \mid s_0)$,</li>
+<li><strong>feedback</strong>: an immediate click or no-click outcome,</li>
+<li><strong>state</strong>: a trivial repeated state $s_0$; each exposure is treated as independent,</li>
+<li><strong>what we learn directly</strong>: posterior uncertainty over each variant's CTR; because reward is binary and immediate, this is also uncertainty over expected immediate reward,</li>
+<li><strong>decision quantity</strong>: posterior probability that one action has higher expected immediate reward than the other, such as $P(B &gt; A \mid \mathrm{data})$.</li>
+</ul>
+<p>This is a fixed experiment with immediate feedback, no evolving state, and no adaptive policy. The posterior helps with the final ship decision, but it does not change traffic allocation while the experiment is running. That is the boundary for this post: uncertainty matters, but online decision-making has not entered yet. In the <a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_02_multi_armed_bandits %}">next post</a>, the same posterior-probability idea becomes an adaptive action distribution.</p>
+<h2 id="References">References<a class="anchor-link" href="#References"><i class="fa-solid fa-sm fa-link"></i></a></h2><ul>
+<li><a href="https://www.evanmiller.org/bayesian-ab-testing.html">Formulas for Bayesian A/B Testing</a>, Evan Miller: compact reference for computing posterior probabilities in Bayesian A/B tests.</li>
+</ul>
+<h2 id="Further-Reading">Further Reading<a class="anchor-link" href="#Further-Reading"><i class="fa-solid fa-sm fa-link"></i></a></h2><ul>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_02_multi_armed_bandits %}">Part 2: Bandits and Thompson Sampling</a>, Peter Roelants: continues from fixed A/B testing to online learning and adaptive traffic allocation.</li>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_03_delayed_feedback_menace %}">Part 3: MENACE and Delayed Rewards</a>, Peter Roelants: extends the online-learning view to state-dependent policies and delayed rewards.</li>
+<li><a href="{% post_url /blog/ab_to_rl/2026-05-14-beta-distribution-probabilities %}">Beta distribution: Probabilities and binary data</a>, Peter Roelants: background on why the Beta distribution is a natural model for uncertainty over probabilities.</li>
+<li><a href="https://www.pymc.io/projects/examples/en/latest/causal_inference/bayesian_ab_testing_introduction.html">Introduction to Bayesian A/B testing</a>, PyMC: a worked Bayesian A/B testing example using a probabilistic programming workflow.</li>
+<li><a href="https://vwo.com/downloads/VWO_SmartStats_technical_whitepaper.pdf">Bayesian A/B Testing at VWO</a>, Chris Stucchio: practical discussion of Bayesian A/B testing, decision rules, and product-experimentation concerns.</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Print package versions used to execute this notebook.</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Python: </span><span class="si">{</span><span class="n">platform</span><span class="o">.</span><span class="n">python_version</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">package</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"numpy"</span><span class="p">,</span> <span class="s2">"scipy"</span><span class="p">,</span> <span class="s2">"matplotlib"</span><span class="p">,</span> <span class="s2">"seaborn"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">package</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">importlib</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">version</span><span class="p">(</span><span class="n">package</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python: 3.13.12
+numpy: 2.4.6
+scipy: 1.17.1
+matplotlib: 3.11.0
+seaborn: 0.13.2
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt"></div><div class="inner_cell"><div class="text_cell_render border-box-sizing rendered_html"><p>This post is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/from_ab_to_rl/post_01_bayesian_ab_testing.ipynb">Link to the full IPython notebook file</a></p></div></div></div>

@@ -1,0 +1,788 @@
+---
+layout: post
+title: 'Neural network from scratch (3/5): Backpropagation'
+description: Transition from single-layer linear models to a multi-layer neural network by adding a hidden layer with a nonlinearity. A minimal network is implemented using Python and NumPy. This minimal network is simple enough to visualize its parameter space. The model will be optimized on a toy problem using backpropagation and gradient descent, for which the gradient derivations are included.
+tags:
+- Neural Networks
+- Machine Learning
+- NumPy
+- Backpropagation
+- Nonlinearity
+- Radial Basis Function (RBF)
+- Notebook
+image: /images/social/2015-06-14-neural-network-implementation-part03-preview.png
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Neural-network-from-scratch-(3/5):-Backpropagation">Neural network from scratch (3/5): Backpropagation<a class="anchor-link" href="#Neural-network-from-scratch-(3/5):-Backpropagation"><i class="fa-solid fa-sm fa-link"></i></a></h1>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Hidden-layer-trained-by-backpropagation">Hidden layer trained by backpropagation<a class="anchor-link" href="#Hidden-layer-trained-by-backpropagation"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>This third part will explain the workings of neural network hidden layers. A simple toy example in Python and NumPy will illustrate how hidden layers with a <a href="#Non-linear-activation-function">non-linear activation function</a> can be trained by the <a href="#Optimization-by-backpropagation">backpropagation</a> algorithm. These non-linear layers can learn how to separate non-linearly separatable samples.</p>
+<p>The toy example in this tutorial will be simple neural network with 1 input dimension, a non-linear hidden layer with 1 neuron, and a single output. This network can be represented graphically as:</p>
+<p><img alt="Image of the network with hidden layer" decoding="async" height="100" loading="lazy" src="/images/neural_net_implementation/SimpleANN03.png" width="610"/></p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This is the third part of a 5-part tutorial on how to implement neural networks from scratch in Python:</p>
+<ul>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">Part 1: Gradient descent</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-13-neural-network-implementation-part02 %}">Part 2: Classification</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-14-neural-network-implementation-part03 %}">Part 3: Backpropagation (this)</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-15-neural-network-implementation-part04 %}">Part 4: Vectorization</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-16-neural-network-implementation-part05 %}">Part 5: Multiple layers</a></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports</span>
+<span class="o">%</span><span class="k">matplotlib</span> inline
+<span class="o">%</span><span class="k">config</span> InlineBackend.figure_formats = ['svg']
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>  <span class="c1"># Matrix and vector computation package</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">cm</span> <span class="c1"># Colormaps</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.colors</span><span class="w"> </span><span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.gridspec</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gridspec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mpl_toolkits.mplot3d</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axes3D</span>  <span class="c1"># 3D plots</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>  <span class="c1"># Fancier plots</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+
+<span class="c1"># Set seaborn plotting style</span>
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s1">'darkgrid'</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1"># Set the seed for reproducability</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Dataset">Dataset<a class="anchor-link" href="#Dataset"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>In this example the target classes $t$ corresponding to the inputs $x$ will be generated from 2 class distributions: blue circles ($t=1$) and red stars ($t=0$). Where the red star class is a <a href="http://en.wikipedia.org/wiki/Multimodal_distribution">multimodal distribution</a> that surrounds the distribution of the blue circle class. This results in a 1D dataset that is not linearly separable. These samples are plotted in the figure below.</p>
+<p>The model from part 2 won't be able to classify both classes correctly since it can learn only linear separations. By adding a hidden layer with a non-linear activation function, the model will be able to train a non-linear classifier.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define and generate the samples</span>
+<span class="n">nb_of_samples_per_class</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c1"># The number of sample in each class</span>
+<span class="n">blue_mean</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># The mean of the blue class</span>
+<span class="n">red_left_mean</span> <span class="o">=</span> <span class="o">-</span><span class="mi">2</span>  <span class="c1"># The mean of the red class</span>
+<span class="n">red_right_mean</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># The mean of the red class</span>
+
+<span class="n">std_dev</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># standard deviation of both classes</span>
+<span class="c1"># Generate samples from both classes</span>
+<span class="n">xs_blue</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
+    <span class="n">nb_of_samples_per_class</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">std_dev</span> <span class="o">+</span> <span class="n">blue_mean</span>
+<span class="n">xs_red</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>  <span class="c1"># Red star left samples</span>
+        <span class="n">nb_of_samples_per_class</span><span class="o">//</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">std_dev</span> <span class="o">+</span> <span class="n">red_left_mean</span><span class="p">,</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>  <span class="c1"># Red star right samples</span>
+        <span class="n">nb_of_samples_per_class</span><span class="o">//</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">std_dev</span> <span class="o">+</span> <span class="n">red_right_mean</span>
+<span class="p">))</span>
+
+<span class="c1"># Merge samples in set of input variables x, and corresponding set of</span>
+<span class="c1"># output variables t</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">xs_blue</span><span class="p">,</span> <span class="n">xs_red</span><span class="p">))</span>
+<span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">xs_blue</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">)),</span>
+               <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">xs_red</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">))))</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot samples from both classes</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+<span class="c1"># Plot samples</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs_blue</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">xs_blue</span><span class="p">),</span> <span class="s1">'bo'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs_red</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">xs_red</span><span class="p">),</span> <span class="s1">'r*'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span><span class="o">.</span><span class="n">axes</span><span class="o">.</span><span class="n">get_yaxis</span><span class="p">()</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Input samples from the blue circles and red star classes'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">bottom</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Blue-circle and red-star input samples in one dimension."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Blue-circle and red-star input samples in one dimension." decoding="async" height="86" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part03/figure-0006-00-33440b918fd0.svg" width="413"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Non-linear-activation-function">Non-linear activation function<a class="anchor-link" href="#Non-linear-activation-function"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The non-linear <a href="https://en.wikipedia.org/wiki/Activation_function">activation function</a> used in the hidden layer of this example is the <a href="http://en.wikipedia.org/wiki/Gaussian_function">Gaussian</a> <a href="http://en.wikipedia.org/wiki/Radial_basis_function">radial basis function</a> (RBF). The RBF is a activation function that is not usually used in neural networks, except for <a href="http://en.wikipedia.org/wiki/Radial_basis_function_network">radial basis function networks</a>. It's being used in this example because it's non-linearity allows us to seperate the blue circle class surrounded by the red star class i our toy example.
+The RBF will allow to separate the blue circle samples from the red star samples in this simple example by only activating for a certain region around the origin. The RBF is plotted in the figure below and is defined in this example as:</p>
+<p>$$ \text{RBF} = \phi(z_h) = e^{-z_h^2} $$</p>
+<p>The derivative of this RBF function is:</p>
+<p>$$ \frac{d \phi(z_h)}{dz_h} = -2 z_h e^{-z_h^2} = -2 z_h \phi(z_h)$$</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">rbf</span><span class="p">(</span><span class="n">zh</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""RBF activation function"""</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">zh</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the rbf function</span>
+<span class="n">zhs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">zhs</span><span class="p">,</span> <span class="n">rbf</span><span class="p">(</span><span class="n">zhs</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="s1">'$e^{-z_h^2}$'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$z$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'RBF function'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">bottom</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Radial-basis-function activation as a function of its input."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Radial-basis-function activation as a function of its input." decoding="async" height="208" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part03/figure-0009-00-cd02e711d92d.svg" width="314"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Optimization-by-backpropagation">Optimization by backpropagation<a class="anchor-link" href="#Optimization-by-backpropagation"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>We will train this model by using the <a href="http://en.wikipedia.org/wiki/Backpropagation">backpropagation</a> algorithm that is typically used to train neural networks. Each iteration of the backpropagation algorithm consists of two steps:</p>
+<ol>
+<li>A forward propagation step to compute the output of the network.</li>
+<li>A backward propagation step in which the error at the end of the network is propagated backward through all the neurons while updating their parameters.</li>
+</ol>
+<h3 id="1.-Forward-step">1. Forward step<a class="anchor-link" href="#1.-Forward-step"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>During the forward step, the input will be propagated layer by layer through the network to compute the final output of the network.</p>
+<h4 id="Compute-activations-of-hidden-layer">Compute activations of hidden layer<a class="anchor-link" href="#Compute-activations-of-hidden-layer"><i class="fa-solid fa-sm fa-link"></i></a></h4><p>The activations $\mathbf{h}$ of the hidden layer will be computed by:</p>
+<p>$$\mathbf{h} = \text{RBF}(\mathbf{x} \cdot w_h) = e^{-(\mathbf{x} \cdot w_h)^2} $$</p>
+<p>With $w_h$ the weight parameter that transforms the input before applying the RBF activation function. This is implemented below by the <code>hidden_activations(x, wh)</code> method.</p>
+<h4 id="Compute-activations-of-output">Compute activations of output<a class="anchor-link" href="#Compute-activations-of-output"><i class="fa-solid fa-sm fa-link"></i></a></h4><p>The final output of the network will be computed by passing the hidden activations $\mathbf{h}$ as input to the <a href="{% post_url /blog/cross_entropy/2015-06-10-cross-entropy-logistic %}">logistic classifier</a> function $\sigma$:</p>
+<p>$$ \mathbf{y} = \sigma(\mathbf{h} + b_o) = \frac{1}{1+e^{-(\mathbf{h}+ b_o)}} $$</p>
+<p>With $b_o$ the bias parameter of the output layer. This is implemented below as the <code>output_activations(h , bo)</code> method.
+Note that in this toy example we don't multiply with a weight parameter and we add a only add a bias (intercept) term to the input of the logistic output neuron.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">logistic</span><span class="p">(</span><span class="n">zo</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Logistic classifiction function"""</span>
+    <span class="k">return</span> <span class="mf">1.</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">zo</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">hidden_activations</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Hidden layer activations from RBF."""</span>
+    <span class="k">return</span> <span class="n">rbf</span><span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">wh</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">output_activations</span><span class="p">(</span><span class="n">h</span> <span class="p">,</span> <span class="n">bo</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Logistic classification output."""</span>
+    <span class="k">return</span> <span class="n">logistic</span><span class="p">(</span><span class="n">h</span> <span class="o">+</span> <span class="n">bo</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Full neural network function."""</span>
+    <span class="k">return</span> <span class="n">output_activations</span><span class="p">(</span><span class="n">hidden_activations</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">),</span> <span class="n">bo</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">nn_predict</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Neural network prediction function that only returns</span>
+<span class="sd">    1 or 0 depending on the predicted class."""</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">around</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="2.-Backward-step">2. Backward step<a class="anchor-link" href="#2.-Backward-step"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The backward step will begin with computing the loss (error) at the output node. The gradient of this loss will then be propagated backwards layer by layer through the network to calculate the parameter updates. Once we have the gradients for each parameter we can use the <a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">gradient descent</a> algorithm to update these parameters.</p>
+<h4 id="Compute-the-loss-function">Compute the loss function<a class="anchor-link" href="#Compute-the-loss-function"><i class="fa-solid fa-sm fa-link"></i></a></h4><p>The loss function $\xi$ used in this model is the same cross-entropy loss function introduced in <a href="{% post_url /blog/neural_net_implementation/2015-06-13-neural-network-implementation-part02 %}">part 2</a>:</p>
+<p>$$\xi(t_i,y_i) = - \left[ t_i log(y_i) + (1-t_i)log(1-y_i) \right]$$</p>
+<p>This loss function is plotted for the $w_h$ and $b_o$ parameters in the next figure. Note that this error surface is not convex anymore because we introduced a hidden layer with a non-linearity.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">loss</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Cross entropy loss function."""</span>
+    <span class="k">return</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">t</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">y</span><span class="p">))</span> <span class="o">+</span> <span class="p">((</span><span class="mi">1</span><span class="o">-</span><span class="n">t</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">y</span><span class="p">)))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">loss_for_param</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Calculate the loss for a given set of parameters."""</span>
+    <span class="k">return</span> <span class="n">loss</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">)</span> <span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the loss in function of the weights</span>
+<span class="c1"># Define a vector of weights for which we want to plot the loss</span>
+<span class="n">grid_size</span> <span class="o">=</span> <span class="mi">50</span> <span class="c1"># Grid used to plot loss surface</span>
+<span class="n">wsh</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">grid_size</span><span class="p">)</span> <span class="c1"># hidden weights</span>
+<span class="n">bso</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">grid_size</span><span class="p">)</span> <span class="c1"># output weights</span>
+<span class="n">params_x</span><span class="p">,</span> <span class="n">params_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">wsh</span><span class="p">,</span> <span class="n">bso</span><span class="p">)</span> <span class="c1"># generate grid</span>
+<span class="c1"># Initialise loss surface grid</span>
+<span class="n">loss_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">grid_size</span><span class="p">,</span> <span class="n">grid_size</span><span class="p">))</span>
+<span class="c1"># Fill the loss matrix for each combination of weights</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">grid_size</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">grid_size</span><span class="p">):</span>
+        <span class="n">loss_grid</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">loss</span><span class="p">(</span>
+            <span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">params_x</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">params_y</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">])</span> <span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+<span class="c1"># Plot the loss function surface</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="k">with</span> <span class="n">sns</span><span class="o">.</span><span class="n">axes_style</span><span class="p">(</span><span class="s2">"whitegrid"</span><span class="p">):</span>
+    <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">projection</span><span class="o">=</span><span class="s1">'3d'</span><span class="p">)</span>
+    <span class="c1"># plot the surface</span>
+    <span class="n">surf</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot_surface</span><span class="p">(</span>
+        <span class="n">params_x</span><span class="p">,</span> <span class="n">params_y</span><span class="p">,</span> <span class="n">loss_grid</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">magma</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">view_init</span><span class="p">(</span><span class="n">elev</span><span class="o">=</span><span class="mi">55</span><span class="p">,</span> <span class="n">azim</span><span class="o">=-</span><span class="mi">30</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">pane</span><span class="o">.</span><span class="n">fill</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">pane</span><span class="o">.</span><span class="n">fill</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">zaxis</span><span class="o">.</span><span class="n">pane</span><span class="o">.</span><span class="n">fill</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">surf</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.15</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$w_h$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$b_o$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_zlabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'Loss function surface'</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s1">'left'</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">pad</span><span class="o">=-</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Three-dimensional loss surface over the hidden weight and output bias."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Three-dimensional loss surface over the hidden weight and output bias." decoding="async" height="315" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part03/figure-0014-00-790078ab81f5.svg" width="389"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h4 id="Update-the-output-layer">Update the output layer<a class="anchor-link" href="#Update-the-output-layer"><i class="fa-solid fa-sm fa-link"></i></a></h4><p>At the output the gradient for sample $i$, the update ${\partial \xi_i}/{\partial b_o}$ for parameter $b_o$ can be worked out using the <a href="https://en.wikipedia.org/wiki/Chain_rule">chain rule</a> the same way as we did in <a href="{% post_url /blog/neural_net_implementation/2015-06-13-neural-network-implementation-part02 %}">part 2</a>:</p>
+<p>$$
+\frac{\partial \xi_i}{\partial b_o}
+= \frac{\partial \xi_i}{\partial y_i} \frac{\partial y_i}{\partial z_{oi}} \frac{\partial z_{oi}}{\partial b_o}
+= (y_i-t_i) = \delta_{oi}
+$$</p>
+<p>With $z_{oi} = h_i + b_o$, $h_i$ the hidden layer activation of sample $i$ and ${\partial \xi_i}/{\partial z_{oi}} = \delta_{oi}$ the gradient of the error at the output layer of the neural network with respect to the input to this layer. Note that ${\partial z_{oi}}/{\partial b_o} = 1$.</p>
+<p>$\delta_{o}$ is defined below as the <code>gradient_output(y, t)</code> method and ${\partial \xi}/{\partial b_o}$ as the <code>gradient_bias_out(h, grad_output)</code> method. Note that these return the same in this case.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h4 id="Update-the-hidden-layer">Update the hidden layer<a class="anchor-link" href="#Update-the-hidden-layer"><i class="fa-solid fa-sm fa-link"></i></a></h4><p>Using the <a href="https://en.wikipedia.org/wiki/Chain_rule">chain rule</a> at the hidden layer parameter $w_h$ we can compute the gradient for sample $i$: ${\partial \xi_i}/{\partial w_{h}}$ the same way:</p>
+<p>$$
+\frac{\partial \xi_i}{\partial w_{h}}
+= \frac{\partial \xi_i}{\partial h_i} \frac{\partial h_i}{\partial z_{hi}}  \frac{\partial z_{hi}}{\partial w_{h}}
+= x_i \cdot \delta_{hi}
+$$</p>
+<p>With $z_{hi} = x_i \cdot w_{h} $. And with ${\partial \xi_i}/{\partial z_{hi}} = \delta_{hi}$ the gradient of the error at the input of the hidden layer with respect to the input to this layer. $\delta_{hi}$ can be interpreted as the gradient of the contribution of $z_{hi}$ to the final error.</p>
+<p>How do we define this error gradient $\delta_{hi}$ at the input of the hidden neurons? It can be computed as the error gradient propagated back from the output layer through the hidden layer.</p>
+<p>$$
+\begin{split}
+\delta_{hi}
+= \frac{\partial \xi_i}{\partial z_{hi}}
+&amp;= \frac{\partial \xi_i}{\partial z_{oi}} \frac{\partial z_{oi}}{\partial h_i} \frac{\partial h_i}{\partial z_{hi}}
+= (-2 \cdot z_{hi} \cdot h_i) \cdot (y_i - t_i) \\
+&amp;= -2 \cdot z_{hi} \cdot h_i \cdot \delta_{oi}
+\end{split}
+$$</p>
+<p>Because of this, and because ${\partial z_{hi}}/{\partial w_{h}} = x_i$ we can compute ${\partial \xi_i}/{\partial w_{h}}$ as:</p>
+<p>$$\frac{\partial \xi_i}{\partial w_{h}} = x_i \delta_{hi}  $$</p>
+<p>The gradients for each parameter can again be averaged of the inputs $i$ to compute the update for a batch of input examples.</p>
+<p>$\delta_{h}$ is defined below as the <code>gradient_hidden(bo, grad_output)</code> method and ${\partial \xi}/{\partial w_h}$ as the <code>gradient_weight_hidden(x, zh, h, grad_hidden)</code> method.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">gradient_output</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Gradient of loss output."""</span>
+    <span class="k">return</span> <span class="n">y</span> <span class="o">-</span> <span class="n">t</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gradient_bias_out</span><span class="p">(</span><span class="n">grad_output</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Gradient off the bias parameter at the output layer."""</span>
+    <span class="k">return</span> <span class="n">grad_output</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gradient_hidden</span><span class="p">(</span><span class="n">grad_output</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Gradient of hidden layer output."""</span>
+    <span class="k">return</span> <span class="n">grad_output</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gradient_weight_hidden</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">zh</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">grad_hidden</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Gradient of hidden layer weight parameter wh."""</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="o">-</span><span class="mi">2</span> <span class="o">*</span> <span class="n">zh</span> <span class="o">*</span> <span class="n">h</span> <span class="o">*</span> <span class="n">grad_hidden</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Backpropagation-updates">Backpropagation updates<a class="anchor-link" href="#Backpropagation-updates"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>Once we know how to compute gradient of the loss with respect to the parameters we can start using the <a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">gradient descent</a> algorithm to train the network. Gradient descent will iteratively update the parameters in the direction of the negative <a href="http://en.wikipedia.org/wiki/Gradient">gradient</a>. The parameters $w_h$ and $b_o$ are updated scaled by the learning rate $\mu$:</p>
+<p>$$
+w_h(k+1) = w_h(k) - \Delta w_h(k+1) \quad \text{with} \; \Delta w_h = \mu \cdot {\partial \xi}/{\partial w_h}\\
+b_o(k+1) = b_o(k) - \Delta b_o(k+1) \quad \text{with} \; \Delta b_o = \mu \cdot {\partial \xi}/{\partial b_o}
+$$</p>
+<p>The gradient descent algorithm is typically initialised by starting with random initial parameters. After initiating these parameters we can start updating these parameters with $\Delta$ until convergence. The learning rate needs to be tuned separately as a hyperparameter for each neural network. One backpropagation iteration with gradient descent is implemented below by the <code>backprop_update(x, t, wh, bo, learning_rate)</code> method.</p>
+<p>I hope that this rather long writeup of how to update the parameters illustrates that the backpropagation algorithm is just an application of the chain rule for computing derivatives and can be written out for more complex networks if needed.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">backprop_update</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Full backpropagation update function.</span>
+<span class="sd">    Updates the parameters bo and wh in 1 iteration."""</span>
+    <span class="c1"># Compute the output of the network</span>
+    <span class="c1"># This can be done with y = nn(x, wh, bo), but we need</span>
+    <span class="c1">#  the intermediate h and zh for the weight updates.</span>
+    <span class="n">zh</span> <span class="o">=</span> <span class="n">x</span> <span class="o">*</span> <span class="n">wh</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">rbf</span><span class="p">(</span><span class="n">zh</span><span class="p">)</span>  <span class="c1"># h = hidden_activations(x, wh)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">output_activations</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">bo</span><span class="p">)</span>
+    <span class="c1"># Compute the gradient at the output</span>
+    <span class="n">grad_output</span> <span class="o">=</span> <span class="n">gradient_output</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+    <span class="c1"># Get the delta for bo</span>
+    <span class="n">d_bo</span> <span class="o">=</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">gradient_bias_out</span><span class="p">(</span><span class="n">grad_output</span><span class="p">)</span>
+    <span class="c1"># Compute the gradient at the hidden layer</span>
+    <span class="n">grad_hidden</span> <span class="o">=</span> <span class="n">gradient_hidden</span><span class="p">(</span><span class="n">grad_output</span><span class="p">)</span>
+    <span class="c1"># Get the delta for wh</span>
+    <span class="n">d_wh</span> <span class="o">=</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">gradient_weight_hidden</span><span class="p">(</span>
+        <span class="n">x</span><span class="p">,</span> <span class="n">zh</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">grad_hidden</span><span class="p">)</span>
+    <span class="c1"># return the update parameters</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">wh</span><span class="o">-</span><span class="n">d_wh</span><span class="p">)),</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">bo</span><span class="o">-</span><span class="n">d_bo</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>An example run of backpropagation for 50 iterations on the example inputs $\mathbf{x}$ and targets $\mathbf{t}$ is shown in the figure below. The white dots represent the weight parameter values $w_h$ and $b_o$ at iteration $k$ and are plotted on the loss surface.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Run backpropagation</span>
+<span class="c1"># Set the initial weight parameter</span>
+<span class="n">wh</span> <span class="o">=</span> <span class="mf">2.3</span>  <span class="c1"># Randomly decided</span>
+<span class="n">bo</span> <span class="o">=</span> <span class="mf">1.4</span>  <span class="c1"># Randomly decided</span>
+<span class="c1"># Set the learning rate</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">2.0</span>
+
+<span class="c1"># Start the gradient descent updates and plot the iterations</span>
+<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c1"># number of gradient descent updates</span>
+<span class="c1"># List to store the weight values for later vizualization</span>
+<span class="n">params_loss</span> <span class="o">=</span> <span class="p">[(</span><span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">,</span> <span class="n">loss_for_param</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">,</span> <span class="n">t</span><span class="p">))]</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">):</span>
+    <span class="c1"># Update the weights via backpropagation</span>
+    <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span> <span class="o">=</span> <span class="n">backprop_update</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>
+    <span class="c1"># Store the values for plotting</span>
+    <span class="n">params_loss</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">,</span> <span class="n">loss_for_param</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">,</span> <span class="n">t</span><span class="p">)))</span>
+
+<span class="c1"># Print the final loss</span>
+<span class="n">final_loss</span> <span class="o">=</span> <span class="n">loss_for_param</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'final loss is </span><span class="si">{</span><span class="n">final_loss</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> for weights'</span><span class="p">,</span>
+      <span class="sa">f</span><span class="s1">'wh=</span><span class="si">{</span><span class="n">wh</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> and bo=</span><span class="si">{</span><span class="n">bo</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>final loss is 0.52 for weights wh=1.12 and bo=-0.44
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the weight updates on the error surface</span>
+<span class="c1"># Plot the error surface</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+<span class="k">with</span> <span class="n">sns</span><span class="o">.</span><span class="n">axes_style</span><span class="p">(</span><span class="s2">"whitegrid"</span><span class="p">):</span>
+    <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">projection</span><span class="o">=</span><span class="s1">'3d'</span><span class="p">)</span>
+    <span class="n">surf</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot_surface</span><span class="p">(</span>
+        <span class="n">params_x</span><span class="p">,</span> <span class="n">params_y</span><span class="p">,</span> <span class="n">loss_grid</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">magma</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">view_init</span><span class="p">(</span><span class="n">elev</span><span class="o">=</span><span class="mi">55</span><span class="p">,</span> <span class="n">azim</span><span class="o">=-</span><span class="mi">30</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">pane</span><span class="o">.</span><span class="n">fill</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">pane</span><span class="o">.</span><span class="n">fill</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">zaxis</span><span class="o">.</span><span class="n">pane</span><span class="o">.</span><span class="n">fill</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">surf</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.15</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1"># Plot the updates</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">params_loss</span><span class="p">)):</span>
+        <span class="n">wh1</span><span class="p">,</span> <span class="n">bo1</span><span class="p">,</span> <span class="n">l1</span> <span class="o">=</span> <span class="n">params_loss</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">wh2</span><span class="p">,</span> <span class="n">bo2</span><span class="p">,</span> <span class="n">l2</span> <span class="o">=</span> <span class="n">params_loss</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="c1"># Plot the update </span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">wh1</span><span class="p">,</span> <span class="n">wh2</span><span class="p">],</span> <span class="p">[</span><span class="n">bo1</span><span class="p">,</span> <span class="n">bo2</span><span class="p">],</span> <span class="p">[</span><span class="n">l1</span><span class="p">,</span> <span class="n">l2</span><span class="p">],</span> <span class="s1">'w-'</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="o">*</span><span class="n">params_loss</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">'w'</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">'*'</span><span class="p">)</span>
+    <span class="c1"># Show figure</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$w_h$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$b_o$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_zlabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'Gradient descent updates on loss surface'</span><span class="p">,</span> <span class="n">pad</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Gradient-descent updates traced across the neural-network loss surface."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Gradient-descent updates traced across the neural-network loss surface." decoding="async" height="322" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part03/figure-0022-00-0849fd092716.svg" width="389"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Visualization-of-the-trained-classifier">Visualization of the trained classifier<a class="anchor-link" href="#Visualization-of-the-trained-classifier"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The resulting decision boundary of running backpropagation on the example inputs $\mathbf{x}$ and targets $\mathbf{t}$ is shown in the figure below. The background color (blue, red) refers to the classification decision between blue circle and red star of the trained classifier at that position in the input space. Note that all examples are classified correctly by the trained classifier.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[13]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the resulting decision boundary</span>
+<span class="c1"># Generate a grid over the input space to plot the color of the</span>
+<span class="c1">#  classification at that grid point</span>
+<span class="n">nb_of_xs</span> <span class="o">=</span> <span class="mi">50</span>
+<span class="n">xs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_xs</span><span class="p">)</span>
+<span class="n">ys</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_xs</span><span class="p">)</span>
+<span class="n">xx</span><span class="p">,</span> <span class="n">yy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">)</span> <span class="c1"># create the grid</span>
+<span class="c1"># Initialize and fill the classification plane</span>
+<span class="n">classification_plane</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_xs</span><span class="p">,</span> <span class="n">nb_of_xs</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
+        <span class="n">classification_plane</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">nn_predict</span><span class="p">(</span><span class="n">xx</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">wh</span><span class="p">,</span> <span class="n">bo</span><span class="p">)</span>
+<span class="c1"># Color map to show the classification colors of each grid point</span>
+<span class="n">cmap</span> <span class="o">=</span> <span class="n">ListedColormap</span><span class="p">([</span>
+        <span class="n">colorConverter</span><span class="o">.</span><span class="n">to_rgba</span><span class="p">(</span><span class="s1">'r'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.25</span><span class="p">),</span>
+        <span class="n">colorConverter</span><span class="o">.</span><span class="n">to_rgba</span><span class="p">(</span><span class="s1">'b'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)])</span>
+
+<span class="c1"># Classification plane with decision boundary and input samples</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">xx</span><span class="p">,</span> <span class="n">yy</span><span class="p">,</span> <span class="n">classification_plane</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="c1"># Plot samples from both classes as lines on a 1D space</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs_blue</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">xs_blue</span><span class="p">),</span> <span class="s1">'bo'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs_red</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">xs_red</span><span class="p">),</span> <span class="s1">'r*'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span><span class="o">.</span><span class="n">axes</span><span class="o">.</span><span class="n">get_yaxis</span><span class="p">()</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Input samples and their classification'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">bottom</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Nonlinear classification boundary with the blue-circle and red-star samples."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Nonlinear classification boundary with the blue-circle and red-star samples." decoding="async" height="86" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part03/figure-0024-00-b904f6964351.svg" width="413"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Transformation-of-the-input-domain">Transformation of the input domain<a class="anchor-link" href="#Transformation-of-the-input-domain"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>How is the neural network able to separate the non-linearly seperable classes with a linear logistic classifier at the output?  The key is the hidden layer with the non-linear RBF activation function. Note that the RBF activation function is able to transform the samples near the origin (blue circle) to a value larger than $0$, and the samples further from the origin (red stars) to a value near $0$. This projection is plotted in the following figure. The horizontal axis has the input $x$ while the vertical axis shows the transformed input $h = RBF(x \cdot w_h)$.</p>
+<p>Note that in the vertical axis $h$ the red stars are located closer to $0$, and that the blue circles are located more to $1$. This projection is linearly seperable by the logistic classifier in the output layer.</p>
+<p>Also, note that the offset of the peak of the Gaussian function we use is $0$. This means that the Gaussian function is centered around the origin, which can be noted in the symmetrical decision boundaries around the origin on the previous figure.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Illustrate the transformation of x to h</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+<span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">width_ratios</span><span class="o">=</span><span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">height_ratios</span><span class="o">=</span><span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="n">gs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">wspace</span><span class="o">=</span><span class="mf">0.</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span>
+    <span class="s1">'Projection of the input samples $x$ '</span>
+    <span class="s1">'to hidden layer output $h$.'</span><span class="p">)</span>
+
+<span class="c1"># Plot input</span>
+<span class="n">ax_in</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="n">ax_in</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs_blue</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">xs_blue</span><span class="p">),</span> <span class="s1">'bo'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">ax_in</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs_red</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">xs_red</span><span class="p">),</span> <span class="s1">'r*'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">ax_in</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">ax_in</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">ax_in</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span>
+<span class="n">ax_in</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+<span class="c1"># Plot red star projections</span>
+<span class="k">for</span> <span class="n">xr</span> <span class="ow">in</span> <span class="n">xs_red</span><span class="p">:</span>
+    <span class="n">ax_in</span><span class="o">.</span><span class="n">plot</span><span class="p">((</span><span class="n">xr</span><span class="p">,</span> <span class="n">xr</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="s1">'r--'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="c1"># Plot blue circle projections</span>
+<span class="k">for</span> <span class="n">xb</span> <span class="ow">in</span> <span class="n">xs_blue</span><span class="p">:</span>
+    <span class="n">ax_in</span><span class="o">.</span><span class="n">plot</span><span class="p">((</span><span class="n">xb</span><span class="p">,</span> <span class="n">xb</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="s1">'b--'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+
+<span class="c1"># Plot RBF function</span>
+<span class="n">ax_rbf</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">xs_rbf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">ax_rbf</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="n">xs_rbf</span><span class="p">,</span> <span class="n">hidden_activations</span><span class="p">(</span><span class="n">xs_rbf</span><span class="p">,</span> <span class="n">wh</span><span class="p">),</span>
+    <span class="s1">'k-'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'$h = RBF(x \cdot w_h)$'</span><span class="p">)</span>
+<span class="n">ax_rbf</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">ax_rbf</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="n">ax_rbf</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">)</span>
+<span class="n">ax_rbf</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">set_ticks_position</span><span class="p">(</span><span class="s1">'top'</span><span class="p">)</span>
+<span class="c1"># Plot red star projections</span>
+<span class="k">for</span> <span class="n">xr</span> <span class="ow">in</span> <span class="n">xs_red</span><span class="p">:</span>
+    <span class="n">xr</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">xr</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">hidden_activations</span><span class="p">(</span><span class="n">xr</span><span class="p">,</span> <span class="n">wh</span><span class="p">)</span>
+    <span class="n">ax_rbf</span><span class="o">.</span><span class="n">plot</span><span class="p">((</span><span class="n">xr</span><span class="p">,</span> <span class="n">xr</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="s1">'r--'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+    <span class="n">ax_rbf</span><span class="o">.</span><span class="n">plot</span><span class="p">((</span><span class="n">xr</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="p">[</span><span class="n">h</span><span class="p">,</span> <span class="n">h</span><span class="p">],</span> <span class="s1">'r--'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="c1"># Plot blue circle projections</span>
+<span class="k">for</span> <span class="n">xb</span> <span class="ow">in</span> <span class="n">xs_blue</span><span class="p">:</span>
+    <span class="n">xb</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">xb</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">hidden_activations</span><span class="p">(</span><span class="n">xb</span><span class="p">,</span> <span class="n">wh</span><span class="p">)</span>
+    <span class="n">ax_rbf</span><span class="o">.</span><span class="n">plot</span><span class="p">((</span><span class="n">xb</span><span class="p">,</span> <span class="n">xb</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="s1">'b--'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+    <span class="n">ax_rbf</span><span class="o">.</span><span class="n">plot</span><span class="p">((</span><span class="n">xb</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="p">[</span><span class="n">h</span><span class="p">,</span> <span class="n">h</span><span class="p">],</span> <span class="s1">'b--'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+
+<span class="c1"># Plot output</span>
+<span class="n">ax_out</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">ax_out</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">xs_blue</span><span class="p">),</span> <span class="n">hidden_activations</span><span class="p">(</span><span class="n">xs_blue</span><span class="p">,</span> <span class="n">wh</span><span class="p">),</span>
+    <span class="s1">'bo'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">ax_out</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">xs_red</span><span class="p">),</span> <span class="n">hidden_activations</span><span class="p">(</span><span class="n">xs_red</span><span class="p">,</span> <span class="n">wh</span><span class="p">),</span>
+    <span class="s1">'r*'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+<span class="n">ax_out</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">ax_out</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_label_position</span><span class="p">(</span><span class="s1">'right'</span><span class="p">)</span>
+<span class="n">ax_out</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_ticks_position</span><span class="p">(</span><span class="s1">'right'</span><span class="p">)</span>
+<span class="n">ax_out</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$h$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">ax_out</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">)</span>
+<span class="n">ax_out</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="c1"># Plot red star projections</span>
+<span class="k">for</span> <span class="n">xr</span> <span class="ow">in</span> <span class="n">xs_red</span><span class="p">:</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">hidden_activations</span><span class="p">(</span><span class="n">xr</span><span class="p">,</span> <span class="n">wh</span><span class="p">)</span>
+    <span class="n">ax_out</span><span class="o">.</span><span class="n">plot</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="s1">'r--'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="c1"># Plot blue circle projections</span>
+<span class="k">for</span> <span class="n">xb</span><span class="p">,</span> <span class="ow">in</span> <span class="n">xs_blue</span><span class="p">:</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">hidden_activations</span><span class="p">(</span><span class="n">xb</span><span class="p">,</span> <span class="n">wh</span><span class="p">)</span>
+    <span class="n">ax_out</span><span class="o">.</span><span class="n">plot</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="s1">'b--'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">gcf</span><span class="p">(),</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Projection of input samples through the radial-basis hidden layer."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Projection of input samples through the radial-basis hidden layer." decoding="async" height="422" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part03/figure-0026-01-bfabc70edd1f.svg" width="407"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This was the third part of a 5-part tutorial on how to implement neural networks from scratch in Python:</p>
+<ul>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">Part 1: Gradient descent</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-13-neural-network-implementation-part02 %}">Part 2: Classification</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-14-neural-network-implementation-part03 %}">Part 3: Backpropagation (this)</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-15-neural-network-implementation-part04 %}">Part 4: Vectorization</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-16-neural-network-implementation-part05 %}">Part 5: Multiple layers</a></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[15]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python implementation: CPython
+Python version       : 3.13.12
+IPython version      : 9.17.1
+
+IPython   : 9.17.1
+matplotlib: 3.11.1
+numpy     : 2.5.2
+seaborn   : 0.13.2
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This post at <a href="https://peterroelants.github.io/posts/neural-network-implementation-part03/" rel="canonical">peterroelants.github.io</a> is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/neural_net_implementation/neural-network-implementation-part03.ipynb">Link to the full IPython notebook file</a></p>
+</div>
+</div>
+</div>

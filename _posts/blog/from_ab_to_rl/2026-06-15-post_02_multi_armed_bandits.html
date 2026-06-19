@@ -1,0 +1,871 @@
+---
+layout: post
+title: 'From A/B to RL (2/3): Bandits and Thompson Sampling'
+description: Move from fixed A/B testing to online learning with Bayesian multi-armed bandits, probability matching, and Thompson sampling.
+tags:
+- Multi-Armed Bandit (MAB)
+- Thompson Sampling
+- A/B-testing
+- Bayesian Inference
+- Beta Distribution
+- Online Learning
+- Notebook
+image: /images/social/2026-06-15-post_02_multi_armed_bandits-preview.png
+last_modified_at: '2026-08-20'
+updates:
+- date: '2026-08-20'
+  title: Updated bandit and Thompson-sampling explanation
+  description: Updated the title and clarified posterior updates, policy notation, probability matching, regret, and the transition to RL.
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="From-A/B-to-RL-(2/3):-Bandits-and-Thompson-Sampling">From A/B to RL (2/3): Bandits and Thompson Sampling<a class="anchor-link" href="#From-A/B-to-RL-(2/3):-Bandits-and-Thompson-Sampling"><i class="fa-solid fa-sm fa-link"></i></a></h1><p><em>Learn and adapt online instead of choosing once at the end.</em></p>
+<p>In <a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_01_bayesian_ab_testing %}">the first post</a>, we used a fixed randomized experiment to build posterior beliefs about the success probabilities of two actions. Each action produced a binary outcome. After collecting the data, we used $P(B &gt; A \mid \mathrm{data})$ to ask how likely B was to have the higher expected reward.</p>
+<p>Now we keep the same Beta-Bernoulli model, but change the decision problem. At each interaction, the agent chooses an action, observes its binary reward, updates its belief, and uses that updated belief to choose again.</p>
+<p>A <a href="https://en.wikipedia.org/wiki/Multi-armed_bandit">multi-armed bandit</a> turns this into an online allocation problem: the learner chooses among several actions while learning their rewards, but observes feedback only for the action it selected. This partial-feedback setting is called <strong>bandit feedback</strong>.</p>
+<p>The term multi-armed bandit comes from the image of a row of slot machines, sometimes called <a href="https://en.wiktionary.org/wiki/one-armed_bandit">one-armed bandits</a>. In bandit language, each option is traditionally called an <strong>arm</strong>. Following reinforcement-learning terminology, we will mostly use <strong>action</strong>.</p>
+<p>The key shift from a fixed experiment to online allocation is that the learner is no longer only estimating which action is best at the end. It must also decide what to try next while learning.</p>
+<p>In RL terms, the learner now has a policy, takes actions, and receives rewards, but there is still no meaningful evolving state. The external state is effectively the same at every interaction; what changes is the agent's internal belief about the actions.</p>
+<p>This is the second post in a three-part series:</p>
+<ul>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_01_bayesian_ab_testing %}">Part 1: Bayesian A/B Testing</a></li>
+<li><strong>Part 2: Bandits and Thompson Sampling (this post)</strong></li>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_03_delayed_feedback_menace %}">Part 3: MENACE and Delayed Rewards</a></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports and setup</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.metadata</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">platform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.axes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.lines</span><span class="w"> </span><span class="kn">import</span> <span class="n">Line2D</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">stats</span>
+
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s2">"darkgrid"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s2">"figure.figsize"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+
+<span class="n">FloatArray</span> <span class="o">=</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="The-Toy-Problem">The Toy Problem<a class="anchor-link" href="#The-Toy-Problem"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Suppose the agent can choose one of three actions at each interaction:</p>
+<ul>
+<li><strong>Action A</strong></li>
+<li><strong>Action B</strong></li>
+<li><strong>Action C</strong></li>
+</ul>
+<p>After each choice, the environment returns one immediate binary reward: $1$ for success and $0$ for no success. The success probability $\theta_a$ is therefore also the expected immediate reward of choosing action $a$, which we write as $\mathbb{E}[R \mid a]$:</p>
+<p>$$
+\mathbb{E}[R \mid a] = 1 \cdot P(R=1 \mid a) + 0 \cdot P(R=0 \mid a) = \theta_a.
+$$</p>
+<p>Because this bandit episode ends after the immediate reward, its action value, in RL terms, is simply the expected reward of choosing action $a$: $\mathbb{E}[R \mid a] = \theta_a$.</p>
+<p>The statistical quantity is familiar from the fixed A/B test, but decisions are now made as data arrives. In a fixed experiment, allocation is planned up front and the final decision comes later. In a bandit, the policy chooses an action at each interaction using the feedback collected so far. The goal is cumulative reward: the total reward collected over time.</p>
+<p>We will illustrate this with a Bernoulli bandit with three possible actions. Each action has a fixed but hidden success probability. The algorithm never sees those probabilities directly; it only observes binary rewards from the actions it chooses. At each interaction, the policy must balance learning the action values with collecting reward.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define the fixed Bernoulli success probabilities for each bandit action.</span>
+<span class="n">true_success_probabilities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.09</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.15</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+<span class="n">action_labels</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"A"</span><span class="p">,</span> <span class="s2">"B"</span><span class="p">,</span> <span class="s2">"C"</span><span class="p">]</span>
+<span class="n">n_actions</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">true_success_probabilities</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="From-Posterior-Beliefs-to-Online-Decisions">From Posterior Beliefs to Online Decisions<a class="anchor-link" href="#From-Posterior-Beliefs-to-Online-Decisions"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The statistical model is almost unchanged from the <a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_01_bayesian_ab_testing %}">previous post</a>. Each action $a$ has an unknown success probability $\theta_a$. Since the reward $R_t$ is binary, either $0$ or $1$, $\theta_a$ is also the expected immediate reward of choosing action $a$.</p>
+<p>At interaction $t$, the policy first chooses an action, which we write as $a_t$. If $a_t = a$, the reward random variable $R_t$ has success probability $\theta_a$:</p>
+<p>$$
+P(R_t = 1 \mid a_t = a) = \theta_a,
+\qquad
+P(R_t = 0 \mid a_t = a) = 1 - \theta_a.
+$$</p>
+<p>In words, conditional on choosing action $a$, the reward $R_t$ is sampled from a <a href="https://en.wikipedia.org/wiki/Bernoulli_distribution">Bernoulli distribution</a> with parameter $\theta_a$:</p>
+<p>$$
+R_t \mid (a_t = a) \sim \mathrm{Bernoulli}(\theta_a).
+$$</p>
+<p>For each action, we start with a <a href="https://en.wikipedia.org/wiki/Beta_distribution">Beta prior</a> on its unknown success probability:</p>
+<p>$$
+\theta_a \sim \mathrm{Beta}(1, 1).
+$$</p>
+<p>Let $(\alpha_a, \beta_a)$ denote the current Beta parameters for each action. After choosing action $a_t$ and observing reward $r_t \in \{0, 1\}$, we update only that action:</p>
+<p>$$
+\alpha_{a_t} \leftarrow \alpha_{a_t} + r_t,
+\qquad
+\beta_{a_t} \leftarrow \beta_{a_t} + (1 - r_t).
+$$</p>
+<p>This is the same Beta-Bernoulli update as in the <a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_01_bayesian_ab_testing %}">first post</a>, applied one interaction at a time. The <a href="https://en.wikipedia.org/wiki/Posterior_probability">posterior</a> from one step becomes the <a href="https://en.wikipedia.org/wiki/Prior_probability">prior</a> for the next. For a standalone explanation of why this two-count update fits sequential binary feedback, see <a href="{% post_url /blog/ab_to_rl/2026-05-17-beta-prior-sequential-binary-decisions %}">Beta Priors and P&oacute;lya Urns for Binary Decisions</a>.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Online-Updates-and-Cumulative-Reward">Online Updates and Cumulative Reward<a class="anchor-link" href="#Online-Updates-and-Cumulative-Reward"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The model has not changed; the objective has. The goal is no longer just to identify the best action at the end. The learner must also collect as much cumulative reward as possible while it learns.</p>
+<p>Because each interaction is one-step, the reward for one interaction is just the immediate binary outcome. If we write that reward as $r_t$, then $r_t = 1$ for success and $r_t = 0$ for no success. Across the whole run, the objective is to maximize cumulative reward:</p>
+<p>$$
+\sum_{t=1}^T r_t.
+$$</p>
+<p>In this binary setup, the action value is the expected immediate reward. That expected reward is $\theta_a$, the action's hidden success probability. Sampling a plausible $\theta_a$ is therefore the same as sampling a plausible action value.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Policy-and-Exploration">Policy and Exploration<a class="anchor-link" href="#Policy-and-Exploration"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>To act online, we need a <strong>policy</strong>: a rule for selecting the next action. In standard RL notation, a policy is often written as $\pi(a \mid s)$, a distribution over actions $a$ that can be taken from a state $s$. Because the external state is always the same state $s_0$, we write the policy as $\pi_t(a)$ instead of $\pi_t(a \mid s_0)$. What changes over time is the agent's posterior belief about the actions.</p>
+<p>A bandit policy must balance the <a href="https://en.wikipedia.org/wiki/Exploration%E2%80%93exploitation_dilemma">exploration-exploitation dilemma</a>. At one extreme, a <a href="https://en.wikipedia.org/wiki/Greedy_algorithm">greedy</a> policy always chooses the action that currently looks best. It uses the evidence collected so far, but may stop trying underexplored actions too early and miss one that would have been better. At the other extreme, a uniformly random policy keeps exploring every action but never uses what it has learned to improve cumulative reward.</p>
+<p>A common compromise is an <a href="https://en.wikipedia.org/wiki/Multi-armed_bandit#Semi-uniform_strategies">$\varepsilon$-greedy</a> policy: most of the time choose the currently best-looking action, and with probability $\varepsilon$ explore by choosing a random action.</p>
+<p>Here we use <strong>probability matching</strong>. We already model posterior uncertainty over each action's expected reward. In the <a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_01_bayesian_ab_testing %}">first post</a>, that uncertainty gave us $P(B &gt; A \mid \mathrm{data})$. Here, the same comparison drives action selection: an action is chosen in proportion to the posterior probability that it is best. With $K$ actions, we ask this question for every action: under the current posterior, how likely is this action to have the highest expected reward?
+Here, $\mathrm{data}_t$ denotes all action-reward observations available before interaction $t$.</p>
+<p>$$
+\pi_t(a)
+=
+P\!\left(\theta_a &gt; \theta_j \;\; \text{for every other action } j \mid \mathrm{data}_t\right).
+$$</p>
+<p>In other words, $\pi_t(a)$ is the posterior probability that action $a$ has the highest expected reward. Because this is a one-step binary setup, the action with the highest expected reward is also the action with the highest action value.</p>
+<p>This rule turns the posterior probabilities into a policy distribution: choose each action with probability $\pi_t(a)$ on the next interaction. This is the idea <a href="https://doi.org/10.1093/biomet/25.3-4.285">Thompson described in 1933</a>: use the current probability that each option is best to guide allocation as more evidence arrives, instead of waiting for one final decision. Exploration comes from posterior uncertainty rather than a fixed $\varepsilon$, so an underexplored action can still be chosen when the posterior leaves a meaningful chance that it is best.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Online-Learning-with-Bandit-Feedback">Online Learning with Bandit Feedback<a class="anchor-link" href="#Online-Learning-with-Bandit-Feedback"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>With <strong><a href="https://en.wikipedia.org/wiki/Multi-armed_bandit">bandit feedback</a></strong>, we observe the reward of the action we chose, but not the rewards we would have observed had we chosen the other actions. Each interaction is therefore both a chance to learn and a chance to earn reward.</p>
+<p>This is still a one-state, immediate-reward problem: the simplest RL-like setting. The agent chooses actions and receives rewards, but there is no evolving external state. Each interaction ends after the immediate reward; what changes over time is the learner's information about the actions.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Thompson-Sampling-as-Posterior-Sampling">Thompson Sampling as Posterior Sampling<a class="anchor-link" href="#Thompson-Sampling-as-Posterior-Sampling"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The policy distribution</p>
+<p>$$
+\pi_t(a) = P\!\left(\theta_a &gt; \theta_j \;\; \text{for every other action } j \mid \mathrm{data}_t\right)
+$$</p>
+<p>can be difficult to compute exactly. For choosing one action, however, we do not need to estimate the full distribution.</p>
+<p>In the <a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_01_bayesian_ab_testing %}">first post</a>, we estimated $P(B &gt; A \mid \mathrm{data})$ by sampling from the posterior. We drew many plausible expected rewards, $\tilde\theta_A$ and $\tilde\theta_B$, counted how often $\tilde\theta_B$ was higher, and used that empirical frequency as a <a href="https://en.wikipedia.org/wiki/Monte_Carlo_method">Monte Carlo</a> estimate.</p>
+<p>Repeated posterior comparisons would estimate $\pi_t(a)$. Drawing one plausible value from each action's posterior and choosing the largest draw produces one exact sample from the probability-matching policy. For a single interaction, we write those draws as $\tilde\theta_i$ and choose $A_t = \arg\max_i \tilde\theta_i$.</p>
+<p>Written in probability notation, the selected action has the policy distribution because selecting action $a$ is exactly the event that $a$ has the largest sampled expected reward:</p>
+<p>$$
+P(A_t = a \mid \mathrm{data}_t)
+=
+P\!\left(\tilde\theta_a &gt; \tilde\theta_j \;\; \text{for every other action } j \mid \mathrm{data}_t\right)
+=
+\pi_t(a).
+$$</p>
+<p>Repeated sample-and-compare draws would reveal the policy distribution, but a single draw is already one valid sample from it. That is the key idea behind <a href="https://en.wikipedia.org/wiki/Thompson_sampling">Thompson sampling</a>: use current posterior uncertainty to choose actions while evidence accumulates, instead of waiting for one final decision.</p>
+<p>Equivalently, Thompson sampling is a one-sample Monte Carlo implementation of probability matching. It draws one plausible action value for each action and acts on the largest draw instead of estimating the whole policy distribution.</p>
+<p>The Thompson sampling algorithm works as follows:</p>
+<ol>
+<li>sample one plausible expected reward $\tilde{\theta}_i$ from each action's current posterior,</li>
+<li>read each sampled expected reward as a sampled action value,</li>
+<li>choose the action with the largest sampled value,</li>
+<li>observe one binary reward,</li>
+<li>update only the chosen action.</li>
+</ol>
+<p>If we repeated steps 1&ndash;3 many times without updating, the action frequencies would approach $\pi_t(a)$. In the actual algorithm, we make one draw per interaction, then observe the feedback and update the chosen action before the next draw.</p>
+<p>In this one-step setting, the sampled $\tilde{\theta}_i$ values are sampled <strong>action values</strong>: plausible average rewards for each action, not possible next binary outcomes.</p>
+<p>The simulations below make these ideas concrete. We will watch the posteriors evolve, see the induced policy concentrate on the best action, and track reward and expected regret along the way.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The figure below shows one pass through the learning loop. We start with the current posterior beliefs, sample one plausible expected reward for each action, choose the largest sample, observe one binary reward, and update only the chosen action.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Visualize one Thompson sampling interaction step by step.</span>
+<span class="n">demo_alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">8.0</span><span class="p">,</span> <span class="mf">12.0</span><span class="p">,</span> <span class="mf">7.0</span><span class="p">])</span>
+<span class="n">demo_beta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">55.0</span><span class="p">,</span> <span class="mf">68.0</span><span class="p">,</span> <span class="mf">36.0</span><span class="p">])</span>
+<span class="n">demo_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">20260602</span><span class="p">)</span>
+<span class="n">demo_action_colors</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"tab:blue"</span><span class="p">,</span> <span class="s2">"tab:orange"</span><span class="p">,</span> <span class="s2">"tab:green"</span><span class="p">]</span>
+
+<span class="n">sampled_action_values</span> <span class="o">=</span> <span class="n">demo_rng</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">demo_alpha</span><span class="p">,</span> <span class="n">demo_beta</span><span class="p">)</span>
+<span class="n">chosen_action</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">sampled_action_values</span><span class="p">))</span>
+<span class="n">observed_reward</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">demo_rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">true_success_probabilities</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]))</span>
+<span class="n">updated_alpha</span> <span class="o">=</span> <span class="n">demo_alpha</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="n">updated_beta</span> <span class="o">=</span> <span class="n">demo_beta</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="n">updated_alpha</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span> <span class="o">+=</span> <span class="n">observed_reward</span>
+<span class="n">updated_beta</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">observed_reward</span>
+
+<span class="n">value_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.32</span><span class="p">,</span> <span class="mi">800</span><span class="p">)</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">17</span><span class="p">,</span> <span class="mf">4.8</span><span class="p">))</span>
+
+<span class="c1"># Step 1: sample one plausible expected reward from each posterior.</span>
+<span class="k">for</span> <span class="n">action_index</span><span class="p">,</span> <span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">color</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">action_labels</span><span class="p">,</span> <span class="n">demo_action_colors</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)):</span>
+    <span class="n">density</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">demo_alpha</span><span class="p">[</span><span class="n">action_index</span><span class="p">],</span> <span class="n">b</span><span class="o">=</span><span class="n">demo_beta</span><span class="p">[</span><span class="n">action_index</span><span class="p">])</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">value_grid</span><span class="p">)</span>
+    <span class="n">sample</span> <span class="o">=</span> <span class="n">sampled_action_values</span><span class="p">[</span><span class="n">action_index</span><span class="p">]</span>
+    <span class="n">sample_density</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">demo_alpha</span><span class="p">[</span><span class="n">action_index</span><span class="p">],</span> <span class="n">b</span><span class="o">=</span><span class="n">demo_beta</span><span class="p">[</span><span class="n">action_index</span><span class="p">])</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>
+    <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">value_grid</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"action </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> posterior"</span><span class="p">)</span>
+    <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">value_grid</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.12</span><span class="p">)</span>
+    <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">vlines</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">sample_density</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">)</span>
+    <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="n">sample_density</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">55</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"1. Sample one action value per action"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"expected reward / action value"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"posterior density"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s2">"upper right"</span><span class="p">)</span>
+
+<span class="c1"># Step 2: compare sampled action values and act greedily under that sampled model.</span>
+<span class="n">bar_colors</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"0.82"</span><span class="p">]</span> <span class="o">*</span> <span class="n">n_actions</span>
+<span class="n">bar_colors</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span> <span class="o">=</span> <span class="n">demo_action_colors</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span>
+<span class="n">bars</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span>
+    <span class="n">action_labels</span><span class="p">,</span>
+    <span class="n">sampled_action_values</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="n">bar_colors</span><span class="p">,</span>
+    <span class="n">edgecolor</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span>
+    <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.2</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">bars</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="o">.</span><span class="n">set_linewidth</span><span class="p">(</span><span class="mf">2.6</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">action_index</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">sampled_action_values</span><span class="p">):</span>
+    <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">action_index</span><span class="p">,</span> <span class="n">value</span> <span class="o">+</span> <span class="mf">0.006</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">value</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">"bottom"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+    <span class="n">chosen_action</span><span class="p">,</span>
+    <span class="n">sampled_action_values</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span> <span class="o">*</span> <span class="mf">0.42</span><span class="p">,</span>
+    <span class="sa">f</span><span class="s2">"choose</span><span class="se">\n</span><span class="si">{</span><span class="n">action_labels</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="n">ha</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+    <span class="n">va</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"white"</span><span class="p">,</span>
+    <span class="n">fontweight</span><span class="o">=</span><span class="s2">"bold"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"2. Choose the largest sampled value"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"action"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"sampled expected reward"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">sampled_action_values</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1.35</span><span class="p">)</span>
+
+<span class="c1"># Step 3: update only the chosen action's posterior after observing feedback.</span>
+<span class="n">chosen_label</span> <span class="o">=</span> <span class="n">action_labels</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span>
+<span class="n">chosen_color</span> <span class="o">=</span> <span class="n">demo_action_colors</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span>
+<span class="n">before_density</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">demo_alpha</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">],</span> <span class="n">b</span><span class="o">=</span><span class="n">demo_beta</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">])</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">value_grid</span><span class="p">)</span>
+<span class="n">after_density</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">updated_alpha</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">],</span> <span class="n">b</span><span class="o">=</span><span class="n">updated_beta</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">])</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">value_grid</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="n">value_grid</span><span class="p">,</span>
+    <span class="n">before_density</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="n">chosen_color</span><span class="p">,</span>
+    <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span>
+    <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"before: Beta(</span><span class="si">{</span><span class="n">demo_alpha</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">demo_beta</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">)"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="n">value_grid</span><span class="p">,</span>
+    <span class="n">after_density</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="n">chosen_color</span><span class="p">,</span>
+    <span class="n">linewidth</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"after: Beta(</span><span class="si">{</span><span class="n">updated_alpha</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">updated_beta</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">)"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">value_grid</span><span class="p">,</span> <span class="n">after_density</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">chosen_color</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.14</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"3. Observe reward and update chosen action"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"expected reward / action value"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"posterior density"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s2">"upper right"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+    <span class="mf">0.04</span><span class="p">,</span>
+    <span class="mf">0.93</span><span class="p">,</span>
+    <span class="sa">f</span><span class="s2">"observed reward $r_t=</span><span class="si">{</span><span class="n">observed_reward</span><span class="si">}</span><span class="s2">$</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="sa">f</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">alpha_</span><span class="si">{</span><span class="n">chosen_label</span><span class="si">}</span><span class="s2">$: </span><span class="si">{</span><span class="n">demo_alpha</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> $</span><span class="se">\\</span><span class="s2">rightarrow$ </span><span class="si">{</span><span class="n">updated_alpha</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="sa">f</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">beta_</span><span class="si">{</span><span class="n">chosen_label</span><span class="si">}</span><span class="s2">$: </span><span class="si">{</span><span class="n">demo_beta</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> $</span><span class="se">\\</span><span class="s2">rightarrow$ </span><span class="si">{</span><span class="n">updated_beta</span><span class="p">[</span><span class="n">chosen_action</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="n">transform</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span>
+    <span class="n">ha</span><span class="o">=</span><span class="s2">"left"</span><span class="p">,</span>
+    <span class="n">va</span><span class="o">=</span><span class="s2">"top"</span><span class="p">,</span>
+    <span class="n">bbox</span><span class="o">=</span><span class="p">{</span><span class="s2">"boxstyle"</span><span class="p">:</span> <span class="s2">"round,pad=0.35"</span><span class="p">,</span> <span class="s2">"facecolor"</span><span class="p">:</span> <span class="s2">"white"</span><span class="p">,</span> <span class="s2">"edgecolor"</span><span class="p">:</span> <span class="s2">"0.65"</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">"One Thompson sampling interaction"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">1.03</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Three-panel illustration of one Thompson-sampling interaction: sample action values, choose the largest sample, then update the chosen action after the reward."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Three-panel illustration of one Thompson-sampling interaction: sample action values, choose the largest sample, then update the chosen action after the reward." decoding="async" height="499" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_02_multi_armed_bandits/figure-0010-00-047ec704cae5.png" width="1690"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define bandit records, posterior updates, and probability-matching helpers.</span>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BanditInteraction</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Observed feedback and expected regret from one bandit interaction."""</span>
+
+    <span class="n">action</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">reward</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">expected_regret</span><span class="p">:</span> <span class="nb">float</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">beta_posterior_means</span><span class="p">(</span><span class="n">alpha</span><span class="p">:</span> <span class="n">FloatArray</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="n">FloatArray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FloatArray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the posterior mean expected reward of each action."""</span>
+    <span class="k">return</span> <span class="n">alpha</span> <span class="o">/</span> <span class="p">(</span><span class="n">alpha</span> <span class="o">+</span> <span class="n">beta</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">update_beta_bernoulli_posterior</span><span class="p">(</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="n">FloatArray</span><span class="p">,</span>
+    <span class="n">beta</span><span class="p">:</span> <span class="n">FloatArray</span><span class="p">,</span>
+    <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">reward</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FloatArray</span><span class="p">,</span> <span class="n">FloatArray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Update only the chosen action's Beta posterior after binary reward feedback."""</span>
+    <span class="n">updated_alpha</span> <span class="o">=</span> <span class="n">alpha</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">updated_beta</span> <span class="o">=</span> <span class="n">beta</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">updated_alpha</span><span class="p">[</span><span class="n">action</span><span class="p">]</span> <span class="o">+=</span> <span class="n">reward</span>
+    <span class="n">updated_beta</span><span class="p">[</span><span class="n">action</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">reward</span>
+    <span class="k">return</span> <span class="n">updated_alpha</span><span class="p">,</span> <span class="n">updated_beta</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">estimate_probability_each_action_is_best</span><span class="p">(</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="n">FloatArray</span><span class="p">,</span>
+    <span class="n">beta</span><span class="p">:</span> <span class="n">FloatArray</span><span class="p">,</span>
+    <span class="n">rng</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">Generator</span><span class="p">,</span>
+    <span class="n">size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50_000</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FloatArray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Monte Carlo estimate of the probability-matching policy.</span>
+
+<span class="sd">    The estimate samples plausible expected rewards from each action's Beta posterior</span>
+<span class="sd">    and returns the empirical frequency with which each action has the largest sample.</span>
+<span class="sd">    """</span>
+    <span class="n">sampled_action_values</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">alpha</span><span class="p">)))</span>
+    <span class="n">winning_actions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">sampled_action_values</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">winning_actions</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">alpha</span><span class="p">))</span> <span class="o">/</span> <span class="n">size</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>We now run the interaction loop for 1,000 interactions. The code initializes one Beta posterior per action, repeats the Thompson-sampling step, and records the values used by the plots.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Run Thompson sampling for repeated bandit interactions.</span>
+<span class="n">n_steps</span> <span class="o">=</span> <span class="mi">1000</span>
+<span class="n">steps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_steps</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">bandit_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">202604243</span><span class="p">)</span>
+
+<span class="c1"># Initialize one Beta posterior per action.</span>
+<span class="n">alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_actions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+<span class="n">beta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_actions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+<span class="n">interaction_log</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BanditInteraction</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">posterior_history</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FloatArray</span><span class="p">,</span> <span class="n">FloatArray</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">checkpoints</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mi">1000</span><span class="p">]</span>
+
+<span class="c1"># Run Thompson sampling as repeated agent-environment interaction.</span>
+<span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">steps</span><span class="p">:</span>
+    <span class="c1"># Sample one plausible expected reward for each action from its posterior.</span>
+    <span class="n">sampled_action_values</span> <span class="o">=</span> <span class="n">bandit_rng</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">)</span>
+
+    <span class="c1"># Choose the action with the highest sampled value.</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">sampled_action_values</span><span class="p">))</span>
+
+    <span class="c1"># Observe binary feedback from the selected action's hidden success probability.</span>
+    <span class="n">reward</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">bandit_rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">true_success_probabilities</span><span class="p">[</span><span class="n">action</span><span class="p">]))</span>
+
+    <span class="c1"># Update only the selected action's Beta posterior.</span>
+    <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span> <span class="o">=</span> <span class="n">update_beta_bernoulli_posterior</span><span class="p">(</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
+        <span class="n">beta</span><span class="o">=</span><span class="n">beta</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+        <span class="n">reward</span><span class="o">=</span><span class="n">reward</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Log feedback and instantaneous expected regret for later summaries.</span>
+    <span class="n">instant_expected_regret</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">true_success_probabilities</span><span class="p">)</span> <span class="o">-</span> <span class="n">true_success_probabilities</span><span class="p">[</span><span class="n">action</span><span class="p">])</span>
+    <span class="n">interaction_log</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">BanditInteraction</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">reward</span><span class="o">=</span><span class="n">reward</span><span class="p">,</span> <span class="n">expected_regret</span><span class="o">=</span><span class="n">instant_expected_regret</span><span class="p">))</span>
+
+    <span class="c1"># Keep posterior snapshots for the checkpoint visualizations.</span>
+    <span class="k">if</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">checkpoints</span><span class="p">:</span>
+        <span class="n">posterior_history</span><span class="p">[</span><span class="n">step</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">alpha</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">beta</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Summarize actions, rewards, and expected regret from the interaction log.</span>
+<span class="n">chosen_action_history</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">record</span><span class="o">.</span><span class="n">action</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">interaction_log</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+<span class="n">reward_history</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">record</span><span class="o">.</span><span class="n">reward</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">interaction_log</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+<span class="n">instantaneous_expected_regret</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">record</span><span class="o">.</span><span class="n">expected_regret</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">interaction_log</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+<span class="n">cumulative_reward</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">reward_history</span><span class="p">)</span>
+<span class="n">cumulative_expected_regret</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">instantaneous_expected_regret</span><span class="p">)</span>
+<span class="n">action_counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">chosen_action_history</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="n">n_actions</span><span class="p">)</span>
+<span class="n">best_action_value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">true_success_probabilities</span><span class="p">))</span>
+<span class="n">uniform_expected_reward</span> <span class="o">=</span> <span class="n">steps</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">true_success_probabilities</span><span class="p">))</span>
+<span class="n">uniform_expected_regret</span> <span class="o">=</span> <span class="n">steps</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">best_action_value</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">true_success_probabilities</span><span class="p">))</span>
+<span class="n">optimal_expected_reward</span> <span class="o">=</span> <span class="n">steps</span> <span class="o">*</span> <span class="n">best_action_value</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Best true action: </span><span class="si">{</span><span class="n">action_labels</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">true_success_probabilities</span><span class="p">))]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Action counts: </span><span class="si">{</span><span class="n">action_counts</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Posterior means: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">beta_posterior_means</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span><span class="w"> </span><span class="n">beta</span><span class="o">=</span><span class="n">beta</span><span class="p">),</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Total reward: </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">cumulative_reward</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Total expected regret: </span><span class="si">{</span><span class="n">cumulative_expected_regret</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Best true action: C
+Action counts: [ 88 200 712]
+Posterior means: [0.078 0.104 0.15 ]
+Total reward: 132
+Total expected regret: 11.28
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Posterior-Evolution">Posterior Evolution<a class="anchor-link" href="#Posterior-Evolution"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The Bayesian update is the same as in the first post, but here it drives the online decision rule. Each action has a Beta posterior over its unknown expected reward $\theta_a$. When a chosen action produces reward $1$, its posterior shifts to the right; when it produces reward $0$, it shifts to the left.</p>
+<p>When reading these curves, focus on two things:</p>
+<ul>
+<li>the <strong>location</strong> of the curve tells us which expected rewards currently look plausible,</li>
+<li>the <strong>width</strong> of the curve tells us how uncertain we still are about that action value.</li>
+</ul>
+<p>Frequently chosen actions accumulate evidence quickly, so their posteriors become narrower. Less frequently chosen actions remain more diffuse. Thompson sampling uses that difference in uncertainty: uncertain actions can still be explored, while well-performing and well-measured actions are exploited more often.</p>
+<p>Each panel shows the posterior over every action's expected reward at a different point in the run. The dashed lines mark the hidden true expected rewards used to generate the simulation, so we can see whether the posteriors are moving in the right direction. Only the chosen action is updated after each interaction; the others stay where they are until they are chosen again.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot posterior distributions at selected checkpoints.</span>
+<span class="n">action_colors</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"tab:blue"</span><span class="p">,</span> <span class="s2">"tab:orange"</span><span class="p">,</span> <span class="s2">"tab:green"</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_beta_density</span><span class="p">(</span>
+    <span class="n">ax</span><span class="p">:</span> <span class="n">Axes</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">color</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Plot the density of a Beta distribution on an existing Matplotlib axis."""</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.999</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">label</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.18</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"expected reward / action value"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"density"</span><span class="p">)</span>
+
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">checkpoints</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">14</span><span class="p">),</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">ax</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axes</span><span class="p">,</span> <span class="n">checkpoints</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="n">alpha_step</span><span class="p">,</span> <span class="n">beta_step</span> <span class="o">=</span> <span class="n">posterior_history</span><span class="p">[</span><span class="n">step</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">action_index</span><span class="p">,</span> <span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">color</span><span class="p">,</span> <span class="n">true_action_value</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+        <span class="nb">zip</span><span class="p">(</span><span class="n">action_labels</span><span class="p">,</span> <span class="n">action_colors</span><span class="p">,</span> <span class="n">true_success_probabilities</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="n">plot_beta_density</span><span class="p">(</span>
+            <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span>
+            <span class="n">alpha</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">alpha_step</span><span class="p">[</span><span class="n">action_index</span><span class="p">]),</span>
+            <span class="n">beta</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">beta_step</span><span class="p">[</span><span class="n">action_index</span><span class="p">]),</span>
+            <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"posterior of </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">true_action_value</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.55</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.30</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Posterior distributions after </span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2"> interactions"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"density"</span><span class="p">)</span>
+
+<span class="n">legend_handles</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"posterior of </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">color</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">action_labels</span><span class="p">,</span> <span class="n">action_colors</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="p">]</span> <span class="o">+</span> <span class="p">[</span>
+    <span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"true value of </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">color</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">action_labels</span><span class="p">,</span> <span class="n">action_colors</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="p">]</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">handles</span><span class="o">=</span><span class="n">legend_handles</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s2">"upper center"</span><span class="p">,</span> <span class="n">ncol</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.02</span><span class="p">))</span>
+<span class="n">axes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"expected reward / action value"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.96</span><span class="p">])</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Beta posterior densities for three bandit actions at selected interaction checkpoints, with dashed lines marking hidden true action values."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Beta posterior densities for three bandit actions at selected interaction checkpoints, with dashed lines marking hidden true action values." decoding="async" height="1426" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_02_multi_armed_bandits/figure-0016-00-68dd52a1ed2b.png" width="889"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>At each checkpoint, using the posterior after those interactions, we estimate the policy that would be used for the next interaction. The plot answers a simple question: under the current posterior, how likely is each action to be the best?</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the estimated probability-matching policy at selected checkpoints.</span>
+<span class="n">policy_distribution_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">202604244</span><span class="p">)</span>
+<span class="n">estimated_policy_by_checkpoint</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span>
+    <span class="n">estimate_probability_each_action_is_best</span><span class="p">(</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="n">posterior_history</span><span class="p">[</span><span class="n">step</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">beta</span><span class="o">=</span><span class="n">posterior_history</span><span class="p">[</span><span class="n">step</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span>
+        <span class="n">rng</span><span class="o">=</span><span class="n">policy_distribution_rng</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">checkpoints</span>
+<span class="p">])</span>
+
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">action_index</span><span class="p">,</span> <span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">color</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">action_labels</span><span class="p">,</span> <span class="n">action_colors</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)):</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+        <span class="n">checkpoints</span><span class="p">,</span>
+        <span class="n">estimated_policy_by_checkpoint</span><span class="p">[:,</span> <span class="n">action_index</span><span class="p">],</span>
+        <span class="n">marker</span><span class="o">=</span><span class="s2">"o"</span><span class="p">,</span>
+        <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"action </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xscale</span><span class="p">(</span><span class="s2">"log"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">"Estimated policy distribution: P(each action is best | data)"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">"interaction checkpoint"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">"policy probability"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">"center left"</span><span class="p">,</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">1.02</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Estimated probability that each of three actions is selected at several checkpoints, showing how posterior uncertainty changes the policy."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Estimated probability that each of three actions is selected at several checkpoints, showing how posterior uncertainty changes the policy." decoding="async" height="390" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_02_multi_armed_bandits/figure-0018-00-53e7980e3515.png" width="890"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Reward,-Expected-Regret,-and-Action-Allocation">Reward, Expected Regret, and Action Allocation<a class="anchor-link" href="#Reward,-Expected-Regret,-and-Action-Allocation"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>A bandit should not keep allocating equally forever. It starts uncertain, explores several actions, and then shifts more interactions toward the actions that continue to look promising. That is the main behavioral difference from a fixed experiment.</p>
+<p>There are three useful views of the run:</p>
+<ul>
+<li><strong>Cumulative reward:</strong> the reward actually collected; this is the run-level quantity the bandit tries to maximize.</li>
+<li><strong>Cumulative expected regret:</strong> expected reward left uncollected compared with an oracle that always picked the best action.</li>
+<li><strong>Action allocation:</strong> how the algorithm shifted choices over time.</li>
+</ul>
+<p>In the simulation, the reward at interaction $t$ is $r_t$: $1$ for success and $0$ for no success. The cumulative reward $\sum_t r_t$ is the total reward collected during learning. Because we know the hidden true action values, we can also compute the expected regret of the selected action sequence. If $\theta^*$ is the best action's true expected reward and we chose action $a_t$, the expected regret at interaction $t$ is $\theta^* - \theta_{a_t}$. This compares expected rewards, not the realized reward from this run with the realized reward from another run. Summing over interactions gives cumulative expected regret, the total expected reward shortfall relative to the oracle.</p>
+<p>For comparison, we also use a simple uniform baseline that splits allocation evenly across the three actions. This is a fixed-experiment reference point: keep testing evenly and do not adapt. The uniform and oracle reward lines are expected-reference curves, not realized alternative runs. We can plot expected regret only because this is a simulation and we know the hidden true action values. In a real bandit deployment, expected regret is not directly observable.</p>
+<p>One practical caveat: adaptively collected bandit data should not be analyzed as if it came from a fixed randomized experiment. The policy that generated the data is part of the data-generating process. If we want to make causal or off-policy claims from logged bandit data, we need to account for that policy, usually by logging action probabilities and keeping enough exploration for alternative actions to remain observable.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot cumulative reward, expected regret, action counts, and allocation shares.</span>
+<span class="n">block_size</span> <span class="o">=</span> <span class="mi">50</span>
+<span class="n">block_starts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">,</span> <span class="n">block_size</span><span class="p">)</span>
+<span class="n">block_centers</span> <span class="o">=</span> <span class="n">block_starts</span> <span class="o">+</span> <span class="n">block_size</span> <span class="o">/</span> <span class="mi">2</span>
+<span class="n">allocation_share_by_block</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">block_starts</span><span class="p">),</span> <span class="n">n_actions</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">block_index</span><span class="p">,</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">block_starts</span><span class="p">):</span>
+    <span class="n">end</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">block_size</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">)</span>
+    <span class="n">block_choices</span> <span class="o">=</span> <span class="n">chosen_action_history</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+    <span class="n">allocation_share_by_block</span><span class="p">[</span><span class="n">block_index</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">block_choices</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="n">n_actions</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">cumulative_reward</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:green"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"Thompson sampling"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">uniform_expected_reward</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:gray"</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"uniform allocation (expected)"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">optimal_expected_reward</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">":"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"oracle best action (expected)"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Cumulative reward with expected references"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"interaction"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"cumulative reward"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">"upper left"</span><span class="p">)</span>
+
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">cumulative_expected_regret</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:red"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"Thompson sampling"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">uniform_expected_regret</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:gray"</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"uniform allocation (expected)"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Cumulative expected regret"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"interaction"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"expected reward shortfall"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">"upper left"</span><span class="p">)</span>
+
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span><span class="n">action_labels</span><span class="p">,</span> <span class="n">action_counts</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">action_colors</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"How often each action was chosen"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"action"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"times chosen"</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Three-panel bandit evaluation showing cumulative reward, cumulative expected regret, and how often each action was chosen."</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mf">3.8</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">action_index</span><span class="p">,</span> <span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">color</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">action_labels</span><span class="p">,</span> <span class="n">action_colors</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)):</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+        <span class="n">block_centers</span><span class="p">,</span>
+        <span class="n">allocation_share_by_block</span><span class="p">[:,</span> <span class="n">action_index</span><span class="p">],</span>
+        <span class="n">marker</span><span class="o">=</span><span class="s2">"o"</span><span class="p">,</span>
+        <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"action </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Share of interactions assigned to each action in </span><span class="si">{</span><span class="n">block_size</span><span class="si">}</span><span class="s2">-step blocks"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">"interaction"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">"allocation share within block"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">ncol</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s2">"upper left"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Allocation share for each bandit action over successive blocks of interactions."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Three-panel bandit evaluation showing cumulative reward, cumulative expected regret, and how often each action was chosen." decoding="async" height="390" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_02_multi_armed_bandits/figure-0020-00-793e9014c861.png" width="1589"/>
+</div>
+</div>
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Allocation share for each bandit action over successive blocks of interactions." decoding="async" height="370" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_02_multi_armed_bandits/figure-0020-01-d4ab527ad051.png" width="889"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Final-Learned-Picture">Final Learned Picture<a class="anchor-link" href="#Final-Learned-Picture"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>By the end of the run, the posterior means should roughly recover the true ordering of the actions. But unlike the fixed A/B test, that is only part of the story. The bandit did not wait to make one final choice; it used those evolving beliefs to steer interactions toward the better actions.</p>
+<p>The plot compares the hidden true expected rewards with the final posterior means and 90% credible intervals. The labels also show how often each action was chosen, making the exploration-exploitation pattern easy to see.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Compare final posterior estimates with the hidden true action values.</span>
+<span class="n">final_posterior_means</span> <span class="o">=</span> <span class="n">beta_posterior_means</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span>
+<span class="n">posterior_lower</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span><span class="o">.</span><span class="n">ppf</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="n">posterior_upper</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span><span class="o">.</span><span class="n">ppf</span><span class="p">(</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">x_positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n_actions</span><span class="p">)</span>
+
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mf">4.5</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span>
+    <span class="n">x_positions</span><span class="p">,</span>
+    <span class="n">true_success_probabilities</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="n">action_colors</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.45</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"true expected reward (hidden)"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">errorbar</span><span class="p">(</span>
+    <span class="n">x_positions</span><span class="p">,</span>
+    <span class="n">final_posterior_means</span><span class="p">,</span>
+    <span class="n">yerr</span><span class="o">=</span><span class="p">[</span><span class="n">final_posterior_means</span> <span class="o">-</span> <span class="n">posterior_lower</span><span class="p">,</span> <span class="n">posterior_upper</span> <span class="o">-</span> <span class="n">final_posterior_means</span><span class="p">],</span>
+    <span class="n">fmt</span><span class="o">=</span><span class="s2">"o"</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"0.15"</span><span class="p">,</span>
+    <span class="n">capsize</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"posterior mean with 90</span><span class="si">% i</span><span class="s2">nterval"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">(</span>
+    <span class="n">x_positions</span><span class="p">,</span>
+    <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="se">\n</span><span class="s2">(</span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> choices)"</span> <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">action_labels</span><span class="p">,</span> <span class="n">action_counts</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)],</span>
+<span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.22</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">"expected reward / action value"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"What the bandit has learned after </span><span class="si">{</span><span class="n">n_steps</span><span class="si">}</span><span class="s2"> interactions"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">"upper left"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Final posterior means and 90</span><span class="si">% c</span><span class="s2">redible intervals for the three action values, compared with their hidden true expected rewards; labels show selection counts."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Final posterior means and 90% credible intervals for the three action values, compared with their hidden true expected rewards; labels show selection counts." decoding="async" height="440" loading="lazy" src="/images/notebook_outputs/from_ab_to_rl/post_02_multi_armed_bandits/figure-0022-00-f7d54d3822b1.png" width="790"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Summary">Summary<a class="anchor-link" href="#Summary"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>In the first post, Bayesian posterior uncertainty was a final decision aid. Here, the bandit uses the same kind of belief online.</p>
+<p>At each interaction:</p>
+<ul>
+<li>the policy chooses one action using the current posterior belief,</li>
+<li>the environment returns an immediate binary reward for that chosen action only,</li>
+<li>the learner updates only the chosen action's Beta posterior,</li>
+<li>the updated posterior becomes the input to the next action choice.</li>
+</ul>
+<p>The key shift from a fixed A/B test is that the posterior is no longer used only after data collection. It becomes part of the action loop. Probability matching turns posterior probabilities into a policy distribution, so actions that are still plausibly best retain some chance of being tried. Thompson sampling draws one plausible action value for each action, chooses the largest draw, observes the reward, and updates the chosen action. It samples plausible average rewards, not possible next binary outcomes.</p>
+<p>This post moves us from fixed experiments to online learning with actions, rewards, an adaptive policy, bandit feedback, and cumulative reward. It is still only a small step toward RL: there is no evolving external state or delayed credit assignment yet. We will explore both in the <a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_03_delayed_feedback_menace %}">next post</a>.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="References">References<a class="anchor-link" href="#References"><i class="fa-solid fa-sm fa-link"></i></a></h2><ul>
+<li><a href="https://doi.org/10.1093/biomet/25.3-4.285">On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples</a>, William R. Thompson: original paper behind probability matching for allocating experimental effort in two-armed trial settings.</li>
+<li><a href="https://web.stanford.edu/~bvr/pubs/TS_Tutorial.pdf">A Tutorial on Thompson Sampling</a>, Daniel Russo, Benjamin Van Roy, Abbas Kazerouni, Ian Osband, and Zheng Wen: reference for posterior-sampling action selection, probability matching, and Beta-Bernoulli bandit examples.</li>
+</ul>
+<h2 id="Further-Reading">Further Reading<a class="anchor-link" href="#Further-Reading"><i class="fa-solid fa-sm fa-link"></i></a></h2><ul>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_01_bayesian_ab_testing %}">Part 1: Bayesian A/B Testing</a>, Peter Roelants: starts the series from fixed randomized experiments and posterior comparisons.</li>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_03_delayed_feedback_menace %}">Part 3: MENACE and Delayed Rewards</a>, Peter Roelants: extends the online-learning view to stateful policies and delayed rewards.</li>
+<li><a href="{% post_url /blog/ab_to_rl/2026-05-17-beta-prior-sequential-binary-decisions %}">Beta Priors and P&oacute;lya Urns for Binary Decisions</a>, Peter Roelants: background on the Beta-Bernoulli update loop used by the bandit learner.</li>
+<li><a href="https://banditalgs.com/">Bandit Algorithms</a>, Tor Lattimore and Csaba Szepesvari: broader reading on bandit feedback, regret, and common exploration algorithms.</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Print package versions used to execute this notebook.</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Python: </span><span class="si">{</span><span class="n">platform</span><span class="o">.</span><span class="n">python_version</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">package</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"numpy"</span><span class="p">,</span> <span class="s2">"scipy"</span><span class="p">,</span> <span class="s2">"matplotlib"</span><span class="p">,</span> <span class="s2">"seaborn"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">package</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">importlib</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">version</span><span class="p">(</span><span class="n">package</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python: 3.13.12
+numpy: 2.4.6
+scipy: 1.17.1
+matplotlib: 3.11.0
+seaborn: 0.13.2
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt"></div><div class="inner_cell"><div class="text_cell_render border-box-sizing rendered_html"><p>This post is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/from_ab_to_rl/post_02_multi_armed_bandits.ipynb">Link to the full IPython notebook file</a></p></div></div></div>

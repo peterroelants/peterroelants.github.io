@@ -1,0 +1,996 @@
+---
+layout: post
+title: Beta Priors and Pólya Urns for Binary Decisions
+description: See how Beta-Bernoulli updates work one observation at a time in A/B tests and bandits, and how the Pólya urn explains self-reinforcing feedback.
+tags:
+- Beta Distribution
+- Bernoulli Distribution
+- Beta-Binomial Distribution
+- Bayesian Inference
+- A/B-testing
+- Multi-Armed Bandit (MAB)
+- Sequential Data
+- Notebook
+image: /images/social/2026-05-17-beta-prior-sequential-binary-decisions-preview.png
+---
+
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=50eae388"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Beta-Priors-and-P%C3%B3lya-Urns-for-Binary-Decisions">Beta Priors and P&oacute;lya Urns for Binary Decisions<a class="anchor-link" href="#Beta-Priors-and-P%C3%B3lya-Urns-for-Binary-Decisions"><i class="fa-solid fa-sm fa-link"></i></a></h1><p><em>Why the Beta prior naturally matches sequential binary feedback.</em></p>
+<p>Beta priors are natural for sequential binary decisions because they match the structure of the feedback: each observation is either a success or a failure, and the posterior update only needs to add one count to one side.</p>
+<p>That is why Bayesian <a href="{% post_url /blog/misc/2018-09-26-multi-armed-bandit-implementation %}">multi-armed bandit</a> examples with binary feedback often use one Beta prior for each action's unknown success probability. The same count-based update also appears in A/B testing, online experiments, diagnostics, quality control, and other repeated yes/no feedback loops.</p>
+<p>The <a href="{% post_url /blog/ab_to_rl/2026-05-14-beta-distribution-probabilities %}">previous post</a> introduced the <a href="https://en.wikipedia.org/wiki/Beta_distribution">Beta distribution</a> as a distribution over probabilities and showed how binary data updates its two parameters. This post uses that result online: one observation arrives, two counts update, the predictive probability changes, and the same posterior predictive loop can be represented by a P&oacute;lya urn.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered" id="cell-id=97b9ddb2">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.events</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.layouts</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.models</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.palettes</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.plotting</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.stats</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bokeh.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">CustomJS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bokeh.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Resources</span>
+
+<span class="n">bokeh</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">output_notebook</span><span class="p">(</span>
+    <span class="n">resources</span><span class="o">=</span><span class="n">Resources</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"cdn"</span><span class="p">,</span> <span class="n">components</span><span class="o">=</span><span class="p">[</span><span class="s2">"bokeh"</span><span class="p">,</span> <span class="s2">"bokeh-widgets"</span><span class="p">]),</span>
+    <span class="n">hide_banner</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">sns</span><span class="o">.</span><span class="n">set_theme</span><span class="p">(</span><span class="n">style</span><span class="o">=</span><span class="s2">"whitegrid"</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="s2">"notebook"</span><span class="p">)</span>
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">17</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_javascript" id="2be6d467-b594-444f-b5ed-134548fb556c">
+
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=4ca67231"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="The-Beta-Bernoulli-Update-Loop">The Beta-Bernoulli Update Loop<a class="anchor-link" href="#The-Beta-Bernoulli-Update-Loop"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Start with one action and one unknown success probability $\theta$. Each time we choose the action, we observe one binary outcome:</p>
+<p>$$
+Y_t \in \{0, 1\}.
+$$</p>
+<p>The outcome $Y_t$ is the feedback we observe. The parameter $\theta$ is not an outcome; it is the unknown probability that the outcome is $1$ when this action is chosen.</p>
+<p>If the current belief is</p>
+<p>$$
+\theta \sim \mathrm{Beta}(\alpha, \beta),
+$$</p>
+<p>then one new observation updates the parameters by counting:</p>
+<p>$$
+\alpha' = \alpha + y_t,
+\qquad
+\beta' = \beta + (1-y_t).
+$$</p>
+<p>A success increments $\alpha$; a failure increments $\beta$. This is the same conjugacy property from the <a href="{% post_url /blog/ab_to_rl/2026-05-14-beta-distribution-probabilities %}">previous post</a>, now used one observation at a time.</p>
+<p>For a bandit with multiple actions, this loop runs separately for each action. Action $a$ has its own unknown success probability $\theta_a$ and its own counts $\alpha_a$ and $\beta_a$. Only the chosen action gets updated after each observed success or failure.</p>
+<p>The success and failure counts are <a href="https://en.wikipedia.org/wiki/Sufficient_statistic">sufficient statistics</a> for this model: once we know how many successes and failures we have seen, the order of those observations no longer matters for the posterior. That is useful online: each new observation changes one count and leaves the rest of the summary untouched.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=36307f95"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The plot below shows the same update after a short sequence of binary observations. The posterior stays in the Beta family; only the two counts move.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered" id="cell-id=a893b170">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Illustrate the Beta density evolution during sequential learning.</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">update_beta_posterior</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">outcome</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Update a Beta posterior after one binary observation."""</span>
+    <span class="k">if</span> <span class="n">outcome</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"outcome must be 0 or 1"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">alpha</span> <span class="o">+</span> <span class="n">outcome</span><span class="p">,</span> <span class="n">beta</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">outcome</span><span class="p">)</span>
+
+
+<span class="n">observed_outcomes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+<span class="n">alpha</span> <span class="o">=</span> <span class="mf">2.0</span>
+<span class="n">beta</span> <span class="o">=</span> <span class="mf">2.0</span>
+<span class="n">posterior_states</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">)]</span>
+
+<span class="k">for</span> <span class="n">step</span><span class="p">,</span> <span class="n">outcome</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">observed_outcomes</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span> <span class="o">=</span> <span class="n">update_beta_posterior</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta</span><span class="p">,</span> <span class="n">outcome</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">outcome</span><span class="p">))</span>
+    <span class="n">posterior_states</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">step</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">))</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">beta_density_grid</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">nb_points</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">500</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return a grid and Beta density values for plotting."""</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1e-4</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="mf">1e-4</span><span class="p">,</span> <span class="n">nb_points</span><span class="p">)</span>
+    <span class="n">density</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">theta</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">theta</span><span class="p">,</span> <span class="n">density</span>
+
+
+<span class="n">selected_steps</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">observed_outcomes</span><span class="p">)}</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mf">4.5</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">step</span><span class="p">,</span> <span class="n">state_alpha</span><span class="p">,</span> <span class="n">state_beta</span> <span class="ow">in</span> <span class="n">posterior_states</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">step</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">selected_steps</span><span class="p">:</span>
+        <span class="k">continue</span>
+    <span class="n">theta</span><span class="p">,</span> <span class="n">density</span> <span class="o">=</span> <span class="n">beta_density_grid</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="n">state_alpha</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">state_beta</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">theta</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"after </span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2"> observations"</span><span class="p">)</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Sequential binary feedback keeps the posterior in the Beta family"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s2">"success probability $\theta$"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"density"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">sns</span><span class="o">.</span><span class="n">despine</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Beta posterior densities after selected binary observations, showing the distribution becoming more concentrated as evidence accumulates."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Beta posterior densities after selected binary observations, showing the distribution becoming more concentrated as evidence accumulates." decoding="async" height="440" loading="lazy" src="/images/notebook_outputs/ab_to_rl/beta-prior-sequential-binary-decisions/figure-0004-00-5d0d84471751.png" width="695"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=02c1f822"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="The-Predictive-View">The Predictive View<a class="anchor-link" href="#The-Predictive-View"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The current posterior also gives the predictive probability for the next observation. We do not know the true success probability $\theta$, so we average over the current posterior belief about it.</p>
+<p>If the current belief is</p>
+<p>$$
+\theta \mid y_{1:t} \sim \mathrm{Beta}(\alpha_t, \beta_t),
+$$</p>
+<p>then the posterior predictive probability of success is the posterior mean of $\theta$:</p>
+<p>$$
+P(Y_{t+1}=1 \mid y_{1:t})
+=
+\mathbb{E}[\theta \mid y_{1:t}]
+=
+\frac{\alpha_t}{\alpha_t + \beta_t}.
+$$</p>
+<p>In other words, the next feedback is predicted as a <a href="https://en.wikipedia.org/wiki/Bernoulli_distribution">Bernoulli</a> outcome whose success probability is the posterior mean:</p>
+<p>$$
+Y_{t+1} \mid y_{1:t}
+\sim
+\mathrm{Bernoulli}\!\left(\frac{\alpha_t}{\alpha_t + \beta_t}\right).
+$$</p>
+<p>If we started from $\mathrm{Beta}(\alpha_0,\beta_0)$ and have seen $s_t$ successes and $f_t$ failures, then $\alpha_t = \alpha_0 + s_t$ and $\beta_t = \beta_0 + f_t$. The predictive probability can therefore also be written as</p>
+<p>$$
+P(Y_{t+1}=1 \mid y_{1:t})
+=
+\frac{\alpha_0 + s_t}{\alpha_0 + \beta_0 + s_t + f_t}.
+$$</p>
+<p>After the next observation arrives, the same loop continues:</p>
+<p>$$
+\alpha_{t+1} = \alpha_t + y_{t+1},
+\qquad
+\beta_{t+1} = \beta_t + (1-y_{t+1}).
+$$</p>
+<p>So the posterior does two jobs at once: it summarizes what we have learned so far, and through its posterior predictive distribution it gives the probability for the next outcome. When we sample an outcome from that predictive distribution and feed it back as evidence, we get exactly the P&oacute;lya urn update.</p>
+<p>This is the predictive reason the parameters are often described as pseudo-counts: in the fraction above, $\alpha_0$ and $\beta_0$ sit in the same denominator as the observed counts. They are not fake data in a literal sense, but they behave like prior evidence in both the update and the next-outcome probability.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=bcc59f4e"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="The-P%C3%B3lya-Urn-Connection">The P&oacute;lya Urn Connection<a class="anchor-link" href="#The-P%C3%B3lya-Urn-Connection"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>A <a href="https://en.wikipedia.org/wiki/P%C3%B3lya_urn_model">P&oacute;lya urn</a> gives a concrete version of the same posterior predictive loop.</p>
+<p>This is a generative picture, not a literal claim that the world samples from our belief. In Beta-Bernoulli inference, a fixed but unknown $\theta$ generates the data. In the urn, the current composition generates the next draw. Averaged over the Beta prior, the two views produce the same sequence distribution, which is why the urn is a faithful picture of the posterior predictive loop.</p>
+<p>Imagine an <a href="https://en.wikipedia.org/wiki/Urn_problem">urn</a> with <span style="color: #c44e52; font-weight: 600;">red</span> and <span style="color: #4c72b0; font-weight: 600;">blue</span> balls. In the urn itself, these are just colors. To keep the physical picture literal, take <span style="color: #c44e52; font-weight: 600;">&alpha;</span> and <span style="color: #4c72b0; font-weight: 600;">&beta;</span> to be whole-number initial counts here:</p>
+<ul>
+<li>it starts with <span style="color: #c44e52; font-weight: 600;">&alpha; red balls</span>,</li>
+<li>and <span style="color: #4c72b0; font-weight: 600;">&beta; blue balls</span>.</li>
+</ul>
+<p>The P&oacute;lya urn process follows the four-step loop illustrated in the figure below:</p>
+<ol>
+<li>start with the current urn,</li>
+<li>draw one ball,</li>
+<li>return it and add one new ball of the same color,</li>
+<li>repeat with the updated counts.</li>
+</ol>
+<figure class="text-center mx-auto" id="polya-urn-process-figure" style="max-width: 960px;">
+<img alt="Pólya urn loop: draw a red or blue ball, return it, add another ball of the same color, and repeat with the updated counts" class="figure-img img-fluid" decoding="async" height="690" loading="lazy" src="/images/ab_to_rl/polya-urn-process.svg" style="width: 100%; height: auto;" width="1200"/>
+<figcaption class="figure-caption">One Pólya urn step. The drawn ball is returned, and a second ball of the same color reinforces the next draw.</figcaption>
+</figure>
+<p>To connect this notation with the Beta-Bernoulli model, let <span style="color: #c44e52; font-weight: 600;">red</span> represent Bernoulli outcome $\textcolor{#c44e52}{y=1}$ and <span style="color: #4c72b0; font-weight: 600;">blue</span> represent $\textcolor{#4c72b0}{y=0}$. After $t$ urn draws, suppose we have observed <span style="color: #c44e52; font-weight: 600;">r<sub>t</sub> red</span> draws and <span style="color: #4c72b0; font-weight: 600;">b<sub>t</sub> blue</span> draws. The urn then contains <span style="color: #c44e52; font-weight: 600;">&alpha; + r<sub>t</sub> red balls</span> and <span style="color: #4c72b0; font-weight: 600;">&beta; + b<sub>t</sub> blue balls</span>, so the probability of drawing <span style="color: #c44e52; font-weight: 600;">red</span> next is</p>
+<p>$$
+P(\text{red next})
+=
+\frac{\textcolor{#c44e52}{\alpha} + \textcolor{#c44e52}{r_t}}{(\textcolor{#c44e52}{\alpha} + \textcolor{#c44e52}{r_t}) + (\textcolor{#4c72b0}{\beta} + \textcolor{#4c72b0}{b_t})}
+=
+\frac{\textcolor{#c44e52}{\alpha} + \textcolor{#c44e52}{r_t}}{\textcolor{#c44e52}{\alpha} + \textcolor{#4c72b0}{\beta} + t}.
+$$</p>
+<p>Here $t = \textcolor{#c44e52}{r_t} + \textcolor{#4c72b0}{b_t}$.</p>
+<p>This is <a href="https://en.wikipedia.org/wiki/Positive_feedback">reinforcement</a> in the predictive process. A <span style="color: #c44e52; font-weight: 600;">red</span> draw is recorded and reinforced by adding another <span style="color: #c44e52; font-weight: 600;">red</span> ball to the urn. That changes the urn composition, so <span style="color: #c44e52; font-weight: 600;">red</span> is slightly more likely on the next draw. A <span style="color: #4c72b0; font-weight: 600;">blue</span> draw does the same in the other direction. The process has memory, but the memory is compressed into two counts.</p>
+<p>With this mapping, <span style="color: #c44e52; font-weight: 600;">r<sub>t</sub></span> and <span style="color: #4c72b0; font-weight: 600;">b<sub>t</sub></span> are the two counts that update a $\mathrm{Beta}(\textcolor{#c44e52}{\alpha}, \textcolor{#4c72b0}{\beta})$ prior. The urn's next-<span style="color: #c44e52; font-weight: 600;">red</span> probability then matches the Beta-Bernoulli <a href="https://en.wikipedia.org/wiki/Posterior_predictive_distribution">posterior predictive</a> probability for $\textcolor{#c44e52}{y=1}$: current evidence changes the next predictive probability, and the next sampled outcome becomes evidence for the following prediction.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=ca28107a"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The <a href="#polya-urn-process-figure">one-step process figure above</a> shows one urn update. Repeating that update creates many possible paths, as shown in the <a href="#polya-urn-trajectories-figure">trajectory figure below</a>. After a fixed number of draws, the paths produce a distribution over the possible number of red draws: the Beta-binomial distribution discussed below.</p>
+<figure class="text-center mx-auto" id="polya-urn-trajectories-figure" style="max-width: 960px;">
+<img alt="Pólya urn path map: repeated red and blue draws branch through shared urn states, and the final red ratios form an endpoint histogram" class="figure-img img-fluid" decoding="async" height="780" loading="lazy" src="/images/ab_to_rl/polya-urn-trajectories.svg" style="width: 100%; height: auto;" width="1200"/>
+<figcaption class="figure-caption">A three-draw miniature of the interactive app, starting from $\alpha=2$ and $\beta=5$. Repeated trajectories build the endpoint histogram.</figcaption>
+</figure>
+<p>The interactive app below turns this small example into a simulation. It runs the draw-replace-add loop many times and aggregates the path segments. Within each draw count $t$, brighter segments have been walked by more simulated trajectories than the other segments at that same step. The color scale is log-compressed so rare branches stay visible. In the interactive app, the bar chart beneath the path plot counts where completed trajectories end.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered celltag_lazy-bokeh celltag_lazy-bokeh-height=760 celltag_lazy-bokeh-title=Interactive Polya urn simulation" id="cell-id=0f130f03">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Interactive P&oacute;lya urn app</span>
+
+<span class="c1"># Keep the path-segment mass, final-ratio counts, and setup parameters separate.</span>
+<span class="n">datasource_polya_urn_segment</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">ratio_start</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">step_start</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">ratio_end</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">step_end</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">segment_count</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">segment_color</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">segment_width</span><span class="o">=</span><span class="p">[],</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">datasource_polya_urn_sample_ratio</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="nb">dict</span><span class="p">(</span><span class="n">ratio_center</span><span class="o">=</span><span class="p">[],</span> <span class="n">bar_width</span><span class="o">=</span><span class="p">[],</span> <span class="n">path_count</span><span class="o">=</span><span class="p">[],</span> <span class="n">bar_color</span><span class="o">=</span><span class="p">[])</span>
+<span class="p">)</span>
+<span class="n">DEFAULT_ALPHA</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">DEFAULT_BETA</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="n">datasource_polya_urn_params</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="p">[</span><span class="n">DEFAULT_ALPHA</span><span class="p">],</span> <span class="n">beta</span><span class="o">=</span><span class="p">[</span><span class="n">DEFAULT_BETA</span><span class="p">]))</span>
+<span class="n">datasource_anim_state</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">_placeholder</span><span class="o">=</span><span class="p">[]))</span>
+
+<span class="n">APP_WIDTH</span> <span class="o">=</span> <span class="mi">760</span>
+<span class="n">SLIDER_WIDTH</span> <span class="o">=</span> <span class="mi">340</span>
+<span class="n">DEFAULT_PATH_LENGTH</span> <span class="o">=</span> <span class="mi">40</span>
+<span class="n">POLYA_TRAJECTORY_PALETTE</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">bokeh</span><span class="o">.</span><span class="n">palettes</span><span class="o">.</span><span class="n">Viridis256</span><span class="p">[</span><span class="mi">20</span><span class="p">:</span><span class="mi">245</span><span class="p">])</span>
+
+<span class="n">fig_polya_urn_anim_paths</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="n">DEFAULT_PATH_LENGTH</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">APP_WIDTH</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">390</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"P&oacute;lya urn path mass: red ratio over draws"</span><span class="p">,</span>
+    <span class="n">x_axis_label</span><span class="o">=</span><span class="s2">"red ratio (red balls / total balls)"</span><span class="p">,</span>
+    <span class="n">y_axis_label</span><span class="o">=</span><span class="s2">"draw count t (top to bottom)"</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig_polya_urn_anim_paths</span><span class="o">.</span><span class="n">segment</span><span class="p">(</span>
+    <span class="n">x0</span><span class="o">=</span><span class="s2">"ratio_start"</span><span class="p">,</span>
+    <span class="n">y0</span><span class="o">=</span><span class="s2">"step_start"</span><span class="p">,</span>
+    <span class="n">x1</span><span class="o">=</span><span class="s2">"ratio_end"</span><span class="p">,</span>
+    <span class="n">y1</span><span class="o">=</span><span class="s2">"step_end"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">datasource_polya_urn_segment</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"segment_color"</span><span class="p">,</span>
+    <span class="n">line_width</span><span class="o">=</span><span class="s2">"segment_width"</span><span class="p">,</span>
+    <span class="n">line_alpha</span><span class="o">=</span><span class="mf">0.85</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">fig_polya_urn_anim_final_counts</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">fig_polya_urn_anim_paths</span><span class="o">.</span><span class="n">x_range</span><span class="p">,</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">DataRange1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">APP_WIDTH</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">210</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"Where the trajectories end"</span><span class="p">,</span>
+    <span class="n">x_axis_label</span><span class="o">=</span><span class="s2">"final red ratio (red balls / total balls)"</span><span class="p">,</span>
+    <span class="n">y_axis_label</span><span class="o">=</span><span class="s2">"number of trajectories"</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig_polya_urn_anim_final_counts</span><span class="o">.</span><span class="n">vbar</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"ratio_center"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="s2">"bar_width"</span><span class="p">,</span>
+    <span class="n">bottom</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">top</span><span class="o">=</span><span class="s2">"path_count"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">datasource_polya_urn_sample_ratio</span><span class="p">,</span>
+    <span class="n">fill_color</span><span class="o">=</span><span class="s2">"bar_color"</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span>
+    <span class="n">fill_alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">button_polya_urn_start</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Button</span><span class="p">(</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"Run"</span><span class="p">,</span>
+    <span class="n">button_type</span><span class="o">=</span><span class="s2">"primary"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Run the P&oacute;lya urn simulation with the current alpha and beta values."</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">button_polya_urn_reset</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Button</span><span class="p">(</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"Reset"</span><span class="p">,</span>
+    <span class="n">button_type</span><span class="o">=</span><span class="s2">"default"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Stop the simulation and clear all data. New alpha/beta values apply on next Run."</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="n">slider_polya_urn_alpha</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Slider</span><span class="p">(</span>
+    <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">end</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="n">DEFAULT_ALPHA</span><span class="p">,</span>
+    <span class="n">step</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"alpha: initial red balls (before Run)"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">SLIDER_WIDTH</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Initial number of red balls in the urn."</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">slider_polya_urn_beta</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Slider</span><span class="p">(</span>
+    <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">end</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="n">DEFAULT_BETA</span><span class="p">,</span>
+    <span class="n">step</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"beta: initial blue balls (before Run)"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">SLIDER_WIDTH</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Initial number of blue balls in the urn."</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">slider_polya_urn_path_length</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Slider</span><span class="p">(</span>
+    <span class="n">start</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">end</span><span class="o">=</span><span class="mi">120</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="n">DEFAULT_PATH_LENGTH</span><span class="p">,</span>
+    <span class="n">step</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"draws per trajectory (before Run)"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">SLIDER_WIDTH</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"Number of urn draws in one trajectory. Reset to change it."</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">slider_polya_urn_speed</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Slider</span><span class="p">(</span>
+    <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">end</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">step</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">"speed: urn draws per frame"</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">SLIDER_WIDTH</span><span class="p">,</span>
+    <span class="n">html_attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="s2">"How many urn updates to process on each animation frame."</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">div_polya_urn_lock_status</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Div</span><span class="p">(</span>
+    <span class="n">text</span><span class="o">=</span><span class="p">(</span>
+        <span class="s2">"&lt;div style='padding: 8px 10px; border-left: 4px solid #2f6f4e; "</span>
+        <span class="s2">"background: #eef7f1; color: #244434;'&gt;"</span>
+        <span class="s2">"Choose the initial balls and draws per trajectory, then press &lt;b&gt;Run&lt;/b&gt;. "</span>
+        <span class="s2">"These setup settings lock once the simulation starts."</span>
+        <span class="s2">"&lt;/div&gt;"</span>
+    <span class="p">),</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">APP_WIDTH</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># CustomJS keeps the simulation fully embedded in the static blog post.</span>
+<span class="n">callback_start_code</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="sa">f</span><span class="s2">"const TRAJECTORY_PALETTE = </span><span class="si">{</span><span class="n">POLYA_TRAJECTORY_PALETTE</span><span class="si">!r}</span><span class="s2">;</span><span class="se">\n</span><span class="s2">"</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">const TICK_INTERVAL_MS = 20;</span>
+<span class="sd">const MIN_SEGMENT_WIDTH = 1.0;</span>
+<span class="sd">const MAX_EXTRA_SEGMENT_WIDTH = 3.0;</span>
+
+<span class="sd">function getRatio(urn) {</span>
+<span class="sd">    return urn[0] / (urn[0] + urn[1]);</span>
+<span class="sd">}</span>
+
+<span class="sd">function paletteColorFromMass(value, maxValue) {</span>
+<span class="sd">    if (maxValue &lt;= 0) {</span>
+<span class="sd">        return TRAJECTORY_PALETTE[0];</span>
+<span class="sd">    }</span>
+<span class="sd">    const normalizedMass = Math.log1p(value) / Math.log1p(maxValue);</span>
+<span class="sd">    const colorIndex = Math.round(normalizedMass * (TRAJECTORY_PALETTE.length - 1));</span>
+<span class="sd">    return TRAJECTORY_PALETTE[colorIndex];</span>
+<span class="sd">}</span>
+
+<span class="sd">function refreshSegmentStyles(segmentSource) {</span>
+<span class="sd">    // Normalize path mass within each draw count so later, lower-count rows stay readable.</span>
+<span class="sd">    const counts = segmentSource.data.segment_count;</span>
+<span class="sd">    const steps = segmentSource.data.step_start;</span>
+<span class="sd">    const maxCountByStep = new Map();</span>
+
+<span class="sd">    for (let i = 0; i &lt; counts.length; i++) {</span>
+<span class="sd">        const step = steps[i];</span>
+<span class="sd">        const currentMax = maxCountByStep.get(step) || 0;</span>
+<span class="sd">        maxCountByStep.set(step, Math.max(currentMax, counts[i]));</span>
+<span class="sd">    }</span>
+
+<span class="sd">    segmentSource.data.segment_color = counts.map((count, i) =&gt; (</span>
+<span class="sd">        paletteColorFromMass(count, maxCountByStep.get(steps[i]) || 0)</span>
+<span class="sd">    ));</span>
+<span class="sd">    segmentSource.data.segment_width = counts.map((count, i) =&gt; {</span>
+<span class="sd">        const stepMax = maxCountByStep.get(steps[i]) || 0;</span>
+<span class="sd">        const widthDenom = Math.max(1.0, Math.log1p(stepMax));</span>
+<span class="sd">        return MIN_SEGMENT_WIDTH + MAX_EXTRA_SEGMENT_WIDTH * Math.log1p(count) / widthDenom;</span>
+<span class="sd">    });</span>
+<span class="sd">}</span>
+
+<span class="sd">function refreshFinalRatioStyles(histSource) {</span>
+<span class="sd">    const counts = histSource.data.path_count;</span>
+<span class="sd">    const maxCount = counts.reduce((maxValue, count) =&gt; Math.max(maxValue, count), 0);</span>
+<span class="sd">    histSource.data.bar_color = counts.map((count) =&gt; paletteColorFromMass(count, maxCount));</span>
+<span class="sd">}</span>
+
+<span class="sd">function initFinalRatioCounts(alpha, beta, pathLength, histSource) {</span>
+<span class="sd">    // A completed path can only have k = 0, ..., pathLength red draws.</span>
+<span class="sd">    // Therefore each possible final ratio gets its own exact bar.</span>
+<span class="sd">    const numPossibleRatios = pathLength + 1;</span>
+<span class="sd">    const denom = alpha + beta + pathLength;</span>
+<span class="sd">    const ratioBarWidth = 0.9 / denom;</span>
+<span class="sd">    const ratioCenters = Array.from({length: numPossibleRatios}, (_, k) =&gt; (alpha + k) / denom);</span>
+
+<span class="sd">    histSource.data.ratio_center = ratioCenters;</span>
+<span class="sd">    histSource.data.bar_width = Array(numPossibleRatios).fill(ratioBarWidth);</span>
+<span class="sd">    histSource.data.path_count = Array(numPossibleRatios).fill(0);</span>
+<span class="sd">    histSource.data.bar_color = Array(numPossibleRatios).fill(paletteColorFromMass(0, 0));</span>
+<span class="sd">    histSource.change.emit();</span>
+<span class="sd">}</span>
+
+<span class="sd">function updateFinalRatioCount(k, histSource) {</span>
+<span class="sd">    histSource.data.path_count[k]++;</span>
+<span class="sd">}</span>
+
+<span class="sd">function setTitle(model, title) {</span>
+<span class="sd">    const attrs = {...model.html_attributes};</span>
+<span class="sd">    attrs.title = title;</span>
+<span class="sd">    model.html_attributes = attrs;</span>
+<span class="sd">}</span>
+
+<span class="sd">function setStatusLocked(statusDiv) {</span>
+<span class="sd">    statusDiv.text = "&lt;div style='padding: 8px 10px; border-left: 4px solid #9a6518; "</span>
+<span class="sd">        + "background: #fff4df; color: #5a3b0c;'&gt;"</span>
+<span class="sd">        + "Initial balls and draws per trajectory are &lt;b&gt;locked&lt;/b&gt; for this run. "</span>
+<span class="sd">        + "Press &lt;b&gt;Reset&lt;/b&gt; to change them."</span>
+<span class="sd">        + "&lt;/div&gt;";</span>
+<span class="sd">}</span>
+
+<span class="sd">function recordSegment(anim, segmentSource) {</span>
+<span class="sd">    const redBefore = anim.currentUrn[0];</span>
+<span class="sd">    const blueBefore = anim.currentUrn[1];</span>
+<span class="sd">    const ratioBefore = redBefore / (redBefore + blueBefore);</span>
+<span class="sd">    const drawRed = Math.random() &lt; ratioBefore;</span>
+<span class="sd">    const redAfter = redBefore + (drawRed ? 1 : 0);</span>
+<span class="sd">    const blueAfter = blueBefore + (drawRed ? 0 : 1);</span>
+<span class="sd">    const ratioAfter = redAfter / (redAfter + blueAfter);</span>
+<span class="sd">    const stepAfter = anim.stepIdx + 1;</span>
+<span class="sd">    const segmentKey = `${anim.stepIdx}:${redBefore}:${redAfter}`;</span>
+<span class="sd">    let segmentIndex = anim.segmentIndexByKey.get(segmentKey);</span>
+
+<span class="sd">    if (segmentIndex === undefined) {</span>
+<span class="sd">        segmentIndex = segmentSource.data.segment_count.length;</span>
+<span class="sd">        anim.segmentIndexByKey.set(segmentKey, segmentIndex);</span>
+<span class="sd">        segmentSource.data.ratio_start.push(ratioBefore);</span>
+<span class="sd">        segmentSource.data.step_start.push(anim.stepIdx);</span>
+<span class="sd">        segmentSource.data.ratio_end.push(ratioAfter);</span>
+<span class="sd">        segmentSource.data.step_end.push(stepAfter);</span>
+<span class="sd">        segmentSource.data.segment_count.push(0);</span>
+<span class="sd">        segmentSource.data.segment_color.push(paletteColorFromMass(0, 0));</span>
+<span class="sd">        segmentSource.data.segment_width.push(MIN_SEGMENT_WIDTH);</span>
+<span class="sd">    }</span>
+
+<span class="sd">    segmentSource.data.segment_count[segmentIndex]++;</span>
+<span class="sd">    anim.currentUrn = [redAfter, blueAfter];</span>
+<span class="sd">}</span>
+
+<span class="sd">function updatePathMassPlot(anim, segmentSource, histSource) {</span>
+<span class="sd">    if (anim.stepIdx === 0) {</span>
+<span class="sd">        // Start one new trajectory, but aggregate it into shared path segments.</span>
+<span class="sd">        anim.currentUrn = [anim.alpha, anim.beta];</span>
+<span class="sd">    }</span>
+
+<span class="sd">    recordSegment(anim, segmentSource);</span>
+<span class="sd">    anim.stepIdx++;</span>
+
+<span class="sd">    if (anim.stepIdx === anim.pathLength) {</span>
+<span class="sd">        // Once a trajectory is complete, record where it ended and start the next one.</span>
+<span class="sd">        const k = anim.currentUrn[0] - anim.alpha;</span>
+<span class="sd">        updateFinalRatioCount(k, histSource);</span>
+<span class="sd">        anim.stepIdx = 0;</span>
+<span class="sd">    }</span>
+<span class="sd">}</span>
+
+<span class="sd">function updateManyPathSteps(anim, segmentSource, histSource, speedSlider) {</span>
+<span class="sd">    const stepsPerFrame = Math.max(1, Math.floor(speedSlider.value));</span>
+<span class="sd">    for (let i = 0; i &lt; stepsPerFrame; i++) {</span>
+<span class="sd">        updatePathMassPlot(anim, segmentSource, histSource);</span>
+<span class="sd">    }</span>
+<span class="sd">    refreshSegmentStyles(segmentSource);</span>
+<span class="sd">    segmentSource.change.emit();</span>
+<span class="sd">    refreshFinalRatioStyles(histSource);</span>
+<span class="sd">    histSource.change.emit();</span>
+<span class="sd">}</span>
+
+<span class="sd">    let anim = stateSource._anim;</span>
+
+<span class="sd">    if (anim &amp;&amp; anim.isRunning) {</span>
+<span class="sd">        // Run acts as a pause/resume toggle after the simulation has started.</span>
+<span class="sd">        clearInterval(anim.updateTimer);</span>
+<span class="sd">        anim.isRunning = false;</span>
+<span class="sd">        startButton.label = "Run";</span>
+<span class="sd">        setTitle(startButton, "Resume the simulation. Reset to change alpha/beta.");</span>
+<span class="sd">        sliderAlpha.disabled = true;</span>
+<span class="sd">        sliderBeta.disabled = true;</span>
+<span class="sd">        sliderPathLength.disabled = true;</span>
+<span class="sd">        setTitle(sliderAlpha, "Reset to change alpha.");</span>
+<span class="sd">        setTitle(sliderBeta, "Reset to change beta.");</span>
+<span class="sd">        setTitle(sliderPathLength, "Reset to change draws per trajectory.");</span>
+<span class="sd">        setStatusLocked(statusDiv);</span>
+<span class="sd">    } else {</span>
+<span class="sd">        if (!anim) {</span>
+<span class="sd">            // The first Run freezes setup choices so all displayed paths share one experiment.</span>
+<span class="sd">            const alpha = paramsSource.data["alpha"][0];</span>
+<span class="sd">            const beta = paramsSource.data["beta"][0];</span>
+<span class="sd">            const pathLength = Math.round(sliderPathLength.value);</span>
+<span class="sd">            anim = {</span>
+<span class="sd">                pathLength: pathLength,</span>
+<span class="sd">                stepIdx: 0,</span>
+<span class="sd">                alpha: alpha,</span>
+<span class="sd">                beta: beta,</span>
+<span class="sd">                currentUrn: null,</span>
+<span class="sd">                segmentIndexByKey: new Map(),</span>
+<span class="sd">                updateTimer: null,</span>
+<span class="sd">                isRunning: false,</span>
+<span class="sd">            };</span>
+<span class="sd">            stateSource._anim = anim;</span>
+<span class="sd">            figure.y_range.start = pathLength;</span>
+<span class="sd">            figure.y_range.end = 0;</span>
+<span class="sd">            initFinalRatioCounts(alpha, beta, pathLength, histSource);</span>
+<span class="sd">        }</span>
+
+<span class="sd">        sliderAlpha.disabled = true;</span>
+<span class="sd">        sliderBeta.disabled = true;</span>
+<span class="sd">        sliderPathLength.disabled = true;</span>
+<span class="sd">        setTitle(sliderAlpha, "Reset to change alpha.");</span>
+<span class="sd">        setTitle(sliderBeta, "Reset to change beta.");</span>
+<span class="sd">        setTitle(sliderPathLength, "Reset to change draws per trajectory.");</span>
+<span class="sd">        setStatusLocked(statusDiv);</span>
+
+<span class="sd">        anim.updateTimer = setInterval(</span>
+<span class="sd">            () =&gt; updateManyPathSteps(anim, segmentSource, histSource, speedSlider),</span>
+<span class="sd">            TICK_INTERVAL_MS,</span>
+<span class="sd">        );</span>
+<span class="sd">        anim.isRunning = true;</span>
+<span class="sd">        figure.title.text = "P&oacute;lya urn path mass: red ratio over draws "</span>
+<span class="sd">            + "(alpha=" + anim.alpha + ", beta=" + anim.beta + ")";</span>
+<span class="sd">        startButton.label = "Pause";</span>
+<span class="sd">        setTitle(startButton, "Pause the simulation.");</span>
+<span class="sd">    }</span>
+<span class="sd">"""</span>
+<span class="p">)</span>
+
+<span class="n">button_polya_urn_start</span><span class="o">.</span><span class="n">js_on_event</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">ButtonClick</span><span class="p">,</span>
+    <span class="n">CustomJS</span><span class="p">(</span>
+        <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+            <span class="n">segmentSource</span><span class="o">=</span><span class="n">datasource_polya_urn_segment</span><span class="p">,</span>
+            <span class="n">histSource</span><span class="o">=</span><span class="n">datasource_polya_urn_sample_ratio</span><span class="p">,</span>
+            <span class="n">paramsSource</span><span class="o">=</span><span class="n">datasource_polya_urn_params</span><span class="p">,</span>
+            <span class="n">stateSource</span><span class="o">=</span><span class="n">datasource_anim_state</span><span class="p">,</span>
+            <span class="n">figure</span><span class="o">=</span><span class="n">fig_polya_urn_anim_paths</span><span class="p">,</span>
+            <span class="n">startButton</span><span class="o">=</span><span class="n">button_polya_urn_start</span><span class="p">,</span>
+            <span class="n">sliderAlpha</span><span class="o">=</span><span class="n">slider_polya_urn_alpha</span><span class="p">,</span>
+            <span class="n">sliderBeta</span><span class="o">=</span><span class="n">slider_polya_urn_beta</span><span class="p">,</span>
+            <span class="n">sliderPathLength</span><span class="o">=</span><span class="n">slider_polya_urn_path_length</span><span class="p">,</span>
+            <span class="n">speedSlider</span><span class="o">=</span><span class="n">slider_polya_urn_speed</span><span class="p">,</span>
+            <span class="n">statusDiv</span><span class="o">=</span><span class="n">div_polya_urn_lock_status</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">code</span><span class="o">=</span><span class="n">callback_start_code</span><span class="p">,</span>
+        <span class="n">module</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">callback_reset_code</span> <span class="o">=</span> <span class="s2">"""</span>
+<span class="s2">function setTitle(model, title) {</span>
+<span class="s2">    const attrs = {...model.html_attributes};</span>
+<span class="s2">    attrs.title = title;</span>
+<span class="s2">    model.html_attributes = attrs;</span>
+<span class="s2">}</span>
+
+<span class="s2">function setStatusReady(statusDiv) {</span>
+<span class="s2">    statusDiv.text = "&lt;div style='padding: 8px 10px; border-left: 4px solid #2f6f4e; "</span>
+<span class="s2">        + "background: #eef7f1; color: #244434;'&gt;"</span>
+<span class="s2">        + "Choose the initial balls and draws per trajectory, then press &lt;b&gt;Run&lt;/b&gt;. "</span>
+<span class="s2">        + "These setup settings lock once the simulation starts."</span>
+<span class="s2">        + "&lt;/div&gt;";</span>
+<span class="s2">}</span>
+
+<span class="s2">    const anim = stateSource._anim;</span>
+
+<span class="s2">    if (anim) {</span>
+<span class="s2">        // Reset stops browser-side animation state before clearing the visible data.</span>
+<span class="s2">        if (anim.updateTimer) {</span>
+<span class="s2">            clearInterval(anim.updateTimer);</span>
+<span class="s2">        }</span>
+<span class="s2">        delete stateSource._anim;</span>
+<span class="s2">    }</span>
+
+<span class="s2">    segmentSource.data.ratio_start = [];</span>
+<span class="s2">    segmentSource.data.step_start = [];</span>
+<span class="s2">    segmentSource.data.ratio_end = [];</span>
+<span class="s2">    segmentSource.data.step_end = [];</span>
+<span class="s2">    segmentSource.data.segment_count = [];</span>
+<span class="s2">    segmentSource.data.segment_color = [];</span>
+<span class="s2">    segmentSource.data.segment_width = [];</span>
+<span class="s2">    segmentSource.change.emit();</span>
+
+<span class="s2">    histSource.data.ratio_center = [];</span>
+<span class="s2">    histSource.data.bar_width = [];</span>
+<span class="s2">    histSource.data.path_count = [];</span>
+<span class="s2">    histSource.data.bar_color = [];</span>
+<span class="s2">    histSource.change.emit();</span>
+
+<span class="s2">    figure.title.text = "P&oacute;lya urn path mass: red ratio over draws";</span>
+<span class="s2">    startButton.label = "Run";</span>
+<span class="s2">    setTitle(startButton, "Run the P&oacute;lya urn simulation with the current alpha and beta values.");</span>
+
+<span class="s2">    sliderAlpha.disabled = false;</span>
+<span class="s2">    sliderBeta.disabled = false;</span>
+<span class="s2">    sliderPathLength.disabled = false;</span>
+<span class="s2">    setTitle(sliderAlpha, "Initial number of red balls in the urn.");</span>
+<span class="s2">    setTitle(sliderBeta, "Initial number of blue balls in the urn.");</span>
+<span class="s2">    setTitle(sliderPathLength, "Number of urn draws in one trajectory.");</span>
+<span class="s2">    setStatusReady(statusDiv);</span>
+<span class="s2">"""</span>
+
+<span class="n">button_polya_urn_reset</span><span class="o">.</span><span class="n">js_on_event</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">ButtonClick</span><span class="p">,</span>
+    <span class="n">CustomJS</span><span class="p">(</span>
+        <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+            <span class="n">segmentSource</span><span class="o">=</span><span class="n">datasource_polya_urn_segment</span><span class="p">,</span>
+            <span class="n">histSource</span><span class="o">=</span><span class="n">datasource_polya_urn_sample_ratio</span><span class="p">,</span>
+            <span class="n">stateSource</span><span class="o">=</span><span class="n">datasource_anim_state</span><span class="p">,</span>
+            <span class="n">figure</span><span class="o">=</span><span class="n">fig_polya_urn_anim_paths</span><span class="p">,</span>
+            <span class="n">startButton</span><span class="o">=</span><span class="n">button_polya_urn_start</span><span class="p">,</span>
+            <span class="n">sliderAlpha</span><span class="o">=</span><span class="n">slider_polya_urn_alpha</span><span class="p">,</span>
+            <span class="n">sliderBeta</span><span class="o">=</span><span class="n">slider_polya_urn_beta</span><span class="p">,</span>
+            <span class="n">sliderPathLength</span><span class="o">=</span><span class="n">slider_polya_urn_path_length</span><span class="p">,</span>
+            <span class="n">statusDiv</span><span class="o">=</span><span class="n">div_polya_urn_lock_status</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">code</span><span class="o">=</span><span class="n">callback_reset_code</span><span class="p">,</span>
+        <span class="n">module</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">callback_alpha_code</span> <span class="o">=</span> <span class="s2">"""</span>
+<span class="s2">    // Store slider choices in a shared source until Run freezes them for the simulation.</span>
+<span class="s2">    paramsSource.data["alpha"][0] = cb_obj.value;</span>
+<span class="s2">    paramsSource.change.emit();</span>
+<span class="s2">"""</span>
+
+<span class="n">callback_beta_code</span> <span class="o">=</span> <span class="s2">"""</span>
+<span class="s2">    // Store slider choices in a shared source until Run freezes them for the simulation.</span>
+<span class="s2">    paramsSource.data["beta"][0] = cb_obj.value;</span>
+<span class="s2">    paramsSource.change.emit();</span>
+<span class="s2">"""</span>
+
+<span class="n">slider_polya_urn_alpha</span><span class="o">.</span><span class="n">js_on_change</span><span class="p">(</span>
+    <span class="s2">"value"</span><span class="p">,</span>
+    <span class="n">CustomJS</span><span class="p">(</span>
+        <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">paramsSource</span><span class="o">=</span><span class="n">datasource_polya_urn_params</span><span class="p">),</span>
+        <span class="n">code</span><span class="o">=</span><span class="n">callback_alpha_code</span><span class="p">,</span>
+        <span class="n">module</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">slider_polya_urn_beta</span><span class="o">.</span><span class="n">js_on_change</span><span class="p">(</span>
+    <span class="s2">"value"</span><span class="p">,</span>
+    <span class="n">CustomJS</span><span class="p">(</span>
+        <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">paramsSource</span><span class="o">=</span><span class="n">datasource_polya_urn_params</span><span class="p">),</span>
+        <span class="n">code</span><span class="o">=</span><span class="n">callback_beta_code</span><span class="p">,</span>
+        <span class="n">module</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="c1"># Compose the controls below the plots so readers can experiment without a Python kernel.</span>
+<span class="n">layout_polya_urn_buttons</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">row</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Spacer</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mi">285</span><span class="p">),</span>
+    <span class="n">button_polya_urn_start</span><span class="p">,</span>
+    <span class="n">button_polya_urn_reset</span><span class="p">,</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Spacer</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mi">285</span><span class="p">),</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">APP_WIDTH</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">layout_polya_urn_slider_row_1</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">row</span><span class="p">(</span>
+    <span class="n">slider_polya_urn_alpha</span><span class="p">,</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Spacer</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mi">40</span><span class="p">),</span>
+    <span class="n">slider_polya_urn_beta</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">APP_WIDTH</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">layout_polya_urn_slider_row_2</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">row</span><span class="p">(</span>
+    <span class="n">slider_polya_urn_path_length</span><span class="p">,</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Spacer</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mi">40</span><span class="p">),</span>
+    <span class="n">slider_polya_urn_speed</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">APP_WIDTH</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">layout_polya_urn_sliders</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">column</span><span class="p">(</span>
+    <span class="n">layout_polya_urn_slider_row_1</span><span class="p">,</span>
+    <span class="n">layout_polya_urn_slider_row_2</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="n">APP_WIDTH</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">layout_polya_urn_anim</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">layouts</span><span class="o">.</span><span class="n">column</span><span class="p">(</span>
+    <span class="n">fig_polya_urn_anim_paths</span><span class="p">,</span>
+    <span class="n">fig_polya_urn_anim_final_counts</span><span class="p">,</span>
+    <span class="n">div_polya_urn_lock_status</span><span class="p">,</span>
+    <span class="n">layout_polya_urn_buttons</span><span class="p">,</span>
+    <span class="n">layout_polya_urn_sliders</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">layout_polya_urn_anim</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="notebook-bokeh-lazy" data-bokeh-bundles='["/js/bokeh/3.9.1/bokeh.min.js","/js/bokeh/3.9.1/bokeh-widgets.min.js"]' data-bokeh-script="/images/notebook_outputs/ab_to_rl/beta-prior-sequential-binary-decisions/interactive-0000-b2add211e789.js" data-bokeh-title="Interactive Polya urn simulation" style="min-height: 760px;"><p aria-live="polite" class="notebook-bokeh-lazy-status">Interactive visualization loading&hellip;</p><div data-root-id="p1098" id="b3c01533-ef9e-4f19-abd7-6e8188fa93be" style="display: contents;"></div></div></div>
+<div class="output_area">
+<div class="prompt"></div>
+
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=finite-time-beta-binomial-bridge"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Before-the-Limit:-The-Beta-Binomial-Distribution">Before the Limit: The Beta-Binomial Distribution<a class="anchor-link" href="#Before-the-Limit:-The-Beta-Binomial-Distribution"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The urn gives a one-step predictive rule, but the endpoint plots ask a longer-run question: after $T$ reinforced draws, where can an urn trajectory end?</p>
+<p>For a fixed number of urn draws $T$, the endpoint distribution is still discrete. There are only $T+1$ possible numbers of red draws:</p>
+<p>$$
+R_T \in \{0, 1, \ldots, T\}.
+$$</p>
+<p>Those finite endpoint counts follow a <a href="https://en.wikipedia.org/wiki/Beta-binomial_distribution">Beta-binomial distribution</a>:</p>
+<p>$$
+R_T \sim \mathrm{BetaBinomial}(T, \alpha, \beta).
+$$</p>
+<p>This is related to the Beta-Bernoulli update, but it is not the same object. Beta-Bernoulli describes one binary observation at a time and how the Beta belief updates after observing $y \in \{0,1\}$. Beta-binomial describes a finite-count prediction: how many red, or $y=1$, outcomes we might see after $T$ reinforced draws.</p>
+<p>The final urn ratio in the plots is</p>
+<p>$$
+Z_T = \frac{\alpha + R_T}{\alpha + \beta + T}.
+$$</p>
+<p>For small $T$, this ratio lives on a coarse grid of possible values. As $T$ grows, the grid becomes finer. In the limit, the distribution of $Z_T$ approaches the $\mathrm{Beta}(\alpha,\beta)$ distribution, which is continuous over the interval $[0,1]$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=polya-static-convergence-intro"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The finite-time Beta-binomial view explains what the plots below are showing. In each panel, we compute the exact distribution of final red ratios after a fixed number of draws and compare that finite endpoint distribution with the limiting Beta density.</p>
+<p>The blue step function shows the exact finite distribution on its natural grid, scaled as a density so each step's area equals its probability mass. The black curve is the $\mathrm{Beta}(\alpha,\beta)$ density. As the trajectories get longer, the possible final ratios become more finely spaced, and the step function lines up with the Beta density. Only in the limit of increasingly long sequences of draws do the final red ratios approach the Beta distribution.</p>
+<p>A single urn trajectory ends at one final ratio. The Beta distribution describes the distribution of those endpoints across possible trajectories, not a deterministic destination for one trajectory.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered" id="cell-id=d0170234">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Illustrate how the Beta distribution emerges as the limit of P&oacute;lya urn endpoints.</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">polya_final_red_ratio_distribution</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">beta</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">path_length</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the exact finite endpoint distribution on its natural grid."""</span>
+    <span class="n">denominator</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">+</span> <span class="n">beta</span> <span class="o">+</span> <span class="n">path_length</span>
+    <span class="n">grid_width</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">denominator</span>
+    <span class="n">red_draws</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">path_length</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">final_ratios</span> <span class="o">=</span> <span class="p">(</span><span class="n">alpha</span> <span class="o">+</span> <span class="n">red_draws</span><span class="p">)</span> <span class="o">/</span> <span class="n">denominator</span>
+    <span class="n">probabilities</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">betabinom</span><span class="o">.</span><span class="n">pmf</span><span class="p">(</span><span class="n">red_draws</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="n">path_length</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span>
+
+    <span class="c1"># Scale probability masses to density units so step area equals probability.</span>
+    <span class="n">density_values</span> <span class="o">=</span> <span class="n">probabilities</span> <span class="o">/</span> <span class="n">grid_width</span>
+    <span class="n">step_edges</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+        <span class="p">([</span><span class="n">final_ratios</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">grid_width</span><span class="p">],</span> <span class="n">final_ratios</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">grid_width</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">final_ratios</span><span class="p">,</span> <span class="n">step_edges</span><span class="p">,</span> <span class="n">density_values</span>
+
+
+<span class="n">alpha_for_urn</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">beta_for_urn</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="n">path_lengths</span> <span class="o">=</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">100</span><span class="p">]</span>
+
+<span class="n">theta</span><span class="p">,</span> <span class="n">beta_density</span> <span class="o">=</span> <span class="n">beta_density_grid</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="n">alpha_for_urn</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta_for_urn</span><span class="p">)</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">ax</span><span class="p">,</span> <span class="n">path_length</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axes</span><span class="o">.</span><span class="n">flat</span><span class="p">,</span> <span class="n">path_lengths</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">final_ratios</span><span class="p">,</span> <span class="n">step_edges</span><span class="p">,</span> <span class="n">density_values</span> <span class="o">=</span> <span class="n">polya_final_red_ratio_distribution</span><span class="p">(</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="n">alpha_for_urn</span><span class="p">,</span>
+        <span class="n">beta</span><span class="o">=</span><span class="n">beta_for_urn</span><span class="p">,</span>
+        <span class="n">path_length</span><span class="o">=</span><span class="n">path_length</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">stairs</span><span class="p">(</span>
+        <span class="n">density_values</span><span class="p">,</span>
+        <span class="n">step_edges</span><span class="p">,</span>
+        <span class="n">fill</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">color</span><span class="o">=</span><span class="s2">"tab:blue"</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="mf">0.28</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">"exact finite endpoint distribution"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">stairs</span><span class="p">(</span><span class="n">density_values</span><span class="p">,</span> <span class="n">step_edges</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"tab:blue"</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.3</span><span class="p">)</span>
+
+    <span class="c1"># Mark the exact support points so the finite distribution reads as discrete.</span>
+    <span class="n">marker_stride</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">final_ratios</span><span class="p">)</span> <span class="o">//</span> <span class="mi">80</span><span class="p">)</span>
+    <span class="n">marker_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">final_ratios</span><span class="p">),</span> <span class="n">marker_stride</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">vlines</span><span class="p">(</span>
+        <span class="n">final_ratios</span><span class="p">[</span><span class="n">marker_indices</span><span class="p">],</span>
+        <span class="n">ymin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">ymax</span><span class="o">=</span><span class="n">density_values</span><span class="p">[</span><span class="n">marker_indices</span><span class="p">],</span>
+        <span class="n">color</span><span class="o">=</span><span class="s2">"tab:blue"</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="mf">0.22</span><span class="p">,</span>
+        <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+        <span class="n">final_ratios</span><span class="p">[</span><span class="n">marker_indices</span><span class="p">],</span>
+        <span class="n">density_values</span><span class="p">[</span><span class="n">marker_indices</span><span class="p">],</span>
+        <span class="n">color</span><span class="o">=</span><span class="s2">"tab:blue"</span><span class="p">,</span>
+        <span class="n">s</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+        <span class="n">zorder</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">"exact support points"</span> <span class="k">if</span> <span class="n">path_length</span> <span class="o">==</span> <span class="n">path_lengths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+        <span class="n">theta</span><span class="p">,</span>
+        <span class="n">beta_density</span><span class="p">,</span>
+        <span class="n">color</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span>
+        <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="sa">rf</span><span class="s2">"limiting $Beta(</span><span class="si">{</span><span class="n">alpha_for_urn</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">beta_for_urn</span><span class="si">}</span><span class="s2">)$ density"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path_length</span><span class="si">}</span><span class="s2"> draws: </span><span class="si">{</span><span class="n">path_length</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> possible endpoints"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"final red ratio (red balls / total balls)"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"density"</span><span class="p">)</span>
+
+<span class="n">handles</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_legend_handles_labels</span><span class="p">()</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">handles</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s2">"lower center"</span><span class="p">,</span> <span class="n">ncol</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.02</span><span class="p">))</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span>
+    <span class="s2">"From finite urn endpoints to a Beta density</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="sa">r</span><span class="s2">"Increasing draws per trajectory, starting from $\alpha=2$ red and $\beta=5$ blue balls"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="mf">1.04</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">sns</span><span class="o">.</span><span class="n">despine</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Finite endpoint distributions from P&oacute;lya-urn trajectories at increasing path lengths, compared with the limiting Beta(2, 5) density."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_png output_subarea">
+<img alt="Finite endpoint distributions from P&oacute;lya-urn trajectories at increasing path lengths, compared with the limiting Beta(2, 5) density." decoding="async" height="648" loading="lazy" src="/images/notebook_outputs/ab_to_rl/beta-prior-sequential-binary-decisions/figure-0011-00-d1f962da6ce4.png" width="971"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=97496b2e"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="What-the-Beta-Bernoulli-Loop-Assumes">What the Beta-Bernoulli Loop Assumes<a class="anchor-link" href="#What-the-Beta-Bernoulli-Loop-Assumes"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The Beta-Bernoulli update is online and interpretable, but it is still a model. Binary feedback is the setup; the stronger modeling assumptions are about stability, feedback, and what the counts summarize.</p>
+<p>It assumes:</p>
+<ul>
+<li>each action has a stable probability of outcome $y=1$,</li>
+<li>feedback is observed for the action we actually took,</li>
+<li>counts of $y=1$ and $y=0$ outcomes are enough to summarize what we have learned.</li>
+</ul>
+<p>These assumptions fit simple A/B tests, binary bandits, and many repeated yes/no decision problems. They are too narrow when outcomes have different values, rewards are continuous, actions affect future states, or the environment changes over time.</p>
+<p>The P&oacute;lya urn is the posterior predictive loop made physical: each draw is sampled from the current predictive probability, then added back as evidence that reinforces the next prediction. It shows what happens inside the Beta-Bernoulli model when we repeatedly sample from the posterior predictive distribution and feed each sampled outcome back in as evidence.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=00b1f667"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Summary">Summary<a class="anchor-link" href="#Summary"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The Beta prior is natural for sequential binary decisions because it matches the structure of the feedback.</p>
+<p>Each action has an unknown probability of outcome $y=1$. Each time we choose that action, we observe one binary outcome. If $y_t=1$, we increment $\alpha_a$; if $y_t=0$, we increment $\beta_a$. The posterior remains Beta, so the learner only needs to carry two counts per action.</p>
+<p>Those same counts also define the next prediction. The posterior mean gives the posterior predictive probability for the next $y=1$ outcome:</p>
+<p>$$
+P(Y_{t+1}=1 \mid y_{1:t})
+=
+\frac{\alpha_t}{\alpha_t + \beta_t}.
+$$</p>
+<p>The P&oacute;lya urn gives a concrete picture of the same posterior predictive update. A red draw is sampled from the current urn composition, then added back as evidence for the next draw; a blue draw does the same in the other direction. That reinforcement makes future draws depend on previous draws, while the final counts still carry the information used by the Beta-Bernoulli posterior.</p>
+<p>The urn also gives the finite-to-limit bridge. After $T$ draws, the number of red draws follows a Beta-binomial distribution. After converting that count into a final red ratio and letting $T$ grow, the distribution approaches $\mathrm{Beta}(\alpha,\beta)$.</p>
+<p>The update itself stays small:</p>
+<p>$$
+\alpha_a \leftarrow \alpha_a + y_t,
+\qquad
+\beta_a \leftarrow \beta_a + (1-y_t)
+$$</p>
+<p>for the action $a$ we actually chose. That is the compact Beta-Bernoulli update loop behind Bayesian sequential binary decisions.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered" id="cell-id=3b6c51f8"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="References">References<a class="anchor-link" href="#References"><i class="fa-solid fa-sm fa-link"></i></a></h2><ul>
+<li><a href="https://www.randomservices.org/random/urn/Polya.html">P&oacute;lya's Urn Process</a> - RandomServices: detailed technical reference for the urn process and its connection to Beta-Bernoulli and Beta-binomial behavior.</li>
+<li><a href="https://djalil.chafai.net/blog/2015/11/30/back-to-basics-polya-urns/">Back to basics - P&oacute;lya urns</a> - Djalil Chafa&iuml;: mathematical walkthrough of the urn ratio as a martingale and the limiting Beta distribution.</li>
+<li><a href="https://en.wikipedia.org/wiki/P%C3%B3lya_urn_model">P&oacute;lya urn model</a> - Wikipedia: compact reference for the draw-replace-add urn process, self-reinforcement, exchangeability, the martingale property, and convergence to a Beta distribution.</li>
+<li><a href="https://en.wikipedia.org/wiki/Beta-binomial_distribution">Beta-binomial distribution</a> - Wikipedia: compact reference for the finite-time bridge in this post. Before urn ratios approach a continuous Beta distribution, the number of red draws after $T$ draws follows a discrete Beta-binomial distribution.</li>
+</ul>
+<h2 id="Further-Reading">Further Reading<a class="anchor-link" href="#Further-Reading"><i class="fa-solid fa-sm fa-link"></i></a></h2><ul>
+<li><a href="{% post_url /blog/ab_to_rl/2026-05-14-beta-distribution-probabilities %}">Beta distribution: Probabilities and binary data</a> - companion post deriving the Beta distribution and the Beta-Bernoulli update used here.</li>
+<li><a href="{% post_url /blog/misc/2018-09-26-multi-armed-bandit-implementation %}">Multi-armed bandit implementation</a> - implementation-focused companion post showing Beta priors in a binary bandit simulation.</li>
+<li><a href="https://mathenchant.wordpress.com/2015/10/16/polyas-urn/">P&oacute;lya's Urn</a> - James Propp: a reader-friendly essay on why the urn is a useful metaphor for chance processes with memory and reinforcement.</li>
+<li><a href="https://arxiv.org/abs/math/0610076">A survey of random processes with reinforcement</a> - Robin Pemantle: a broad research survey for readers who want to see how P&oacute;lya urns fit into the larger family of reinforced random processes.</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered" id="cell-id=aeb95627">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.metadata</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">platform</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"python: </span><span class="si">{</span><span class="n">platform</span><span class="o">.</span><span class="n">python_version</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">package_name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"numpy"</span><span class="p">,</span> <span class="s2">"scipy"</span><span class="p">,</span> <span class="s2">"matplotlib"</span><span class="p">,</span> <span class="s2">"seaborn"</span><span class="p">,</span> <span class="s2">"bokeh"</span><span class="p">,</span> <span class="s2">"jupyter-bokeh"</span><span class="p">]:</span>
+    <span class="n">version</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">version</span><span class="p">(</span><span class="n">package_name</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">package_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>python: 3.13.12
+numpy: 2.4.4
+scipy: 1.17.1
+matplotlib: 3.10.9
+seaborn: 0.13.2
+bokeh: 3.9.1
+jupyter-bokeh: 4.0.5
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script defer="" src="/js/notebook_bokeh_lazy.js?v=fe477ba95ce9"></script><div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt"></div><div class="inner_cell"><div class="text_cell_render border-box-sizing rendered_html"><p>This post is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/ab_to_rl/beta-prior-sequential-binary-decisions.ipynb">Link to the full IPython notebook file</a></p></div></div></div>
