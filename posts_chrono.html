@@ -1,0 +1,24 @@
+---
+layout: default_container
+title: Posts
+description: All posts in chronological order.
+---
+<h1><span class="fa-solid fa-clock-rotate-left fa-fw"></span> Posts</h1>
+{% for post in site.posts %}
+    {% if post.redirect_to %}
+    {% else %}
+        {% assign currentdate = post.date | date: "%Y" %}
+        {% if currentdate != date %}
+            {% unless forloop.first %}</ul>{% endunless %}
+            <h2 id="y{{post.date | date: '%Y'}}">{{ currentdate }}</h2>
+            <div role="group" aria-labelledby="y{{post.date | date: '%Y'}}">
+            <ul>
+            {% assign date = currentdate %}
+        {% endif %}
+        <li>
+            <a href="{{ post.url }}">{{ post.title }}</a> <span class="text-body-secondary">({{ post.date | date_to_string }})</span><br>
+            {{ post.description }}
+        </li>
+        {% if forloop.last %}</ul></div>{% endif %}
+    {% endif %}
+{% endfor %}

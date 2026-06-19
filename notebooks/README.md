@@ -1,0 +1,65 @@
+# Notebook Workflow
+
+Responsibility: this document is the notebook workflow guide. Keep notebook
+conversion commands, converter setup, and the boundary between conversion
+tooling and per-post execution environments here. Keep site architecture in
+`build_info/site_overview.md`, Jekyll/GitHub Pages commands in
+`build_info/jekyll.md`, and agent-specific behavior in `AGENTS.md`.
+
+## Canonical Converter
+
+Use `notebooks/notebook_convert.py` as the canonical converter for
+notebook-derived posts. Run it with `uv run`; the converter dependencies are
+declared in the script metadata at the top of that file.
+
+From a notebook topic directory:
+```sh
+uv run ../notebook_convert.py --nbpath <notebook>.ipynb --date YYYY-MM-DD --layout post --subdir <_posts-subdir>
+```
+
+From the repository root:
+```sh
+uv run ./notebooks/notebook_convert.py --nbpath notebooks/<topic>/<notebook>.ipynb --date YYYY-MM-DD --layout post --subdir <_posts-subdir>
+```
+
+Prefer the existing `*_convert.sh` script in each topic directory when one
+exists; those scripts encode the post dates, target subdirectories,
+descriptions, and tags.
+
+To strip outputs from all source notebooks before committing or rerunning them, use:
+```sh
+just clear-notebooks
+```
+
+When a notebook-derived post needs visible history metadata, add `--update`
+entries to the topic conversion script. The value format is
+`YYYY-MM-DD|Title|Description`, and the generated front matter is rendered by
+`_includes/post_history.html`.
+
+When a notebook-derived post should show a source link footer, add
+`--add_notebook_source_note` to its conversion command. Keep that footer out of
+the notebook itself so the converter remains the source of truth.
+
+When a converted post has legacy URLs, add them with `--redirect_from` in the
+topic conversion script so rerunning the converter preserves those redirects.
+
+## Execution Environments
+
+The converter environment is separate from environments used to execute or
+regenerate notebook outputs.
+
+- Use the converter with `uv run notebooks/notebook_convert.py` or the
+  topic-specific conversion scripts.
+- Use topic-local environment files, such as `conda_env.yml`, `env.yml`,
+  `pyproject.toml`, or `uv.lock`, when you need to run the notebook itself.
+  If a topic directory has its own `README.md`, treat it as the command guide
+  for that notebook environment.
+- Do not move post-specific runtime dependencies into the converter unless the
+  converter code imports them directly.
+
+## Generated Posts
+
+Converted posts are written under `_posts/` as HTML files. When changing a
+notebook-derived post, prefer editing the source notebook and rerunning the
+conversion script. Manual edits to generated HTML are best kept small and
+intentional.

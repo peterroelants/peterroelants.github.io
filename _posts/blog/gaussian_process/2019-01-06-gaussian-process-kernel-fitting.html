@@ -1,0 +1,1921 @@
+---
+layout: post
+title: Gaussian processes (2/3) - Fitting a Gaussian process kernel
+description: "Fit a parameterized Gaussian process kernel on the Mauna Loa CO\u2082 dataset. We'll use JAX and Optax to implement the model and fit the kernel parameters."
+tags:
+- Gaussian Process
+- Kernel
+- JAX
+- Machine Learning
+- Notebook
+image: /images/social/2019-01-06-gaussian-process-kernel-fitting-preview.png
+updates:
+- date: '2026-05-04'
+  title: Reimplemented with JAX
+  description: Replaced the TensorFlow Probability implementation with explicit JAX code
+---
+
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h1 id="Gaussian-processes-(2/3)---Fitting-a-Gaussian-process-kernel">
+    Gaussian processes (2/3) - Fitting a Gaussian process kernel
+    <a class="anchor-link" href="#Gaussian-processes-(2/3)---Fitting-a-Gaussian-process-kernel">
+     <i class="fa-solid fa-sm fa-link">
+     </i>
+    </a>
+   </h1>
+   <p>
+    In the
+    <a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">
+     previous post
+    </a>
+    we introduced the Gaussian process model with the exponentiated quadratic covariance function. In this post we will introduce parametrized covariance functions (kernels), fit them to real world data, and use them to make posterior predictions. This post is the second part of a series on Gaussian processes:
+   </p>
+   <ol>
+    <li>
+     <a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">
+      Understanding Gaussian processes
+     </a>
+    </li>
+    <li>
+     <a href="{% post_url /blog/gaussian_process/2019-01-06-gaussian-process-kernel-fitting %}">
+      Fitting a Gaussian process kernel (this)
+     </a>
+    </li>
+    <li>
+     <a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}">
+      Gaussian process kernels
+     </a>
+    </li>
+   </ol>
+   <p>
+    We will implement the Gaussian process model in
+    <a href="https://jax.dev/">
+     JAX
+    </a>
+    , keeping the kernel and likelihood calculations explicit so the model details remain visible.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [1]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Imports</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">"ignore"</span><span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NamedTuple</span><span class="p">,</span> <span class="n">TypeAlias</span><span class="p">,</span> <span class="n">cast</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+
+<span class="n">jax</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">"jax_enable_x64"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax.scipy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jsp</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">optax</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">tqdm.notebook</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.plotting</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bokeh.models</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span><span class="p">,</span> <span class="n">HTML</span>
+
+<span class="n">bokeh</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">output_notebook</span><span class="p">(</span><span class="n">hide_banner</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">Array</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span>
+<span class="n">Scalar</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Array</span>
+
+
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_javascript" id="2a44345c-ddce-4255-8e23-84c2ce06da94">
+     <script type="text/javascript">
+      var element = $('#2a44345c-ddce-4255-8e23-84c2ce06da94');
+'use strict';
+(function(root) {
+  function now() {
+    return new Date();
+  }
+
+  const force = true;
+
+  if (typeof root._bokeh_onload_callbacks === "undefined" || force === true) {
+    root._bokeh_onload_callbacks = [];
+    root._bokeh_is_loading = undefined;
+  }
+
+const JS_MIME_TYPE = 'application/javascript';
+  const HTML_MIME_TYPE = 'text/html';
+  const EXEC_MIME_TYPE = 'application/vnd.bokehjs_exec.v0+json';
+  const CLASS_NAME = 'output_bokeh rendered_html';
+
+  /**
+   * Render data to the DOM node
+   */
+  function render(props, node) {
+    const script = document.createElement("script");
+    node.appendChild(script);
+  }
+
+  /**
+   * Handle when an output is cleared or removed
+   */
+  function handleClearOutput(event, handle) {
+    function drop(id) {
+      const view = Bokeh.index.get_by_id(id)
+      if (view != null) {
+        view.model.document.clear()
+        Bokeh.index.delete(view)
+      }
+    }
+
+    const cell = handle.cell;
+
+    const id = cell.output_area._bokeh_element_id;
+    const server_id = cell.output_area._bokeh_server_id;
+
+    // Clean up Bokeh references
+    if (id != null) {
+      drop(id)
+    }
+
+    if (server_id !== undefined) {
+      // Clean up Bokeh references
+      const cmd_clean = "from bokeh.io.state import curstate; print(curstate().uuid_to_server['" + server_id + "'].get_sessions()[0].document.roots[0]._id)";
+      cell.notebook.kernel.execute(cmd_clean, {
+        iopub: {
+          output: function(msg) {
+            const id = msg.content.text.trim()
+            drop(id)
+          }
+        }
+      });
+      // Destroy server and session
+      const cmd_destroy = "import bokeh.io.notebook as ion; ion.destroy_server('" + server_id + "')";
+      cell.notebook.kernel.execute(cmd_destroy);
+    }
+  }
+
+  /**
+   * Handle when a new output is added
+   */
+  function handleAddOutput(event, handle) {
+    const output_area = handle.output_area;
+    const output = handle.output;
+
+    // limit handleAddOutput to display_data with EXEC_MIME_TYPE content only
+    if ((output.output_type != "display_data") || (!Object.prototype.hasOwnProperty.call(output.data, EXEC_MIME_TYPE))) {
+      return
+    }
+
+    const toinsert = output_area.element.find("." + CLASS_NAME.split(' ')[0]);
+
+    if (output.metadata[EXEC_MIME_TYPE]["id"] !== undefined) {
+      toinsert[toinsert.length - 1].firstChild.textContent = output.data[JS_MIME_TYPE];
+      // store reference to embed id on output_area
+      output_area._bokeh_element_id = output.metadata[EXEC_MIME_TYPE]["id"];
+    }
+    if (output.metadata[EXEC_MIME_TYPE]["server_id"] !== undefined) {
+      const bk_div = document.createElement("div");
+      bk_div.innerHTML = output.data[HTML_MIME_TYPE];
+      const script_attrs = bk_div.children[0].attributes;
+      for (let i = 0; i < script_attrs.length; i++) {
+        toinsert[toinsert.length - 1].firstChild.setAttribute(script_attrs[i].name, script_attrs[i].value);
+        toinsert[toinsert.length - 1].firstChild.textContent = bk_div.children[0].textContent
+      }
+      // store reference to server id on output_area
+      output_area._bokeh_server_id = output.metadata[EXEC_MIME_TYPE]["server_id"];
+    }
+  }
+
+  function register_renderer(events, OutputArea) {
+
+    function append_mime(data, metadata, element) {
+      // create a DOM node to render to
+      const toinsert = this.create_output_subarea(
+        metadata,
+        CLASS_NAME,
+        EXEC_MIME_TYPE
+      );
+      this.keyboard_manager.register_events(toinsert);
+      // Render to node
+      const props = {data: data, metadata: metadata[EXEC_MIME_TYPE]};
+      render(props, toinsert[toinsert.length - 1]);
+      element.append(toinsert);
+      return toinsert
+    }
+
+    /* Handle when an output is cleared or removed */
+    events.on('clear_output.CodeCell', handleClearOutput);
+    events.on('delete.Cell', handleClearOutput);
+
+    /* Handle when a new output is added */
+    events.on('output_added.OutputArea', handleAddOutput);
+
+    /**
+     * Register the mime type and append_mime function with output_area
+     */
+    OutputArea.prototype.register_mime_type(EXEC_MIME_TYPE, append_mime, {
+      /* Is output safe? */
+      safe: true,
+      /* Index of renderer in `output_area.display_order` */
+      index: 0
+    });
+  }
+
+  // register the mime type if in Jupyter Notebook environment and previously unregistered
+  if (root.Jupyter !== undefined) {
+    const events = require('base/js/events');
+    const OutputArea = require('notebook/js/outputarea').OutputArea;
+
+    if (OutputArea.prototype.mime_types().indexOf(EXEC_MIME_TYPE) == -1) {
+      register_renderer(events, OutputArea);
+    }
+  }
+  if (typeof (root._bokeh_timeout) === "undefined" || force === true) {
+    root._bokeh_timeout = Date.now() + 5000;
+    root._bokeh_failed_load = false;
+  }
+
+  const NB_LOAD_WARNING = {'data': {'text/html':
+     "<div style='background-color: #fdd'>\n"+
+     "<p>\n"+
+     "BokehJS does not appear to have successfully loaded. If loading BokehJS from CDN, this \n"+
+     "may be due to a slow or bad network connection. Possible fixes:\n"+
+     "</p>\n"+
+     "<ul>\n"+
+     "<li>re-rerun `output_notebook()` to attempt to load from CDN again, or</li>\n"+
+     "<li>use INLINE resources instead, as so:</li>\n"+
+     "</ul>\n"+
+     "<code>\n"+
+     "from bokeh.resources import INLINE\n"+
+     "output_notebook(resources=INLINE)\n"+
+     "</code>\n"+
+     "</div>"}};
+
+  function display_loaded(error = null) {
+    const el = document.getElementById(null);
+    if (el != null) {
+      const html = (() => {
+        if (typeof root.Bokeh === "undefined") {
+          if (error == null) {
+            return "BokehJS is loading ...";
+          } else {
+            return "BokehJS failed to load.";
+          }
+        } else {
+          const prefix = `BokehJS ${root.Bokeh.version}`;
+          if (error == null) {
+            return `${prefix} successfully loaded.`;
+          } else {
+            return `${prefix} <b>encountered errors</b> while loading and may not function as expected.`;
+          }
+        }
+      })();
+      el.innerHTML = html;
+
+      if (error != null) {
+        const wrapper = document.createElement("div");
+        wrapper.style.overflow = "auto";
+        wrapper.style.height = "5em";
+        wrapper.style.resize = "vertical";
+        const content = document.createElement("div");
+        content.style.fontFamily = "monospace";
+        content.style.whiteSpace = "pre-wrap";
+        content.style.backgroundColor = "rgb(255, 221, 221)";
+        content.textContent = error.stack ?? error.toString();
+        wrapper.append(content);
+        el.append(wrapper);
+      }
+    } else if (Date.now() < root._bokeh_timeout) {
+      setTimeout(() => display_loaded(error), 100);
+    }
+  }
+
+  function run_callbacks() {
+    try {
+      root._bokeh_onload_callbacks.forEach(function(callback) {
+        if (callback != null)
+          callback();
+      });
+    } finally {
+      delete root._bokeh_onload_callbacks
+    }
+    console.debug("Bokeh: all callbacks have finished");
+  }
+
+  function load_libs(css_urls, js_urls, callback) {
+    if (css_urls == null) css_urls = [];
+    if (js_urls == null) js_urls = [];
+
+    root._bokeh_onload_callbacks.push(callback);
+    if (root._bokeh_is_loading > 0) {
+      console.debug("Bokeh: BokehJS is being loaded, scheduling callback at", now());
+      return null;
+    }
+    if (js_urls == null || js_urls.length === 0) {
+      run_callbacks();
+      return null;
+    }
+    console.debug("Bokeh: BokehJS not loaded, scheduling load and callback at", now());
+    root._bokeh_is_loading = css_urls.length + js_urls.length;
+
+    function on_load() {
+      root._bokeh_is_loading--;
+      if (root._bokeh_is_loading === 0) {
+        console.debug("Bokeh: all BokehJS libraries/stylesheets loaded");
+        run_callbacks()
+      }
+    }
+
+    function on_error(url) {
+      console.error("failed to load " + url);
+    }
+
+    for (let i = 0; i < css_urls.length; i++) {
+      const url = css_urls[i];
+      const element = document.createElement("link");
+      element.onload = on_load;
+      element.onerror = on_error.bind(null, url);
+      element.rel = "stylesheet";
+      element.type = "text/css";
+      element.href = url;
+      console.debug("Bokeh: injecting link tag for BokehJS stylesheet: ", url);
+      document.body.appendChild(element);
+    }
+
+    for (let i = 0; i < js_urls.length; i++) {
+      const url = js_urls[i];
+      const element = document.createElement('script');
+      element.onload = on_load;
+      element.onerror = on_error.bind(null, url);
+      element.async = false;
+      element.src = url;
+      console.debug("Bokeh: injecting script tag for BokehJS library: ", url);
+      document.head.appendChild(element);
+    }
+  };
+
+  function inject_raw_css(css) {
+    const element = document.createElement("style");
+    element.appendChild(document.createTextNode(css));
+    document.body.appendChild(element);
+  }
+
+  const js_urls = ["https://cdn.bokeh.org/bokeh/release/bokeh-3.9.0.min.js", "https://cdn.bokeh.org/bokeh/release/bokeh-gl-3.9.0.min.js", "https://cdn.bokeh.org/bokeh/release/bokeh-widgets-3.9.0.min.js", "https://cdn.bokeh.org/bokeh/release/bokeh-tables-3.9.0.min.js", "https://cdn.bokeh.org/bokeh/release/bokeh-mathjax-3.9.0.min.js"];
+  const css_urls = [];
+
+  const inline_js = [    function(Bokeh) {
+      Bokeh.set_log_level("info");
+    },
+function(Bokeh) {
+    }
+  ];
+
+  function run_inline_js() {
+    if (root.Bokeh !== undefined || force === true) {
+      try {
+            for (let i = 0; i < inline_js.length; i++) {
+      inline_js[i].call(root, root.Bokeh);
+    }
+
+      } catch (error) {throw error;
+      }} else if (Date.now() < root._bokeh_timeout) {
+      setTimeout(run_inline_js, 100);
+    } else if (!root._bokeh_failed_load) {
+      console.log("Bokeh: BokehJS failed to load within specified timeout.");
+      root._bokeh_failed_load = true;
+    } else if (force !== true) {
+      const cell = $(document.getElementById(null)).parents('.cell').data().cell;
+      cell.output_area.append_execute_result(NB_LOAD_WARNING)
+    }
+  }
+
+  if (root._bokeh_is_loading === 0) {
+    console.debug("Bokeh: BokehJS loaded, going straight to plotting");
+    run_inline_js();
+  } else {
+    load_libs(css_urls, js_urls, function() {
+      console.debug("Bokeh: BokehJS plotting callback run at", now());
+      run_inline_js();
+    });
+  }
+}(window));
+     </script>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Mauna-Loa-CO%E2%82%82-data">
+    Mauna Loa CO₂ data
+    <a class="anchor-link" href="#Mauna-Loa-CO%E2%82%82-data">
+     <i class="fa-solid fa-sm fa-link">
+     </i>
+    </a>
+   </h2>
+   <p>
+    The dataset used in this example is the monthly average
+    <a href="https://en.wikipedia.org/wiki/Carbon_dioxide_in_Earth%27s_atmosphere">
+     atmospheric CO₂
+    </a>
+    concentrations (in parts per million (ppm)) collected at the
+    <a href="https://en.wikipedia.org/wiki/Mauna_Loa_Observatory">
+     Mauna Loa Observatory
+    </a>
+    in Hawaii. The observatory has been collecting these CO₂ concentrations since 1958 and
+    <a href="https://en.wikipedia.org/wiki/Keeling_Curve">
+     showed
+    </a>
+    the first significant evidence of rapidly increasing CO₂ levels in the atmosphere.
+   </p>
+   <p>
+    These measures of atmospheric CO₂ concentrations show different characteristics such as a long term rising trend, variation with the seasons, and smaller irregularities. This made it into a canonical example in Gaussian process modelling
+    <a href="#References">
+     ⁽¹⁾
+    </a>
+    .
+   </p>
+   <p>
+    In this post the data is downloaded as a CSV file from the
+    <a href="https://scrippsco2.ucsd.edu/data/atmospheric_co2/primary_mlo_co2_record.html">
+     Scripps CO₂ Program website
+    </a>
+    . This data is loaded in a pandas dataframe and plotted below.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [2]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Load the data</span>
+<span class="c1"># Load the data from the Scripps CO2 program website.</span>
+<span class="n">co2_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span>  <span class="c1"># ty: ignore[no-matching-overload] - pandas stub mismatch</span>
+    <span class="c1"># Source: https://scrippsco2.ucsd.edu/assets/data/atmospheric/stations/in_situ_co2/monthly/monthly_in_situ_co2_mlo.csv</span>
+    <span class="n">filepath_or_buffer</span><span class="o">=</span><span class="s2">"./monthly_in_situ_co2_mlo.csv"</span><span class="p">,</span>
+    <span class="n">header</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Data starts here</span>
+    <span class="n">skiprows</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>  <span class="c1"># Headers consist of multiple rows</span>
+    <span class="n">usecols</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>  <span class="c1"># Only keep the 'Date' and 'CO2' columns</span>
+    <span class="n">na_values</span><span class="o">=</span><span class="s2">"-99.99"</span><span class="p">,</span>  <span class="c1"># NaNs are denoted as '-99.99'</span>
+<span class="p">)</span>
+
+<span class="c1"># Drop missing values</span>
+<span class="n">co2_df</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># Remove whitespace from column names</span>
+<span class="n">co2_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [3]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Plot data</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">1958</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">2021</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">310</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">420</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"Date"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"CO₂ (ppm)"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span>
+        <span class="n">text</span><span class="o">=</span><span class="s2">"In situ air measurements at Mauna Loa, Observatory, Hawaii"</span><span class="p">,</span>
+        <span class="n">text_font_style</span><span class="o">=</span><span class="s2">"italic"</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Atmospheric CO₂ concentrations"</span><span class="p">,</span> <span class="n">text_font_size</span><span class="o">=</span><span class="s2">"14pt"</span><span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">observed_source</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">co2_df</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="s2">"co2"</span><span class="p">:</span> <span class="n">co2_df</span><span class="o">.</span><span class="n">CO2</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()}</span>
+<span class="p">)</span>
+<span class="n">observed_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">line</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"co2"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">observed_source</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"All data"</span><span class="p">,</span>
+    <span class="n">line_width</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"midnightblue"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_tools</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">observed_renderer</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[(</span><span class="s2">"Date"</span><span class="p">,</span> <span class="s2">"@date</span><span class="si">{0.00}</span><span class="s2">"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"CO₂"</span><span class="p">,</span> <span class="s2">"@co2</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">)],</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">"vline"</span><span class="p">,</span>
+        <span class="n">line_policy</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="o">.</span><span class="n">location</span> <span class="o">=</span> <span class="s2">"top_left"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">toolbar</span><span class="o">.</span><span class="n">autohide</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_html rendered_html output_subarea">
+     <div data-root-id="p1010" id="a9d2104b-97bf-437c-be94-6d8b56a04696" style="display: contents;">
+     </div>
+    </div>
+   </div>
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_javascript" id="ef3e6f5a-1120-4f8b-8da3-66ff13bd43fe">
+     <script type="text/javascript">
+      var element = $('#ef3e6f5a-1120-4f8b-8da3-66ff13bd43fe');
+(function(root) {
+  function embed_document(root) {
+  const docs_json = {"58d4430f-f32a-4c5a-bb17-23999cc350cd":{"version":"3.9.0","title":"Bokeh Application","config":{"type":"object","name":"DocumentConfig","id":"p1058","attributes":{"notifications":{"type":"object","name":"Notifications","id":"p1059"}}},"roots":[{"type":"object","name":"Figure","id":"p1010","attributes":{"height":300,"x_range":{"type":"object","name":"Range1d","id":"p1008","attributes":{"start":1958,"end":2021}},"y_range":{"type":"object","name":"Range1d","id":"p1009","attributes":{"start":310,"end":420}},"x_scale":{"type":"object","name":"LinearScale","id":"p1019"},"y_scale":{"type":"object","name":"LinearScale","id":"p1020"},"title":{"type":"object","name":"Title","id":"p1017"},"renderers":[{"type":"object","name":"GlyphRenderer","id":"p1052","attributes":{"data_source":{"type":"object","name":"ColumnDataSource","id":"p1046","attributes":{"selected":{"type":"object","name":"Selection","id":"p1047","attributes":{"indices":[],"line_indices":[]}},"selection_policy":{"type":"object","name":"UnionRenderers","id":"p1048"},"data":{"type":"map","entries":[["date",{"type":"ndarray","array":{"type":"bytes","data":"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"},"shape":[750],"dtype":"float64","order":"little"}],["co2",{"type":"ndarray","array":{"type":"bytes","data":"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"},"shape":[750],"dtype":"float64","order":"little"}]]}}},"view":{"type":"object","name":"CDSView","id":"p1053","attributes":{"filter":{"type":"object","name":"AllIndices","id":"p1054"}}},"glyph":{"type":"object","name":"Line","id":"p1049","attributes":{"x":{"type":"field","field":"date"},"y":{"type":"field","field":"co2"},"line_color":"midnightblue","line_width":2}},"nonselection_glyph":{"type":"object","name":"Line","id":"p1050","attributes":{"x":{"type":"field","field":"date"},"y":{"type":"field","field":"co2"},"line_color":"midnightblue","line_alpha":0.1,"line_width":2}},"muted_glyph":{"type":"object","name":"Line","id":"p1051","attributes":{"x":{"type":"field","field":"date"},"y":{"type":"field","field":"co2"},"line_color":"midnightblue","line_alpha":0.2,"line_width":2}}}}],"toolbar":{"type":"object","name":"Toolbar","id":"p1018","attributes":{"tools":[{"type":"object","name":"PanTool","id":"p1031"},{"type":"object","name":"WheelZoomTool","id":"p1032","attributes":{"renderers":"auto"}},{"type":"object","name":"BoxZoomTool","id":"p1033","attributes":{"overlay":{"type":"object","name":"BoxAnnotation","id":"p1034","attributes":{"syncable":false,"line_color":"black","line_alpha":1.0,"line_width":2,"line_dash":[4,4],"fill_color":"lightgrey","fill_alpha":0.5,"level":"overlay","visible":false,"left":{"type":"number","value":"nan"},"right":{"type":"number","value":"nan"},"top":{"type":"number","value":"nan"},"bottom":{"type":"number","value":"nan"},"left_units":"canvas","right_units":"canvas","top_units":"canvas","bottom_units":"canvas","handles":{"type":"object","name":"BoxInteractionHandles","id":"p1040","attributes":{"all":{"type":"object","name":"AreaVisuals","id":"p1039","attributes":{"fill_color":"white","hover_fill_color":"lightgray"}}}}}}}},{"type":"object","name":"SaveTool","id":"p1041"},{"type":"object","name":"ResetTool","id":"p1042"},{"type":"object","name":"HelpTool","id":"p1043"},{"type":"object","name":"HoverTool","id":"p1057","attributes":{"renderers":[{"id":"p1052"}],"tooltips":[["Date","@date{0.00}"],["CO\u2082","@co2{0.00} ppm"]],"sort_by":null,"mode":"vline"}}],"autohide":true}},"left":[{"type":"object","name":"LinearAxis","id":"p1026","attributes":{"ticker":{"type":"object","name":"BasicTicker","id":"p1027","attributes":{"mantissas":[1,2,5]}},"formatter":{"type":"object","name":"BasicTickFormatter","id":"p1028"},"axis_label":"CO\u2082 (ppm)","major_label_policy":{"type":"object","name":"AllLabels","id":"p1029"}}}],"above":[{"type":"object","name":"Title","id":"p1044","attributes":{"text":"In situ air measurements at Mauna Loa, Observatory, Hawaii","text_font_style":"italic"}},{"type":"object","name":"Title","id":"p1045","attributes":{"text":"Atmospheric CO\u2082 concentrations","text_font_size":"14pt"}}],"below":[{"type":"object","name":"LinearAxis","id":"p1021","attributes":{"ticker":{"type":"object","name":"BasicTicker","id":"p1022","attributes":{"mantissas":[1,2,5]}},"formatter":{"type":"object","name":"BasicTickFormatter","id":"p1023"},"axis_label":"Date","major_label_policy":{"type":"object","name":"AllLabels","id":"p1024"}}}],"center":[{"type":"object","name":"Grid","id":"p1025","attributes":{"axis":{"id":"p1021"}}},{"type":"object","name":"Grid","id":"p1030","attributes":{"dimension":1,"axis":{"id":"p1026"}}},{"type":"object","name":"Legend","id":"p1055","attributes":{"location":"top_left","items":[{"type":"object","name":"LegendItem","id":"p1056","attributes":{"label":{"type":"value","value":"All data"},"renderers":[{"id":"p1052"}]}}]}}]}}]}};
+  const render_items = [{"docid":"58d4430f-f32a-4c5a-bb17-23999cc350cd","roots":{"p1010":"a9d2104b-97bf-437c-be94-6d8b56a04696"},"root_ids":["p1010"]}];
+  void root.Bokeh.embed.embed_items_notebook(docs_json, render_items);
+  }
+  if (root.Bokeh !== undefined) {
+    embed_document(root);
+  } else {
+    let attempts = 0;
+    const timer = setInterval(function(root) {
+      if (root.Bokeh !== undefined) {
+        clearInterval(timer);
+        embed_document(root);
+      } else {
+        attempts++;
+        if (attempts > 100) {
+          clearInterval(timer);
+          console.log("Bokeh: ERROR: Unable to run BokehJS code because BokehJS library is missing");
+        }
+      }
+    }, 10, root)
+  }
+})(window);
+     </script>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [4]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Split the data into observed and to predict</span>
+<span class="n">date_split_predict</span> <span class="o">=</span> <span class="mi">2010</span>
+<span class="n">df_observed</span> <span class="o">=</span> <span class="n">co2_df</span><span class="p">[</span><span class="n">co2_df</span><span class="o">.</span><span class="n">Date</span> <span class="o">&lt;</span> <span class="n">date_split_predict</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df_observed</span><span class="p">)</span><span class="si">}</span><span class="s2"> measurements in the observed set"</span><span class="p">)</span>
+<span class="n">df_predict</span> <span class="o">=</span> <span class="n">co2_df</span><span class="p">[</span><span class="n">co2_df</span><span class="o">.</span><span class="n">Date</span> <span class="o">&gt;=</span> <span class="n">date_split_predict</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df_predict</span><span class="p">)</span><span class="si">}</span><span class="s2"> measurements in the test set"</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>617 measurements in the observed set
+133 measurements in the test set
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Gaussian-process-model">
+    Gaussian process model
+    <a class="anchor-link" href="#Gaussian-process-model">
+     <i class="fa-solid fa-sm fa-link">
+     </i>
+    </a>
+   </h2>
+   <p>
+    We're going to use a Gaussian process model to make posterior predictions of the atmospheric CO₂ concentrations for 2010 and after based on the observed data from before 2010.
+   </p>
+   <p>
+    A Gaussian process is uniquely defined by its mean function $m(x)$ and covariance function $k(x,x')$:
+   </p>
+   <p>
+    $$f(x) \sim \mathcal{GP}(m(x),k(x,x'))$$
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Mean-function">
+    Mean function
+    <a class="anchor-link" href="#Mean-function">
+     <i class="fa-solid fa-sm fa-link">
+     </i>
+    </a>
+   </h3>
+   <p>
+    Since most interesting effects will be modelled by the kernel function we will keep the mean function simple. In this example the mean function is going to be modelled as a function that always returns the mean of the observations.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [5]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define mean function which is the mean of observations</span>
+<span class="n">observations_mean</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">df_observed</span><span class="o">.</span><span class="n">CO2</span><span class="o">.</span><span class="n">values</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">mean_fn</span><span class="p">(</span><span class="n">index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Use the empirical CO2 mean as the GP prior mean."""</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">index_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],),</span> <span class="n">fill_value</span><span class="o">=</span><span class="n">observations_mean</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span>
+    <span class="p">)</span>
+
+
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Kernel-function">
+    Kernel function
+    <a class="anchor-link" href="#Kernel-function">
+     <i class="fa-solid fa-sm fa-link">
+     </i>
+    </a>
+   </h3>
+   <p>
+    To model the different characteristics of our dataset we will create a covariance (kernel) function by combining a few small JAX kernel functions. The different data characteristics will be modelled as:
+   </p>
+   <ul>
+    <li>
+     Long term smooth change in CO₂ levels over time modelled by an exponentiated quadratic kernel defined in the code below as
+     <code>
+      smooth_kernel
+     </code>
+     .
+    </li>
+    <li>
+     Seasonality based on a local periodic kernel, which consists of a periodic kernel multiplied with an exponentiated quadratic to make the seasonality decay as it gets farther from the observations. This seasonal periodic kernel is defined in the code below as
+     <code>
+      local_periodic_kernel
+     </code>
+     .
+    </li>
+    <li>
+     Short to medium term irregularities modelled by a rational quadratic kernel, which is defined in the code below as
+     <code>
+      irregular_kernel
+     </code>
+     .
+    </li>
+    <li>
+     Observational noise which will be modelled directly by adding
+     <code>
+      observation_noise_variance
+     </code>
+     to the kernel matrix diagonal.
+    </li>
+   </ul>
+   <p>
+    These different kernels will be summed into one single kernel function $k_{\theta}(x_a, x_b)$ that will allow for all these effects to occur together. This kernel is defined as
+    <code>
+     kernel
+    </code>
+    in the code below. Each of the kernels has hyperparameters $\theta$ that can be tuned, they will be defined as unconstrained log-parameters and transformed to positive values before use.
+    <a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}">
+     This post
+    </a>
+    provides more insight on the kernels used here and the effect of their hyperparameters.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [6]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define the parameters for the kernel function we're fitting</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">KernelParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Named GP hyperparameters that remain a JAX pytree."""</span>
+
+    <span class="n">smooth_amplitude</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">smooth_length_scale</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">periodic_amplitude</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">periodic_length_scale</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">periodic_period</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">periodic_local_length_scale</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">irregular_amplitude</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">irregular_length_scale</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">irregular_scale_mixture</span><span class="p">:</span> <span class="n">Array</span>
+    <span class="n">observation_noise_variance</span><span class="p">:</span> <span class="n">Array</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [7]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define the kernel with trainable parameters.</span>
+<span class="c1"># We optimize unconstrained log-parameters and exponentiate them so</span>
+<span class="c1"># kernel hyperparameters stay positive.</span>
+
+<span class="c1"># Use float64 to reduce numerical issues when computing the</span>
+<span class="c1"># Cholesky decomposition of the kernel matrix.</span>
+<span class="n">JITTER</span> <span class="o">=</span> <span class="mf">1e-6</span>
+<span class="n">TINY</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">tiny</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">log_param</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Initialize a positive hyperparameter in unconstrained log space."""</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
+
+
+<span class="c1"># Initial unconstrained values</span>
+<span class="n">params</span> <span class="o">=</span> <span class="n">KernelParams</span><span class="p">(</span>
+    <span class="n">smooth_amplitude</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">10.0</span><span class="p">),</span>
+    <span class="n">smooth_length_scale</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">10.0</span><span class="p">),</span>
+    <span class="n">periodic_amplitude</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">5.0</span><span class="p">),</span>
+    <span class="n">periodic_length_scale</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">periodic_period</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">periodic_local_length_scale</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">irregular_amplitude</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">irregular_length_scale</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">irregular_scale_mixture</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+    <span class="n">observation_noise_variance</span><span class="o">=</span><span class="n">log_param</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Map unconstrained optimizer values to positive hyperparameters."""</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">raw_value</span><span class="p">)</span> <span class="o">+</span> <span class="n">TINY</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">transform_params</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Convert learned log-parameters into valid kernel hyperparameters."""</span>
+    <span class="k">return</span> <span class="n">KernelParams</span><span class="p">(</span>
+        <span class="n">smooth_amplitude</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">smooth_amplitude</span><span class="p">),</span>
+        <span class="n">smooth_length_scale</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">smooth_length_scale</span><span class="p">),</span>
+        <span class="n">periodic_amplitude</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">periodic_amplitude</span><span class="p">),</span>
+        <span class="n">periodic_length_scale</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">periodic_length_scale</span><span class="p">),</span>
+        <span class="n">periodic_period</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">periodic_period</span><span class="p">),</span>
+        <span class="n">periodic_local_length_scale</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span>
+            <span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">periodic_local_length_scale</span>
+        <span class="p">),</span>
+        <span class="n">irregular_amplitude</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">irregular_amplitude</span><span class="p">),</span>
+        <span class="n">irregular_length_scale</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">irregular_length_scale</span><span class="p">),</span>
+        <span class="n">irregular_scale_mixture</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span><span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">irregular_scale_mixture</span><span class="p">),</span>
+        <span class="n">observation_noise_variance</span><span class="o">=</span><span class="n">positive</span><span class="p">(</span>
+            <span class="n">raw_value</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">observation_noise_variance</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [8]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define kernel functions</span>
+
+<span class="c1"># The inputs in this post are one-dimensional dates. Keeping them as</span>
+<span class="c1"># explicit column vectors makes the pairwise covariance shapes visible.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">as_column</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Represent one-dimensional inputs as column vectors."""</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">squared_distance</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compute pairwise squared distances for stationary kernels."""</span>
+    <span class="n">xa</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xa</span><span class="p">)</span>
+    <span class="n">xb</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xb</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">xa</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">xb</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">exponentiated_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">amplitude</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Model long-term smooth variation with an RBF covariance."""</span>
+    <span class="k">return</span> <span class="n">amplitude</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span>
+        <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">squared_distance</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">)</span> <span class="o">/</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">scale_mixture</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Model variation across several length scales."""</span>
+    <span class="k">return</span> <span class="n">amplitude</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="p">(</span>
+        <span class="mf">1.0</span> <span class="o">+</span> <span class="n">squared_distance</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">scale_mixture</span> <span class="o">*</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+    <span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="n">scale_mixture</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">periodic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">period</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Model repeating structure with a periodic covariance."""</span>
+    <span class="n">xa</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xa</span><span class="p">)</span>
+    <span class="n">xb</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xb</span><span class="p">)</span>
+    <span class="n">distance</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">xa</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">xb</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+    <span class="n">sine_squared</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">distance</span> <span class="o">/</span> <span class="n">period</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">amplitude</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">sine_squared</span> <span class="o">/</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">periodic_length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">period</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">local_length_scale</span><span class="p">:</span> <span class="n">Scalar</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Model periodic structure that fades with distance."""</span>
+    <span class="k">return</span> <span class="n">periodic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+        <span class="n">amplitude</span><span class="o">=</span><span class="n">amplitude</span><span class="p">,</span>
+        <span class="n">length_scale</span><span class="o">=</span><span class="n">periodic_length_scale</span><span class="p">,</span>
+        <span class="n">period</span><span class="o">=</span><span class="n">period</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">*</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="n">local_length_scale</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">smooth_kernel</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">positive_params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Extract the long-term smooth component of the CO2 model."""</span>
+    <span class="k">return</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+        <span class="n">amplitude</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">smooth_amplitude</span><span class="p">,</span>
+        <span class="n">length_scale</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">smooth_length_scale</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">irregular_kernel</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">positive_params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Extract the medium-scale irregular component of the CO2 model."""</span>
+    <span class="k">return</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+        <span class="n">amplitude</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">irregular_amplitude</span><span class="p">,</span>
+        <span class="n">length_scale</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">irregular_length_scale</span><span class="p">,</span>
+        <span class="n">scale_mixture</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">irregular_scale_mixture</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [9]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Define the combined kernel we're going to be fitting</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">combined_kernel</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">positive_params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Combine smooth, seasonal, and irregular CO2 covariance components."""</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">smooth_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span> <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">)</span>
+        <span class="o">+</span> <span class="n">local_periodic_kernel</span><span class="p">(</span>
+            <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+            <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+            <span class="n">amplitude</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">periodic_amplitude</span><span class="p">,</span>
+            <span class="n">periodic_length_scale</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">periodic_length_scale</span><span class="p">,</span>
+            <span class="n">period</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">periodic_period</span><span class="p">,</span>
+            <span class="n">local_length_scale</span><span class="o">=</span><span class="n">positive_params</span><span class="o">.</span><span class="n">periodic_local_length_scale</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="o">+</span> <span class="n">irregular_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span> <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">)</span>
+    <span class="p">)</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h3 id="Tuning-the-hyperparameters">
+    Tuning the hyperparameters
+    <a class="anchor-link" href="#Tuning-the-hyperparameters">
+     <i class="fa-solid fa-sm fa-link">
+     </i>
+    </a>
+   </h3>
+   <p>
+    We can tune the hyperparameters $\theta$ of our Gaussian process model based on the data. This post uses JAX to fit the parameters by maximizing the marginal likelihood  $p(\mathbf{y} \mid X, \theta)$ of the Gaussian process distribution based on the observed data $(X, \mathbf{y})$.
+   </p>
+   <p>
+    $$\hat{\theta}  = \underset{\theta}{\text{argmax}} \left( p(\mathbf{y} \mid X, \theta) \right)$$
+   </p>
+   <p>
+    The marginal likelihood of the Gaussian process is the likelihood of a
+    <a href="{% post_url /blog/misc/2018-09-28-multivariate-normal-primer %}">
+     Gaussian distribution
+    </a>
+    which is defined as:
+   </p>
+   <p>
+    $$p(\mathbf{y} \mid \mu, \Sigma) = \frac{1}{\sqrt{(2\pi)^d \lvert\Sigma\rvert}} \exp{ \left( -\frac{1}{2}(\mathbf{y} - \mu)^{\top} \Sigma^{-1} (\mathbf{y} - \mu) \right)}$$
+   </p>
+   <p>
+    The mean is calculated from the parameterized mean function using the observed data $X$ as input: $\mu_{\theta} = m_{\theta}(X)$. For the observed targets, the covariance also includes observation noise on the diagonal: $\Sigma_{\theta} = k_{\theta}(X, X) + \sigma_n^2 I$. We can then write the marginal likelihood as:
+   </p>
+   <p>
+    $$
+p(\mathbf{y} \mid X, \theta) =
+\frac{1}{\sqrt{(2\pi)^d \lvert \Sigma_{\theta} \rvert}} \exp{ \left( -\frac{1}{2}(\mathbf{y} - \mu_{\theta})^\top \Sigma_{\theta}^{-1} (\mathbf{y} - \mu_{\theta}) \right)}$$
+   </p>
+   <p>
+    With $d$ the dimensionality of the marginal and $\lvert \Sigma_{\theta} \rvert$ the determinant of the observed-data covariance matrix. We can get rid of the exponent by taking the log and maximizing the log marginal likelihood:
+   </p>
+   <p>
+    $$ \log{p(\mathbf{y} \mid X, \theta)} =
+-\frac{1}{2}(\mathbf{y} - \mu_{\theta})^\top \Sigma_{\theta}^{-1} (\mathbf{y} - \mu_{\theta}) - \frac{1}{2} \log{\lvert \Sigma_{\theta} \rvert} - \frac{d}{2} \log{2 \pi}$$
+   </p>
+   <p>
+    The first term ($-0.5 (\mathbf{y} - \mu_{\theta})^\top \Sigma_{\theta}^{-1} (\mathbf{y} - \mu_{\theta})$) is the data-fit while the rest ($-0.5(\log{\lvert \Sigma_{\theta} \rvert} + d\log{2 \pi})$) is a complexity penalty, also known as
+    <a href="https://en.wikipedia.org/wiki/Differential_entropy">
+     differential entropy
+    </a>
+    <a href="#Sidenotes">
+     ⁽¹⁾
+    </a>
+    .
+   </p>
+   <p>
+    The optimal parameters $\hat{\theta}$ can then be found by minimizing the negative of the log marginal likelihood:
+   </p>
+   <p>
+    $$
+\hat{\theta}  = \underset{\theta}{\text{argmax}} \left( p(\mathbf{y} \mid X, \theta) \right) = \underset{\theta}{\text{argmin}} { \;-\log{ p(\mathbf{y} \mid X, \theta)}}$$
+   </p>
+   <p>
+    Since in this case the log marginal likelihood is differentiable with respect to the kernel hyperparameters, we can use a
+    <a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">
+     gradient-based approach
+    </a>
+    to minimize the negative log marginal likelihood (NLL). In this post we will use JAX automatic differentiation and Optax to train the hyperparameters on the full observed dataset.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [10]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Convert observed and prediction data to JAX arrays</span>
+<span class="n">X_observed</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">df_observed</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="n">y_observed</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">df_observed</span><span class="o">.</span><span class="n">CO2</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="n">X_predict</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">df_predict</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    We will implement the Gaussian process marginal likelihood directly from the Gaussian distribution formula above.
+    <a href="https://docs.jax.dev/en/latest/_autosummary/jax.value_and_grad.html">
+     <code>
+      jax.value_and_grad
+     </code>
+    </a>
+    evaluates the negative marginal log likelihood and its gradient, while
+    <a href="https://optax.readthedocs.io/">
+     <code>
+      optax.adam
+     </code>
+    </a>
+    is used to update the unconstrained log-parameters.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [11]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Implement the Gaussian process marginal likelihood</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">solve_cholesky</span><span class="p">(</span><span class="n">cholesky</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">rhs</span><span class="p">:</span> <span class="n">Array</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Solve GP linear systems stably through a Cholesky factor."""</span>
+    <span class="k">return</span> <span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve_triangular</span><span class="p">(</span>
+        <span class="n">a</span><span class="o">=</span><span class="n">cholesky</span><span class="o">.</span><span class="n">T</span><span class="p">,</span>
+        <span class="n">b</span><span class="o">=</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve_triangular</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">cholesky</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">rhs</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="n">lower</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gp_negative_log_marginal_likelihood</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">,</span> <span class="n">index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span> <span class="n">observations</span><span class="p">:</span> <span class="n">Array</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Score how well hyperparameters explain the observed CO2 data."""</span>
+    <span class="c1"># Convert unconstrained optimizer values to valid positive hyperparameters.</span>
+    <span class="n">positive_params</span> <span class="o">=</span> <span class="n">transform_params</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
+    <span class="c1"># Build the prior covariance over observations.</span>
+    <span class="n">covariance</span> <span class="o">=</span> <span class="n">combined_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">index_points</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">index_points</span><span class="p">,</span> <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span>
+    <span class="p">)</span>
+    <span class="c1"># Add observation noise and jitter for a stable Cholesky decomposition.</span>
+    <span class="n">covariance</span> <span class="o">=</span> <span class="n">covariance</span> <span class="o">+</span> <span class="p">(</span>
+        <span class="n">positive_params</span><span class="o">.</span><span class="n">observation_noise_variance</span> <span class="o">+</span> <span class="n">JITTER</span>
+    <span class="p">)</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">index_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="c1"># Center observations around the prior mean before evaluating the likelihood.</span>
+    <span class="n">centered_observations</span> <span class="o">=</span> <span class="n">observations</span> <span class="o">-</span> <span class="n">mean_fn</span><span class="p">(</span><span class="n">index_points</span><span class="o">=</span><span class="n">index_points</span><span class="p">)</span>
+
+    <span class="c1"># Factor the covariance once and reuse it for solves and the log determinant.</span>
+    <span class="n">cholesky</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cholesky</span><span class="p">(</span><span class="n">covariance</span><span class="p">)</span>
+    <span class="c1"># Compute K^-1 y without forming the inverse explicitly.</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">solve_cholesky</span><span class="p">(</span><span class="n">cholesky</span><span class="o">=</span><span class="n">cholesky</span><span class="p">,</span> <span class="n">rhs</span><span class="o">=</span><span class="n">centered_observations</span><span class="p">)</span>
+
+    <span class="c1"># Combine data fit, model complexity, and Gaussian normalization terms.</span>
+    <span class="n">data_fit</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">centered_observations</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+    <span class="n">complexity_penalty</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">cholesky</span><span class="p">)))</span>
+    <span class="n">constant</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">index_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">data_fit</span> <span class="o">+</span> <span class="n">complexity_penalty</span> <span class="o">+</span> <span class="n">constant</span>
+
+
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [12]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Fit hyperparameters</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.01</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">optax</span><span class="o">.</span><span class="n">adam</span><span class="p">(</span><span class="n">learning_rate</span><span class="o">=</span><span class="n">learning_rate</span><span class="p">)</span>
+<span class="n">opt_state</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+<span class="c1"># Define loss and gradients</span>
+<span class="n">loss_and_grad</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">value_and_grad</span><span class="p">(</span><span class="n">gp_negative_log_marginal_likelihood</span><span class="p">)</span>
+
+
+<span class="nd">@jax</span><span class="o">.</span><span class="n">jit</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">optimization_step</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">,</span>
+    <span class="n">opt_state</span><span class="p">:</span> <span class="n">optax</span><span class="o">.</span><span class="n">OptState</span><span class="p">,</span>
+    <span class="n">index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">KernelParams</span><span class="p">,</span> <span class="n">optax</span><span class="o">.</span><span class="n">OptState</span><span class="p">,</span> <span class="n">Array</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Take one step toward lower full-data GP marginal likelihood."""</span>
+    <span class="n">loss</span><span class="p">,</span> <span class="n">grads</span> <span class="o">=</span> <span class="n">loss_and_grad</span><span class="p">(</span>
+        <span class="n">params</span><span class="p">,</span> <span class="n">index_points</span><span class="o">=</span><span class="n">index_points</span><span class="p">,</span> <span class="n">observations</span><span class="o">=</span><span class="n">observations</span>
+    <span class="p">)</span>
+    <span class="n">updates</span><span class="p">,</span> <span class="n">opt_state</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">grads</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">KernelParams</span><span class="p">,</span> <span class="n">optax</span><span class="o">.</span><span class="n">apply_updates</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">updates</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">params</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">loss</span>
+
+
+<span class="c1"># Training loop</span>
+<span class="n">full_nlls</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Full data NLL for plotting</span>
+<span class="n">nb_iterations</span> <span class="o">=</span> <span class="mi">2500</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">nb_iterations</span><span class="p">)):</span>
+    <span class="n">params</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">loss</span> <span class="o">=</span> <span class="n">optimization_step</span><span class="p">(</span>
+        <span class="n">params</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">index_points</span><span class="o">=</span><span class="n">X_observed</span><span class="p">,</span> <span class="n">observations</span><span class="o">=</span><span class="n">y_observed</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">10</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">i</span> <span class="o">==</span> <span class="n">nb_iterations</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">full_nlls</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">i</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">loss</span><span class="p">)))</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_text output_subarea">
+     <pre>  0%|          | 0/2500 [00:00&lt;?, ?it/s]</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [13]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Plot NLL over iterations</span>
+<span class="n">nll_source</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">"iteration"</span><span class="p">:</span> <span class="p">[</span><span class="n">iteration</span> <span class="k">for</span> <span class="n">iteration</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">full_nlls</span><span class="p">],</span>
+        <span class="s2">"nll"</span><span class="p">:</span> <span class="p">[</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">full_nlls</span><span class="p">],</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="n">nll_values</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">full_nlls</span><span class="p">]</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">350</span><span class="p">,</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="n">nb_iterations</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">nll_values</span><span class="p">)</span> <span class="o">-</span> <span class="mi">20</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">nll_values</span><span class="p">)</span> <span class="o">+</span> <span class="mi">20</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span>
+        <span class="n">text</span><span class="o">=</span><span class="s2">"Negative Log-Likelihood (NLL) during training"</span><span class="p">,</span> <span class="n">text_font_size</span><span class="o">=</span><span class="s2">"14pt"</span>
+    <span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"iteration"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"NLL all observed data"</span>
+<span class="n">nll_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">line</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"iteration"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"nll"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">nll_source</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"All observed data"</span><span class="p">,</span>
+    <span class="n">line_width</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"midnightblue"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_tools</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">nll_renderer</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[(</span><span class="s2">"Iteration"</span><span class="p">,</span> <span class="s2">"@iteration"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"NLL"</span><span class="p">,</span> <span class="s2">"@nll</span><span class="si">{0.00}</span><span class="s2">"</span><span class="p">)],</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">"vline"</span><span class="p">,</span>
+        <span class="n">line_policy</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="o">.</span><span class="n">location</span> <span class="o">=</span> <span class="s2">"top_right"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">toolbar</span><span class="o">.</span><span class="n">autohide</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_html rendered_html output_subarea">
+     <div data-root-id="p1067" id="a8829749-f3cf-4a69-aa8a-f1dd9492d20b" style="display: contents;">
+     </div>
+    </div>
+   </div>
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_javascript" id="4e54c7d3-a31a-4d62-8ed6-b72984490ae6">
+     <script type="text/javascript">
+      var element = $('#4e54c7d3-a31a-4d62-8ed6-b72984490ae6');
+(function(root) {
+  function embed_document(root) {
+  const docs_json = {"999c98dc-d572-4a3c-b1cc-6ece4eaf9acd":{"version":"3.9.0","title":"Bokeh Application","config":{"type":"object","name":"DocumentConfig","id":"p1111","attributes":{"notifications":{"type":"object","name":"Notifications","id":"p1112"}}},"roots":[{"type":"object","name":"Figure","id":"p1067","attributes":{"height":350,"x_range":{"type":"object","name":"Range1d","id":"p1065","attributes":{"end":2500}},"y_range":{"type":"object","name":"Range1d","id":"p1066","attributes":{"start":120.8879171392407,"end":1109.5016378818223}},"x_scale":{"type":"object","name":"LinearScale","id":"p1076"},"y_scale":{"type":"object","name":"LinearScale","id":"p1077"},"title":{"type":"object","name":"Title","id":"p1074"},"renderers":[{"type":"object","name":"GlyphRenderer","id":"p1105","attributes":{"data_source":{"type":"object","name":"ColumnDataSource","id":"p1062","attributes":{"selected":{"type":"object","name":"Selection","id":"p1063","attributes":{"indices":[],"line_indices":[]}},"selection_policy":{"type":"object","name":"UnionRenderers","id":"p1064"},"data":{"type":"map","entries":[["iteration",[0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440,450,460,470,480,490,500,510,520,530,540,550,560,570,580,590,600,610,620,630,640,650,660,670,680,690,700,710,720,730,740,750,760,770,780,790,800,810,820,830,840,850,860,870,880,890,900,910,920,930,940,950,960,970,980,990,1000,1010,1020,1030,1040,1050,1060,1070,1080,1090,1100,1110,1120,1130,1140,1150,1160,1170,1180,1190,1200,1210,1220,1230,1240,1250,1260,1270,1280,1290,1300,1310,1320,1330,1340,1350,1360,1370,1380,1390,1400,1410,1420,1430,1440,1450,1460,1470,1480,1490,1500,1510,1520,1530,1540,1550,1560,1570,1580,1590,1600,1610,1620,1630,1640,1650,1660,1670,1680,1690,1700,1710,1720,1730,1740,1750,1760,1770,1780,1790,1800,1810,1820,1830,1840,1850,1860,1870,1880,1890,1900,1910,1920,1930,1940,1950,1960,1970,1980,1990,2000,2010,2020,2030,2040,2050,2060,2070,2080,2090,2100,2110,2120,2130,2140,2150,2160,2170,2180,2190,2200,2210,2220,2230,2240,2250,2260,2270,2280,2290,2300,2310,2320,2330,2340,2350,2360,2370,2380,2390,2400,2410,2420,2430,2440,2450,2460,2470,2480,2490,2499]],["nll",[1089.5016378818223,996.8679006271132,913.7411457095307,842.7664515192055,782.6016914487988,731.8893667536045,688.659151887117,651.4185270380888,619.4586352258498,590.9569650514231,561.7314648021955,531.7465714700293,503.45909844700054,475.5461040948271,448.83408716349396,423.232497690608,398.9619540046991,376.1230321544301,354.84390680578576,335.18302298903996,317.08975895065447,300.4874652004735,285.1236352694793,270.8546052668795,257.9035734245225,246.29913307832646,236.18013698283664,227.59689646062043,220.48696047624514,214.55094629764238,209.67904165882385,205.63946411647885,202.20197569001812,199.4908755880914,196.83999557707926,194.14476827292708,191.6929316686975,189.2367372135538,186.7596486234866,184.4025513584271,182.15667641972277,180.02224667761828,178.04613507901246,176.97887365432268,174.57884273930023,172.92653493789066,171.51709374900054,170.18017735753568,168.96959247182463,167.87253125298923,166.8469771471955,165.8946315069283,165.0039698358073,164.1635130425763,163.3679260773191,166.03019473181195,166.0025336874611,163.78512711093754,160.97583038790458,160.5649165393848,159.6726575193905,158.95898353173226,158.26611304116,157.63328419713878,157.0090420567721,156.3988736813131,155.7988948897558,155.2120847358604,154.63889038664348,154.0804445676825,153.53789533895662,153.0128323840696,154.32506515993043,152.56532716695023,152.42034448509986,151.21255263302572,150.7787270485719,150.42017630916683,149.99376650664516,149.67783281180635,151.35070707732723,148.97591648170658,148.84279440411046,148.48266047254077,148.14914434101195,148.83145797722887,148.67860611924095,147.30892872746364,147.32635584997257,146.93366872675358,146.72836917910342,149.1855274005448,146.9866423504679,146.28449351262077,146.00166932734743,145.7217299126437,145.5042582792264,145.28297176415936,148.19072088948195,161.89660470117474,202.17698618107232,195.89680719341516,193.11014096909724,180.02977204073107,170.02575546774386,162.79829615775952,157.63867192823875,154.7303058897756,153.18362701385513,152.35810820618605,151.85159111686596,151.44557391153103,151.07450036674663,150.72270921369864,150.38829446248712,150.07115691075893,149.77044854211937,149.4850916811539,149.2139894728727,148.95609079738318,148.71039723087347,148.4759517568193,148.25184368729333,148.03721217237637,147.83124971414446,147.63320398040958,147.4423777922202,147.25812817149944,147.0798646180828,146.90704686252093,146.73918251948277,146.57582431161904,146.4165677666236,146.26104851114752,146.1089400384115,145.9599514642718,145.81382545617328,145.67033650427868,145.52928916973644,145.39051648520513,145.25387864483753,145.11926156697098,144.98657571153007,144.85575475945222,144.72675440949098,144.5995511030925,144.47414064058057,144.35053680052147,144.2287698084163,144.10888469298692,143.9909394648829,143.87500325722186,143.76115443344708,143.64947822797507,143.54006486904376,143.43300705467254,143.32839805794754,143.22632934932358,143.12688855759592,143.03015751008644,142.93621054610344,142.84511279321765,142.75691905280172,142.67167264403872,142.58940464266425,142.5101334761727,142.43386465930587,142.36059104690338,142.29029302387477,142.2229391706589,142.15848697355847,142.09688381032578,142.03806786111602,141.98196933699109,141.9285115271557,141.87761202953124,141.82918386927787,141.78313655672082,141.73937720645455,141.69781138718696,141.65834412514556,141.62088058923848,141.5853268081916,141.55159030136502,141.5195805503642,141.48920939154283,141.46039139309664,141.43304411738245,141.4070883070795,141.38244792326083,141.35905038573742,141.33682649007943,141.31571053225156,141.29564000486744,141.27655593072512,141.2584024182433,141.24112671564404,141.2246791713673,141.20901292387248,141.19408397670202,141.1798509462085,141.16627487444333,141.15331929404886,141.14094990601149,141.12913452936783,141.11784302322468,141.10704705920426,141.0967200660749,141.08683714583412,141.0773749575634,141.06831152331358,141.0596262768653,141.0512999227605,141.0433142627673,141.0356522986362,141.02829792683752,141.0212361685351,141.01445276353599,141.00793441503424,141.00166848932048,140.99564317338678,140.9898472960743,140.9842702904769,140.9789021918536,140.97373362809566,140.968755682356,140.9639599347327,140.95933844194678,140.9548836568747,140.95058843178862,140.9464459822011,140.94244987172448,140.93859399914703,140.93487256996093,140.93128002734397,140.9278111753867,140.9244609811422,140.92122468191184,140.91809777953085,140.9150758896501,140.9121549522667,140.90933095768747,140.9066001954448,140.90395907582302,140.90140412868936,140.89893208348172,140.89653981550754,140.8942242930944,140.89198261034994,140.88981204455496,140.8879171392407]]]}}},"view":{"type":"object","name":"CDSView","id":"p1106","attributes":{"filter":{"type":"object","name":"AllIndices","id":"p1107"}}},"glyph":{"type":"object","name":"Line","id":"p1102","attributes":{"x":{"type":"field","field":"iteration"},"y":{"type":"field","field":"nll"},"line_color":"midnightblue","line_width":2}},"nonselection_glyph":{"type":"object","name":"Line","id":"p1103","attributes":{"x":{"type":"field","field":"iteration"},"y":{"type":"field","field":"nll"},"line_color":"midnightblue","line_alpha":0.1,"line_width":2}},"muted_glyph":{"type":"object","name":"Line","id":"p1104","attributes":{"x":{"type":"field","field":"iteration"},"y":{"type":"field","field":"nll"},"line_color":"midnightblue","line_alpha":0.2,"line_width":2}}}}],"toolbar":{"type":"object","name":"Toolbar","id":"p1075","attributes":{"tools":[{"type":"object","name":"PanTool","id":"p1088"},{"type":"object","name":"WheelZoomTool","id":"p1089","attributes":{"renderers":"auto"}},{"type":"object","name":"BoxZoomTool","id":"p1090","attributes":{"overlay":{"type":"object","name":"BoxAnnotation","id":"p1091","attributes":{"syncable":false,"line_color":"black","line_alpha":1.0,"line_width":2,"line_dash":[4,4],"fill_color":"lightgrey","fill_alpha":0.5,"level":"overlay","visible":false,"left":{"type":"number","value":"nan"},"right":{"type":"number","value":"nan"},"top":{"type":"number","value":"nan"},"bottom":{"type":"number","value":"nan"},"left_units":"canvas","right_units":"canvas","top_units":"canvas","bottom_units":"canvas","handles":{"type":"object","name":"BoxInteractionHandles","id":"p1097","attributes":{"all":{"type":"object","name":"AreaVisuals","id":"p1096","attributes":{"fill_color":"white","hover_fill_color":"lightgray"}}}}}}}},{"type":"object","name":"SaveTool","id":"p1098"},{"type":"object","name":"ResetTool","id":"p1099"},{"type":"object","name":"HelpTool","id":"p1100"},{"type":"object","name":"HoverTool","id":"p1110","attributes":{"renderers":[{"id":"p1105"}],"tooltips":[["Iteration","@iteration"],["NLL","@nll{0.00}"]],"sort_by":null,"mode":"vline"}}],"autohide":true}},"left":[{"type":"object","name":"LinearAxis","id":"p1083","attributes":{"ticker":{"type":"object","name":"BasicTicker","id":"p1084","attributes":{"mantissas":[1,2,5]}},"formatter":{"type":"object","name":"BasicTickFormatter","id":"p1085"},"axis_label":"NLL all observed data","major_label_policy":{"type":"object","name":"AllLabels","id":"p1086"}}}],"above":[{"type":"object","name":"Title","id":"p1101","attributes":{"text":"Negative Log-Likelihood (NLL) during training","text_font_size":"14pt"}}],"below":[{"type":"object","name":"LinearAxis","id":"p1078","attributes":{"ticker":{"type":"object","name":"BasicTicker","id":"p1079","attributes":{"mantissas":[1,2,5]}},"formatter":{"type":"object","name":"BasicTickFormatter","id":"p1080"},"axis_label":"iteration","major_label_policy":{"type":"object","name":"AllLabels","id":"p1081"}}}],"center":[{"type":"object","name":"Grid","id":"p1082","attributes":{"axis":{"id":"p1078"}}},{"type":"object","name":"Grid","id":"p1087","attributes":{"dimension":1,"axis":{"id":"p1083"}}},{"type":"object","name":"Legend","id":"p1108","attributes":{"items":[{"type":"object","name":"LegendItem","id":"p1109","attributes":{"label":{"type":"value","value":"All observed data"},"renderers":[{"id":"p1105"}]}}]}}]}}]}};
+  const render_items = [{"docid":"999c98dc-d572-4a3c-b1cc-6ece4eaf9acd","roots":{"p1067":"a8829749-f3cf-4a69-aa8a-f1dd9492d20b"},"root_ids":["p1067"]}];
+  void root.Bokeh.embed.embed_items_notebook(docs_json, render_items);
+  }
+  if (root.Bokeh !== undefined) {
+    embed_document(root);
+  } else {
+    let attempts = 0;
+    const timer = setInterval(function(root) {
+      if (root.Bokeh !== undefined) {
+        clearInterval(timer);
+        embed_document(root);
+      } else {
+        attempts++;
+        if (attempts > 100) {
+          clearInterval(timer);
+          console.log("Bokeh: ERROR: Unable to run BokehJS code because BokehJS library is missing");
+        }
+      }
+    }, 10, root)
+  }
+})(window);
+     </script>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    Despite the complexity term in the log marginal likelihood it is still possible to overfit to the data. While we didn't prevent further overfitting in this post, you could prevent overfitting by adding a regularization term on the hyperparameters
+    <a href="#Sidenotes">
+     ⁽²⁾
+    </a>
+    , or split the observations in training an validation sets and select the best fit on your validation data from models trained on the training data.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [14]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Show values of parameters found</span>
+<span class="n">fitted_params</span> <span class="o">=</span> <span class="n">transform_params</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="p">[(</span><span class="n">name</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">fitted_params</span><span class="p">,</span> <span class="n">name</span><span class="p">)))</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">KernelParams</span><span class="o">.</span><span class="n">_fields</span><span class="p">]</span>
+<span class="n">df_variables</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">Index</span><span class="p">([</span><span class="s2">"Hyperparameters"</span><span class="p">,</span> <span class="s2">"Value"</span><span class="p">]))</span>
+<span class="n">display</span><span class="p">(</span><span class="n">HTML</span><span class="p">(</span><span class="n">df_variables</span><span class="o">.</span><span class="n">to_html</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">float_format</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">x</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)))</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_html rendered_html output_subarea contains-table">
+     <table border="1" class="dataframe table table-sm table-hover w-auto text-right">
+      <thead>
+       <tr style="text-align: right;">
+        <th>
+         Hyperparameters
+        </th>
+        <th>
+         Value
+        </th>
+       </tr>
+      </thead>
+      <tbody>
+       <tr>
+        <td>
+         smooth_amplitude
+        </td>
+        <td>
+         124.3517
+        </td>
+       </tr>
+       <tr>
+        <td>
+         smooth_length_scale
+        </td>
+        <td>
+         99.9925
+        </td>
+       </tr>
+       <tr>
+        <td>
+         periodic_amplitude
+        </td>
+        <td>
+         2.2775
+        </td>
+       </tr>
+       <tr>
+        <td>
+         periodic_length_scale
+        </td>
+        <td>
+         1.3713
+        </td>
+       </tr>
+       <tr>
+        <td>
+         periodic_period
+        </td>
+        <td>
+         0.9998
+        </td>
+       </tr>
+       <tr>
+        <td>
+         periodic_local_length_scale
+        </td>
+        <td>
+         99.0098
+        </td>
+       </tr>
+       <tr>
+        <td>
+         irregular_amplitude
+        </td>
+        <td>
+         2.3398
+        </td>
+       </tr>
+       <tr>
+        <td>
+         irregular_length_scale
+        </td>
+        <td>
+         1.6404
+        </td>
+       </tr>
+       <tr>
+        <td>
+         irregular_scale_mixture
+        </td>
+        <td>
+         0.0073
+        </td>
+       </tr>
+       <tr>
+        <td>
+         observation_noise_variance
+        </td>
+        <td>
+         0.0404
+        </td>
+       </tr>
+      </tbody>
+     </table>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    The fitted kernel and its components are illustrated in more detail in a
+    <a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}#Atmospheric-CO%E2%82%82-kernel">
+     follow-up post
+    </a>
+    .
+   </p>
+   <h3 id="Posterior-predictions">
+    Posterior predictions
+    <a class="anchor-link" href="#Posterior-predictions">
+     <i class="fa-solid fa-sm fa-link">
+     </i>
+    </a>
+   </h3>
+   <p>
+    With the fitted kernel we can use the Gaussian process conditioning equations directly to make posterior predictions on points after 2010.
+   </p>
+   <p>
+    The posterior predictions conditioned on the observed data before 2010 are plotted in the figure below together with their 95% prediction interval.
+   </p>
+   <p>
+    Notice that our model captures the different dataset characteristics such as the trend and seasonality quite well. The predictions start deviating the further away from the observed data the model was conditioned on, together with widening prediction interval.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [15]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Posterior predictions</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gp_posterior_predict</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">KernelParams</span><span class="p">,</span>
+    <span class="n">observation_index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+    <span class="n">prediction_index_points</span><span class="p">:</span> <span class="n">Array</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Array</span><span class="p">,</span> <span class="n">Array</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Predict fitted GP mean and uncertainty at new input locations."""</span>
+    <span class="c1"># Convert learned log-space parameters to positive kernel hyperparameters.</span>
+    <span class="n">positive_params</span> <span class="o">=</span> <span class="n">transform_params</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
+    <span class="c1"># Build the noisy covariance among observed points.</span>
+    <span class="n">observation_covariance</span> <span class="o">=</span> <span class="n">combined_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">observation_index_points</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">observation_index_points</span><span class="p">,</span>
+        <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">observation_covariance</span> <span class="o">=</span> <span class="n">observation_covariance</span> <span class="o">+</span> <span class="p">(</span>
+        <span class="n">positive_params</span><span class="o">.</span><span class="n">observation_noise_variance</span> <span class="o">+</span> <span class="n">JITTER</span>
+    <span class="p">)</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">observation_index_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="c1"># Build the cross-covariance between observations and predictions.</span>
+    <span class="n">cross_covariance</span> <span class="o">=</span> <span class="n">combined_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">observation_index_points</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">prediction_index_points</span><span class="p">,</span>
+        <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># Build the prior covariance among prediction points.</span>
+    <span class="n">prediction_covariance</span> <span class="o">=</span> <span class="n">combined_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">prediction_index_points</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">prediction_index_points</span><span class="p">,</span>
+        <span class="n">positive_params</span><span class="o">=</span><span class="n">positive_params</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Center observations around the prior mean before conditioning.</span>
+    <span class="n">centered_observations</span> <span class="o">=</span> <span class="n">observations</span> <span class="o">-</span> <span class="n">mean_fn</span><span class="p">(</span>
+        <span class="n">index_points</span><span class="o">=</span><span class="n">observation_index_points</span>
+    <span class="p">)</span>
+    <span class="c1"># Factor the observed covariance and solve K^-1 y stably.</span>
+    <span class="n">cholesky</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cholesky</span><span class="p">(</span><span class="n">observation_covariance</span><span class="p">)</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">solve_cholesky</span><span class="p">(</span><span class="n">cholesky</span><span class="o">=</span><span class="n">cholesky</span><span class="p">,</span> <span class="n">rhs</span><span class="o">=</span><span class="n">centered_observations</span><span class="p">)</span>
+    <span class="c1"># Add the conditional correction to the prior mean.</span>
+    <span class="n">posterior_mean</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">mean_fn</span><span class="p">(</span><span class="n">index_points</span><span class="o">=</span><span class="n">prediction_index_points</span><span class="p">)</span> <span class="o">+</span> <span class="n">cross_covariance</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">alpha</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Remove explained variance from the prediction prior covariance.</span>
+    <span class="n">v</span> <span class="o">=</span> <span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve_triangular</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">cholesky</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">cross_covariance</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">posterior_covariance</span> <span class="o">=</span> <span class="n">prediction_covariance</span> <span class="o">-</span> <span class="n">v</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">v</span>
+    <span class="c1"># Keep tiny numerical negatives from becoming invalid standard deviations.</span>
+    <span class="n">posterior_variance</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">posterior_covariance</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">posterior_std</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">posterior_variance</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">posterior_mean</span><span class="p">,</span> <span class="n">posterior_std</span>
+
+
+<span class="n">posterior_mean_predict</span><span class="p">,</span> <span class="n">posterior_std_predict</span> <span class="o">=</span> <span class="n">gp_posterior_predict</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">,</span>
+    <span class="n">observation_index_points</span><span class="o">=</span><span class="n">X_observed</span><span class="p">,</span>
+    <span class="n">observations</span><span class="o">=</span><span class="n">y_observed</span><span class="p">,</span>
+    <span class="n">prediction_index_points</span><span class="o">=</span><span class="n">X_predict</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [16]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Plot posterior predictions</span>
+
+<span class="c1"># Get posterior predictions</span>
+<span class="n">μ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">posterior_mean_predict</span><span class="p">)</span>
+<span class="n">σ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">posterior_std_predict</span><span class="p">)</span>
+<span class="n">prediction_source</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">"date"</span><span class="p">:</span> <span class="n">df_predict</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span>
+        <span class="s2">"mean"</span><span class="p">:</span> <span class="n">μ</span><span class="p">,</span>
+        <span class="s2">"lower"</span><span class="p">:</span> <span class="n">μ</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">σ</span><span class="p">,</span>
+        <span class="s2">"upper"</span><span class="p">:</span> <span class="n">μ</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">σ</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="n">reference_source</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">ColumnDataSource</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">co2_df</span><span class="o">.</span><span class="n">Date</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="s2">"co2"</span><span class="p">:</span> <span class="n">co2_df</span><span class="o">.</span><span class="n">CO2</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()}</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">400</span><span class="p">,</span>
+    <span class="n">x_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">2010</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mf">2021.3</span><span class="p">),</span>
+    <span class="n">y_range</span><span class="o">=</span><span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Range1d</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">384</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">418</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"Date"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">axis_label</span> <span class="o">=</span> <span class="s2">"CO₂ (ppm)"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span>
+        <span class="n">text</span><span class="o">=</span><span class="s2">"Posterior predictions conditioned on observations before 2010."</span><span class="p">,</span>
+        <span class="n">text_font_style</span><span class="o">=</span><span class="s2">"italic"</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_layout</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Title</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"Atmospheric CO₂ concentrations"</span><span class="p">,</span> <span class="n">text_font_size</span><span class="o">=</span><span class="s2">"14pt"</span><span class="p">),</span>
+    <span class="s2">"above"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">reference_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"co2"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">reference_source</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"True data (reference)"</span><span class="p">,</span>
+    <span class="n">size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">marker</span><span class="o">=</span><span class="s2">"circle"</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"midnightblue"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">mean_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">line</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="s2">"mean"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">prediction_source</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"μ (predictions)"</span><span class="p">,</span>
+    <span class="n">line_width</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">line_color</span><span class="o">=</span><span class="s2">"firebrick"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># Prediction interval</span>
+<span class="n">interval_renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">varea</span><span class="p">(</span>
+    <span class="n">x</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span>
+    <span class="n">y1</span><span class="o">=</span><span class="s2">"lower"</span><span class="p">,</span>
+    <span class="n">y2</span><span class="o">=</span><span class="s2">"upper"</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">prediction_source</span><span class="p">,</span>
+    <span class="n">color</span><span class="o">=</span><span class="s2">"firebrick"</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
+    <span class="n">legend_label</span><span class="o">=</span><span class="s2">"2σ"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">add_tools</span><span class="p">(</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">reference_renderer</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[(</span><span class="s2">"Date"</span><span class="p">,</span> <span class="s2">"@date</span><span class="si">{0.00}</span><span class="s2">"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"CO₂"</span><span class="p">,</span> <span class="s2">"@co2</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">)],</span>
+    <span class="p">),</span>
+    <span class="n">bokeh</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">HoverTool</span><span class="p">(</span>
+        <span class="n">renderers</span><span class="o">=</span><span class="p">[</span><span class="n">mean_renderer</span><span class="p">,</span> <span class="n">interval_renderer</span><span class="p">],</span>
+        <span class="n">tooltips</span><span class="o">=</span><span class="p">[</span>
+            <span class="p">(</span><span class="s2">"Date"</span><span class="p">,</span> <span class="s2">"@date</span><span class="si">{0.00}</span><span class="s2">"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"μ"</span><span class="p">,</span> <span class="s2">"@mean</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"lower 2σ"</span><span class="p">,</span> <span class="s2">"@lower</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"upper 2σ"</span><span class="p">,</span> <span class="s2">"@upper</span><span class="si">{0.00}</span><span class="s2"> ppm"</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">mode</span><span class="o">=</span><span class="s2">"vline"</span><span class="p">,</span>
+        <span class="n">line_policy</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="o">.</span><span class="n">location</span> <span class="o">=</span> <span class="s2">"top_left"</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">toolbar</span><span class="o">.</span><span class="n">autohide</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">bokeh</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_html rendered_html output_subarea">
+     <div data-root-id="p1121" id="c4b2d92e-d0f2-4a7d-9f35-686e9d27f6f6" style="display: contents;">
+     </div>
+    </div>
+   </div>
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_javascript" id="ec7807e6-85a6-40e4-9798-97eaf374b7bf">
+     <script type="text/javascript">
+      var element = $('#ec7807e6-85a6-40e4-9798-97eaf374b7bf');
+(function(root) {
+  function embed_document(root) {
+  const docs_json = {"1481a593-3277-481e-be57-bfd3dd545f4e":{"version":"3.9.0","title":"Bokeh Application","config":{"type":"object","name":"DocumentConfig","id":"p1181","attributes":{"notifications":{"type":"object","name":"Notifications","id":"p1182"}}},"roots":[{"type":"object","name":"Figure","id":"p1121","attributes":{"height":400,"x_range":{"type":"object","name":"Range1d","id":"p1119","attributes":{"start":2010,"end":2021.3}},"y_range":{"type":"object","name":"Range1d","id":"p1120","attributes":{"start":384,"end":418}},"x_scale":{"type":"object","name":"LinearScale","id":"p1130"},"y_scale":{"type":"object","name":"LinearScale","id":"p1131"},"title":{"type":"object","name":"Title","id":"p1128"},"renderers":[{"type":"object","name":"GlyphRenderer","id":"p1160","attributes":{"data_source":{"type":"object","name":"ColumnDataSource","id":"p1116","attributes":{"selected":{"type":"object","name":"Selection","id":"p1117","attributes":{"indices":[],"line_indices":[]}},"selection_policy":{"type":"object","name":"UnionRenderers","id":"p1118"},"data":{"type":"map","entries":[["date",{"type":"ndarray","array":{"type":"bytes","data":"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"},"shape":[750],"dtype":"float64","order":"little"}],["co2",{"type":"ndarray","array":{"type":"bytes","data":"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"},"shape":[750],"dtype":"float64","order":"little"}]]}}},"view":{"type":"object","name":"CDSView","id":"p1161","attributes":{"filter":{"type":"object","name":"AllIndices","id":"p1162"}}},"glyph":{"type":"object","name":"Scatter","id":"p1157","attributes":{"x":{"type":"field","field":"date"},"y":{"type":"field","field":"co2"},"size":{"type":"value","value":2},"line_color":{"type":"value","value":"midnightblue"},"fill_color":{"type":"value","value":"#1f77b4"}}},"nonselection_glyph":{"type":"object","name":"Scatter","id":"p1158","attributes":{"x":{"type":"field","field":"date"},"y":{"type":"field","field":"co2"},"size":{"type":"value","value":2},"line_color":{"type":"value","value":"midnightblue"},"line_alpha":{"type":"value","value":0.1},"fill_color":{"type":"value","value":"#1f77b4"},"fill_alpha":{"type":"value","value":0.1},"hatch_alpha":{"type":"value","value":0.1}}},"muted_glyph":{"type":"object","name":"Scatter","id":"p1159","attributes":{"x":{"type":"field","field":"date"},"y":{"type":"field","field":"co2"},"size":{"type":"value","value":2},"line_color":{"type":"value","value":"midnightblue"},"line_alpha":{"type":"value","value":0.2},"fill_color":{"type":"value","value":"#1f77b4"},"fill_alpha":{"type":"value","value":0.2},"hatch_alpha":{"type":"value","value":0.2}}}}},{"type":"object","name":"GlyphRenderer","id":"p1168","attributes":{"data_source":{"type":"object","name":"ColumnDataSource","id":"p1113","attributes":{"selected":{"type":"object","name":"Selection","id":"p1114","attributes":{"indices":[],"line_indices":[]}},"selection_policy":{"type":"object","name":"UnionRenderers","id":"p1115"},"data":{"type":"map","entries":[["date",{"type":"ndarray","array":{"type":"bytes","data":"H4sIAAEAAAAA/y3QP0jUcRyH8SFoCwIhJxvENKNoaQgi+C5Bkw4t0dbWH7P/V9mdd9ZZlmZmERTED6KlKQnKISgiqEFCjnOrlhocGxoiWnp6eE+v5cPDm09tdOuWHceqsvvbwMYpfPTm4cIq7t+59njweFWGVzZ/msDvh3uXO7j6+9CPbSeqMjN9pFvH0nP0Qxd3vXzyc+hkVTr9X/5M4tv3vYNdrP3vj6WP9tH+qfTRPtofTx/to/3T6aN9nB1b/zt8pirje1rLLfy8b6TTwaUN63Pbz1bl49dX7To+fzZSuviu0bd36FxVnh54/auB7U2jL9bQ+/NVWVxpHmyi9+j+C9mP7kf3X8x+dD+6v5b96H50/6XsR/ej/cvpo320fyV9tI/2J9JH+2j/avpoH+3X00f7aL+RPtpH+5Ppo32030wf7aP/b+X/6P/Rf07l/+g/0f9fy//R/6P31/N/9B7d385+dD+6fzr70f3o/hvZj+5H99/MfnQ/2p9JH+2j/Vvpo320fzt9tI/2Z9NH+2h/Ln20j/bvpI/20f58+mgf7d9NH+2j/1/I/9H/o/+8l/+j/0T/v5j/o/9H7+/n/+g9uv9BVf4B4KgRsSgEAAA="},"shape":[133],"dtype":"float64","order":"little"}],["mean",{"type":"ndarray","array":{"type":"bytes","data":"H4sIAAEAAAAA/xVSf1CTdRyObkCsDDxGnMOGwBonwx/Ym+y8mN8BU2ySJZCKG9xgaonhAaO9b/FDYg5bCzsYkBxjoNxiWUTe4FA5nEUzzbOgUZzHQcEO7sIljPFjwUUPf33u+Xyez/N5nu/7qp+V8bWHaGIUKn3fZtFElVg0o8xHZQtbVDRNUp+02S5+jLl8tasN2CWRdY/n0oR/rCbqpySadBQmTP4eQxMn925thgA8kea2Wgw8q0jyQo/14+7PJs7QRB1G121S0yQzkTfkqEIVmCNHG8HX5lYGtYM3Nb/t1SaaDF7Nr6YraGKrOGgolKPvHvnBnAxeuPKXFCl0FUnz5QqacKTUWy+Ugie0qZd00LvgfhhaD19FJ1/KgF7qY1/zkV74c2xf4drRX83SeXrAT9/dFGqiCTVzej/3I+gGRPB7lehXjRUPqMCTLl1klaNaOh/pjeDtWZYUWYDHvfG6G8A9rO5d0Bv81z0hHqGJN7hdr5mAnxLPiHUDjxS8808/TbR6k32uGf0T45tPIi8VrVggWvhfPDTV2oL5X+40sQ35rGxRrAP9Pl+OcBh32Ak19zf0AjMETi/0Zq1rm9aR78vSuJRF9LXMdd0Y+gOviS/fAn/e0RqGvMaVv8u5HbhjaMyuwX2vYntOvBP577FswdO4k81t9/Ngv8FA1UNP6/re/wsOQ/hPZ7OGeQxRB+7IZIcxxNW/RNLXwOP12eSP8S5RMWXrG+83JOqMHsQe9fVzJtx31lWSA/BH/Tf6Ni+AIRz5mH1pM0MGrx184L+NIZk77j3/lGKIsXbrowExqvgZ6iow590PGu0RwN+EPJz04b9wxd6c+xM6mqDEEhfeVfN+iAf3KcvedAP8pbLL/LIFDHEW6P35e4DDlz+5sh8+H0w7L2cyRCVd6Lufw5COvLhfA7MYQoUWl8peR55h/bkCLnjdL36e5gdsrLNbWPB1NuC86GWGsPIkh6fhh7WPE/zdAfRXdc2njkK/6dRvP+eiBu1quKmGvmhvv6cCvjW3kqlS4BbTcUbOEO2qJfTaPtyrHU1rjYI/rVm25RXkN1smbUnIFzHzZj78qE4I62LOwN+VmN67xdCZPT8WfoEhNkfu4TUj9qmQs5QZfI+ki2lA3WJasZeBJy6sXszGfMH6XnAy+Mt+QxYp8lx/I0GGvLadyWwf/Gi5PdXWGuxFyqri6vE9o/XE14Y8rk/td3rgx6fpMtxBTXGXVGzgP3ixHS3wE7munvsQ/EtKOZ2H/amjx86dZohXEr81pBK8vIgjXzWCJ0h8IutkyP8oQ6lxKAQAAA=="},"shape":[133],"dtype":"float64","order":"little"}],["lower",{"type":"ndarray","array":{"type":"bytes","data":"H4sIAAEAAAAA/w2SfTQVZhzHqY2oMCHTjbOTLBKHJkzT91wv6za53pb3LVbcrutlRX6PqSm6t+jINS6xXoj1ctCENBZljUyZaaurIeGsdkqNpkuT9vz1O5/nOefz+31/z5OknuloFxLaJwPkHX6EFdlD7z8PI+RbFQxUyQhP1DTYk0YYchgYM08giOKlBxoCCVkS1QoDR8KxUJlZpQmhmnT/vmxGWLlwZx05EMbObBarfAjWfaVPF4cSRhOLF/bEEoK1KjPsUwinCwPCx3MIk05HPDrzeY32iKvi/PrX3s++433+HXyjEykihDz01RHzPjveyQ1vdSLcczLubePnAXJhvWEMYWdecMr53QTFom216fsJ5yxTglOPEvZpWxWsqyAc+lxErRd4ju8/kIWeJiTG3LcWKgg/9Sp1l+0kPDaKrf3qE0JacnNliD/Bta07OiGOYL68ZkHrPsLm/nx52DECCvVPWJcT9kp/2FB4jhCqLxPEXiWES/uKt3fx+4+ydSI4bzjWvV1aRfAb6O9zO0hwWG4n/FJCOBl1u3kNz2Xi8Js6NJvwsd/dV9fKCC+0zxyIqSG46ZW+vfIKIfNcl9HXPxPsZ65Oie5z/27VxOZxgso9W+rNWWWq3R90ndC2ZM7H5hRhU/WRDHaI8E+xi9L/MJ/3Py9NLs/ZgqV3NM2EqJ4llwq6CUn1p+td/yBoDdXN5I4S5MHKkq0agvG7Kd9u0WYoWQWJL2dNUMmtwGHC0dpRpe2PhLzrPgWqSj7PcZlEUU1YoEzP6eU5ZRt95Bu5T2n6cKDzL74/69S5gClC8XD/LoEWg3Omcus1E4aaobYysSWDoOxexYtlDLZ+adJ7rwjlF+1utKkJPRfNmr9pJ0y5xz4Y6SDcsbFda/snYeZ5RVEO981mqSVabzFM7xY3phsyuGU8mjgrYMiMuhIf4sTwxvR4o8iDwfBpo5c356KRqXiROYPHYnGO3UtCVbhL0y+DhNVNtxufP+DvfaH8mu8MwfCGQU4991VIfS+vfo/hrrqp/6A9w56J+cJT7gwOmr7Xnv4MDc/KhY5hDC2a3Ok1nKciOtlaF4ab82ZOxjzPkyK7oFuz/L+aejvrvyZsia+cijNl+N3+VO9t7hOvNypy9mSQKE4IU0UMQUHYn7mNV1fL7qUJDPrT1ekzqQzL9boiJ6UMtR2XOicDGer8Pn007Mhg/qEwqsGMYdG6rL16FgxydYNS6syQpVDZ3eK+Z+cHLQSRfC83q0o94hj2Wr20atrDMBfhObTqMINN8vjISSVDU+xY7yYFg5egMtoiiSHPNXnEwo8h1cdgPmw9w9jcrjJdV4bEswYtX4j5/LPnNTXc1zK3o/5xOsP/pxTJ/ygEAAA="},"shape":[133],"dtype":"float64","order":"little"}],["upper",{"type":"ndarray","array":{"type":"bytes","data":"H4sIAAEAAAAA/xWRfTQVdhzGSzE3ncqwTdzKjrxGa6L05qnoaGPZDlaS0qncCPfm7fu9ak7eOvJyRTudXTnZOoahN3SW3K0yhqvy1nBWU5oiLLJ0k4799ufzO+f5fj7P+SlXFKZ5+xEOH1QcKQwhVA7PLemKJKx71RBinUoonGnK8lARPj8lVdqlE5IsV/RJoghNXmSb7EO4njZZaeRCmKNRrh5zJRhFZTTJvyA0uMQ4fnWI8Pf1JqcqIhhogqz80ggBUWrb0HyCYe3ogLaUsKbbtd6nivChrPTPW2WEzDhdyWenCbHLVMbJ0YRq3YETYwGE36RrvVp3EtozZKYbFYSeOTYvDDMEt9WUtxYQrHSpI5dKCEX123pXXRMeVV3FCi2h3mkeKe8T9nglFGWL/NY9XTJwlVA8sz7BSnAw3akeSyBM5M/eapdIMG79+GKh8PvEtVgdVE5Ylrf3XYZG+Dr01T1rJryc2WF/p5uwajj6gsUoQVWjSMp5TRgsDS1+I/JVywU+RwWvbr3scqnYNaXOe+ypJrQ8G3HeVUg4o7k9OlBDuBWvf/bGHYKZ39F/RvoIctnun91HCK0R6ncmU4Rps8FdIQsZqoMao05zxvtmsuebFzHyXo6n1gqegyLaTSc4ko1z66/UEdbuLgp/+qvwlQ5pUnoIzoleQ/vGCCP10zU5egy13plc7QKGnW+4vMCSkRz3b0z/KoZbQ9jCoA2ML4fNcfdTRrtNYI33Ysa5nOxulY7w8MQsmUz4WUr0BzX94h97HmVFvCVsGLo+tcOE0f20rTluOaMq3zPtnLg3IatzeOHBiP9rulkawDjmoZztvJcx/4ldo5/IMykJt8sEL7t8stPAgiE1d7/hK/ziqy/n6BswapquvKpdwpAHa/XPuIn9+UvVVd7i/oGGwDZ/hl+1gU3mfoaPu9kWbQKjOdZXsz2Z4d57PlhLjC6v8WTffYzK7xr9KzYxrA0HwxuFX33M16177Bk37RVShy2MNzMxphZBjDBJf9iGI4wO6c793qJvtrnVRJfGCLLIXrG6QOTkNtdrxYyoySGVxznGHw9j1/yewoDObdJFeBw/me4h386onpg6YOfL2NTzU4feIYb/vJX3dMcZnLQt1zSX8ai8zH7h//2U8+uqyhgfBH5/7/kvjJAYZbC8mWH8oG6W3k1GovykQ24JQ7ny5NL56WJvhXFCRCRj3+0UR08FY0vS4zbHU4zB+6NDy39gLM7MHnGrZozFjx82F/0O6yWhG+8yKiJ7L+x+wtifanRMOcrotH79kUZkr/yCMSctQ/OeStIoPLpaqmvPnhbvLetN278V/Afbv6m7KPZos34saWTk+ElsL/Uw/gM92ARmKAQAAA=="},"shape":[133],"dtype":"float64","order":"little"}]]}}},"view":{"type":"object","name":"CDSView","id":"p1169","attributes":{"filter":{"type":"object","name":"AllIndices","id":"p1170"}}},"glyph":{"type":"object","name":"Line","id":"p1165","attributes":{"x":{"type":"field","field":"date"},"y":{"type":"field","field":"mean"},"line_color":"firebrick","line_width":2}},"nonselection_glyph":{"type":"object","name":"Line","id":"p1166","attributes":{"x":{"type":"field","field":"date"},"y":{"type":"field","field":"mean"},"line_color":"firebrick","line_alpha":0.1,"line_width":2}},"muted_glyph":{"type":"object","name":"Line","id":"p1167","attributes":{"x":{"type":"field","field":"date"},"y":{"type":"field","field":"mean"},"line_color":"firebrick","line_alpha":0.2,"line_width":2}}}},{"type":"object","name":"GlyphRenderer","id":"p1175","attributes":{"data_source":{"id":"p1113"},"view":{"type":"object","name":"CDSView","id":"p1176","attributes":{"filter":{"type":"object","name":"AllIndices","id":"p1177"}}},"glyph":{"type":"object","name":"VArea","id":"p1172","attributes":{"x":{"type":"field","field":"date"},"y1":{"type":"field","field":"lower"},"y2":{"type":"field","field":"upper"},"fill_color":"firebrick","fill_alpha":0.4,"hatch_color":{"type":"value","value":"firebrick"},"hatch_alpha":{"type":"value","value":0.4}}},"nonselection_glyph":{"type":"object","name":"VArea","id":"p1173","attributes":{"x":{"type":"field","field":"date"},"y1":{"type":"field","field":"lower"},"y2":{"type":"field","field":"upper"},"fill_color":"firebrick","fill_alpha":0.1,"hatch_color":{"type":"value","value":"firebrick"},"hatch_alpha":{"type":"value","value":0.1}}},"muted_glyph":{"type":"object","name":"VArea","id":"p1174","attributes":{"x":{"type":"field","field":"date"},"y1":{"type":"field","field":"lower"},"y2":{"type":"field","field":"upper"},"fill_color":"firebrick","fill_alpha":0.2,"hatch_color":{"type":"value","value":"firebrick"},"hatch_alpha":{"type":"value","value":0.2}}}}}],"toolbar":{"type":"object","name":"Toolbar","id":"p1129","attributes":{"tools":[{"type":"object","name":"PanTool","id":"p1142"},{"type":"object","name":"WheelZoomTool","id":"p1143","attributes":{"renderers":"auto"}},{"type":"object","name":"BoxZoomTool","id":"p1144","attributes":{"overlay":{"type":"object","name":"BoxAnnotation","id":"p1145","attributes":{"syncable":false,"line_color":"black","line_alpha":1.0,"line_width":2,"line_dash":[4,4],"fill_color":"lightgrey","fill_alpha":0.5,"level":"overlay","visible":false,"left":{"type":"number","value":"nan"},"right":{"type":"number","value":"nan"},"top":{"type":"number","value":"nan"},"bottom":{"type":"number","value":"nan"},"left_units":"canvas","right_units":"canvas","top_units":"canvas","bottom_units":"canvas","handles":{"type":"object","name":"BoxInteractionHandles","id":"p1151","attributes":{"all":{"type":"object","name":"AreaVisuals","id":"p1150","attributes":{"fill_color":"white","hover_fill_color":"lightgray"}}}}}}}},{"type":"object","name":"SaveTool","id":"p1152"},{"type":"object","name":"ResetTool","id":"p1153"},{"type":"object","name":"HelpTool","id":"p1154"},{"type":"object","name":"HoverTool","id":"p1179","attributes":{"renderers":[{"id":"p1160"}],"tooltips":[["Date","@date{0.00}"],["CO\u2082","@co2{0.00} ppm"]],"sort_by":null}},{"type":"object","name":"HoverTool","id":"p1180","attributes":{"renderers":[{"id":"p1168"},{"id":"p1175"}],"tooltips":[["Date","@date{0.00}"],["\u03bc","@mean{0.00} ppm"],["lower 2\u03c3","@lower{0.00} ppm"],["upper 2\u03c3","@upper{0.00} ppm"]],"sort_by":null,"mode":"vline"}}],"autohide":true}},"left":[{"type":"object","name":"LinearAxis","id":"p1137","attributes":{"ticker":{"type":"object","name":"BasicTicker","id":"p1138","attributes":{"mantissas":[1,2,5]}},"formatter":{"type":"object","name":"BasicTickFormatter","id":"p1139"},"axis_label":"CO\u2082 (ppm)","major_label_policy":{"type":"object","name":"AllLabels","id":"p1140"}}}],"above":[{"type":"object","name":"Title","id":"p1155","attributes":{"text":"Posterior predictions conditioned on observations before 2010.","text_font_style":"italic"}},{"type":"object","name":"Title","id":"p1156","attributes":{"text":"Atmospheric CO\u2082 concentrations","text_font_size":"14pt"}}],"below":[{"type":"object","name":"LinearAxis","id":"p1132","attributes":{"ticker":{"type":"object","name":"BasicTicker","id":"p1133","attributes":{"mantissas":[1,2,5]}},"formatter":{"type":"object","name":"BasicTickFormatter","id":"p1134"},"axis_label":"Date","major_label_policy":{"type":"object","name":"AllLabels","id":"p1135"}}}],"center":[{"type":"object","name":"Grid","id":"p1136","attributes":{"axis":{"id":"p1132"}}},{"type":"object","name":"Grid","id":"p1141","attributes":{"dimension":1,"axis":{"id":"p1137"}}},{"type":"object","name":"Legend","id":"p1163","attributes":{"location":"top_left","items":[{"type":"object","name":"LegendItem","id":"p1164","attributes":{"label":{"type":"value","value":"True data (reference)"},"renderers":[{"id":"p1160"}]}},{"type":"object","name":"LegendItem","id":"p1171","attributes":{"label":{"type":"value","value":"\u03bc (predictions)"},"renderers":[{"id":"p1168"}]}},{"type":"object","name":"LegendItem","id":"p1178","attributes":{"label":{"type":"value","value":"2\u03c3"},"renderers":[{"id":"p1175"}]}}]}}]}}]}};
+  const render_items = [{"docid":"1481a593-3277-481e-be57-bfd3dd545f4e","roots":{"p1121":"c4b2d92e-d0f2-4a7d-9f35-686e9d27f6f6"},"root_ids":["p1121"]}];
+  void root.Bokeh.embed.embed_items_notebook(docs_json, render_items);
+  }
+  if (root.Bokeh !== undefined) {
+    embed_document(root);
+  } else {
+    let attempts = 0;
+    const timer = setInterval(function(root) {
+      if (root.Bokeh !== undefined) {
+        clearInterval(timer);
+        embed_document(root);
+      } else {
+        attempts++;
+        if (attempts > 100) {
+          clearInterval(timer);
+          console.log("Bokeh: ERROR: Unable to run BokehJS code because BokehJS library is missing");
+        }
+      }
+    }, 10, root)
+  }
+})(window);
+     </script>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post illustrated using JAX to combine multiple kernels and fit their hyperparameters on observed data. The fitted model was then used to make posterior predictions.
+   </p>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post was the second part of a series on Gaussian processes:
+   </p>
+   <ol>
+    <li>
+     <a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">
+      Understanding Gaussian processes
+     </a>
+    </li>
+    <li>
+     <a href="{% post_url /blog/gaussian_process/2019-01-06-gaussian-process-kernel-fitting %}">
+      Fitting a Gaussian process kernel (this)
+     </a>
+    </li>
+    <li>
+     <a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}">
+      Gaussian process kernels
+     </a>
+    </li>
+   </ol>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="Sidenotes">
+    Sidenotes
+    <a class="anchor-link" href="#Sidenotes">
+     <i class="fa-solid fa-sm fa-link">
+     </i>
+    </a>
+   </h2>
+   <ol>
+    <li>
+     Note that the
+     <a href="https://en.wikipedia.org/wiki/Determinant">
+      determinant
+     </a>
+     $\lvert \Sigma \rvert$ is equal to the product of its
+     <a href="https://en.wikipedia.org/wiki/Eigenvalues_and_eigenvectors">
+      eigenvalues
+     </a>
+     , and that $\lvert \Sigma \rvert$ can be interpreted as the
+     <a href="https://en.wikipedia.org/wiki/Determinant#Volume_and_Jacobian_determinant">
+      volume spanned by
+     </a>
+     the covariance matrix $\Sigma$. Reducing $\lvert \Sigma \rvert$ will thus decrease the dispersion of the points coming from the distribution with covariance matrix $\Sigma$ and reduce the complexity.
+    </li>
+    <li>
+     A fully Bayesian extension could define prior distributions for the hyperparameters and sample from the posterior with a JAX-based probabilistic programming library such as
+     <a href="https://num.pyro.ai/">
+      NumPyro
+     </a>
+     .
+    </li>
+   </ol>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <h2 id="References">
+    References
+    <a class="anchor-link" href="#References">
+     <i class="fa-solid fa-sm fa-link">
+     </i>
+    </a>
+   </h2>
+   <ol>
+    <li>
+     <a href="http://www.gaussianprocess.org/gpml/chapters/RW5.pdf">
+      Gaussian Processes for Machine Learning. Chapter 5: Model Selection and Adaptation of Hyperparameters
+     </a>
+     by Carl Edward Rasmussen and Christopher K. I. Williams.
+    </li>
+    <li>
+     <a href="https://papers.nips.cc/paper/1048-gaussian-processes-for-regression.pdf">
+      Gaussian Processes for Regression
+     </a>
+     by Christopher K. I. Williams and Carl Edward Rasmussen.
+    </li>
+   </ol>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+ <div class="input">
+  <div class="prompt input_prompt">
+   In [17]:
+  </div>
+  <div class="inner_cell">
+   <div class="input_area collapsed">
+    <div class="collapse_expand_button fa-1x">
+    </div>
+    <div class="highlight hl-ipython3">
+     <pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="output_wrapper">
+  <div class="output">
+   <div class="output_area">
+    <div class="prompt">
+    </div>
+    <div class="output_subarea output_stream output_stdout output_text">
+     <pre>Python implementation: CPython
+Python version       : 3.13.12
+IPython version      : 9.13.0
+
+IPython: 9.13.0
+bokeh  : 3.9.0
+jax    : 0.8.3
+numpy  : 2.4.4
+optax  : 0.2.8
+pandas : 2.3.3
+tqdm   : 4.67.3
+
+</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+ <div class="prompt input_prompt">
+ </div>
+ <div class="inner_cell">
+  <div class="text_cell_render border-box-sizing rendered_html">
+   <p>
+    This post is generated from an IPython notebook file.
+    <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/gaussian_process/gaussian-process-kernel-fitting.ipynb">
+     Link to the full IPython notebook file
+    </a>
+   </p>
+  </div>
+ </div>
+</div>
