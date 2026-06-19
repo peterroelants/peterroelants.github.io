@@ -1,0 +1,681 @@
+---
+layout: post
+title: Multivariate normal distribution
+description: Introduction to the multivariate normal distribution (Gaussian). We'll describe how to sample from this distribution and how to compute its conditionals and marginals.
+tags:
+- Gaussian Distribution
+- Probability
+- Sampling
+- Notebook
+image: /images/social/2018-09-28-multivariate-normal-primer-preview.png
+redirect_from:
+- /posts/multivariate_normal_primer/
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Multivariate-normal-distribution">Multivariate normal distribution<a class="anchor-link" href="#Multivariate-normal-distribution"><i class="fa-solid fa-sm fa-link"></i></a></h1><p>This post will introduce the <a href="https://en.wikipedia.org/wiki/Multivariate_normal_distribution">multivariate normal</a> (multivariate Gaussian) distribution. It illustrates how to represent, visualize, sample, and compute conditionals and marginals from this distribution.</p>
+<p>This post assumes a basic understanding of probability theory, probability distributions and linear algebra.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports</span>
+<span class="o">%</span><span class="k">matplotlib</span> inline
+<span class="o">%</span><span class="k">config</span> InlineBackend.figure_formats = ['svg']
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">cm</span> <span class="c1"># Colormaps</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.gridspec</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gridspec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mpl_toolkits.axes_grid1</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_axes_locatable</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s1">'darkgrid'</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Univariate-normal-distribution">Univariate normal distribution<a class="anchor-link" href="#Univariate-normal-distribution"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The <a href="https://en.wikipedia.org/wiki/Normal_distribution">normal distribution</a>, also known as the Gaussian distribution, is so called because its based on the <a href="https://en.wikipedia.org/wiki/Gaussian_function">Gaussian function</a>. This distribution is defined by two parameters: the <a href="https://en.wikipedia.org/wiki/Mean">mean</a> $\mu$, which is the expected value of the distribution, and the <a href="https://en.wikipedia.org/wiki/Standard_deviation">standard deviation</a> $\sigma$, which corresponds to the expected deviation from the mean. The square of the standard deviation is typically referred to as the <a href="https://en.wikipedia.org/wiki/Variance">variance</a> $\sigma^2$. We denote this distribution as:</p>
+<p>$$
+\mathcal{N}(\mu, \sigma^2)
+$$</p>
+<p>Given this mean and variance we can calculate the <a href="https://en.wikipedia.org/wiki/Probability_density_function">probability densitiy function (pdf)</a> of the normal distribution with the normalised Gaussian function. For a value $x$ the density is:</p>
+<p>$$
+p(x \mid \mu, \sigma) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp{ \left( -\frac{(x - \mu)^2}{2\sigma^2}\right)}
+$$</p>
+<p>We call this distribution the univariate normal because it consists of only one random normal variable. Three examples of univariate normal distributions with different mean and variance are plotted in the next figure:</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">univariate_normal</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">variance</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""pdf of the univariate normal distribution."""</span>
+    <span class="k">return</span> <span class="p">((</span><span class="mf">1.</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">variance</span><span class="p">))</span> <span class="o">*</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">variance</span><span class="p">)))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot different Univariate Normals</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">univariate_normal</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">variance</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"$\mathcal</span><span class="si">{N}</span><span class="s2">(0, 1)$"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">univariate_normal</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">variance</span><span class="o">=</span><span class="mi">3</span><span class="p">),</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"$\mathcal</span><span class="si">{N}</span><span class="s2">(2, 3)$"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">univariate_normal</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">variance</span><span class="o">=</span><span class="mf">0.2</span><span class="p">),</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">"$\mathcal</span><span class="si">{N}</span><span class="s2">(0, 0.2)$"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'density: $p(x)$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Univariate normal distributions'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">([</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">bottom</span><span class="o">=</span><span class="mf">0.15</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Three univariate normal density curves with different means and variances."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Three univariate normal density curves with different means and variances." decoding="async" height="219" loading="lazy" src="/images/notebook_outputs/misc/multivariate-normal-primer/figure-0004-01-657b3134c56f.svg" width="334"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Multivariate-normal-distribution">Multivariate normal distribution<a class="anchor-link" href="#Multivariate-normal-distribution"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The <a href="https://en.wikipedia.org/wiki/Multivariate_normal_distribution">multivariate normal</a> distribution is a multidimensional generalisation of the one-dimensional <a href="https://en.wikipedia.org/wiki/Normal_distribution">normal distribution</a>. It represents the distribution of a <a href="https://en.wikipedia.org/wiki/Multivariate_random_variable">multivariate random variable</a> that is made up of multiple random variables that can be correlated with each other.</p>
+<p>Like the normal distribution, the multivariate normal is defined by sets of parameters: the mean vector $\mathbf{\mu}$, which is the expected value of the distribution; and the <a href="https://en.wikipedia.org/wiki/Covariance">covariance</a> matrix $\Sigma$, which measures how dependent two random variables are and how they change together. We denote the covariance between variable $X$ and $Y$ as $C(X,Y)$.</p>
+<p>The multivariate normal with dimensionality $d$ has a <a href="https://en.wikipedia.org/wiki/Joint_probability_distribution">joint probability</a> density given by:</p>
+<p>$$
+p(\mathbf{x} \mid \mathbf{\mu}, \Sigma) = \frac{1}{\sqrt{(2\pi)^d \lvert\Sigma\rvert}} \exp{ \left( -\frac{1}{2}(\mathbf{x} - \mathbf{\mu})^T \Sigma^{-1} (\mathbf{x} - \mathbf{\mu}) \right)}
+$$</p>
+<p>Where $\mathbf{x}$ a random vector of size $d$, $\mathbf{\mu}$ is the mean vector, $\Sigma$ is the (<a href="https://en.wikipedia.org/wiki/Symmetric_matrix">symmetric</a>, <a href="https://en.wikipedia.org/wiki/Positive-definite_matrix">positive definite</a>) covariance matrix (of size $d \times d$), and $\lvert\Sigma\rvert$ its <a href="https://en.wikipedia.org/wiki/Determinant">determinant</a>. We denote this multivariate normal distribution as:</p>
+<p>$$
+\mathcal{N}(\mathbf{\mu}, \Sigma)
+$$</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">multivariate_normal</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">covariance</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""pdf of the multivariate normal distribution."""</span>
+    <span class="n">x_m</span> <span class="o">=</span> <span class="n">x</span> <span class="o">-</span> <span class="n">mean</span>
+    <span class="k">return</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span><span class="o">**</span><span class="n">d</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">covariance</span><span class="p">)))</span> <span class="o">*</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">covariance</span><span class="p">,</span> <span class="n">x_m</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">x_m</span><span class="p">))</span> <span class="o">/</span> <span class="mi">2</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Examples of two bivariate normal distributions are plotted below.</p>
+<p>The figure on the left is a bivariate distribution with the covariance between $x_1$ and $x_2$ set to $0$ so that these 2 variables are independent:</p>
+<p>$$
+\mathcal{N}\left(
+\begin{bmatrix}
+0 \\
+0
+\end{bmatrix},
+\begin{bmatrix}
+1 &amp; 0 \\
+0 &amp; 1
+\end{bmatrix}\right)
+$$</p>
+<p>The figure on the right is a bivariate distribution with the covariance between $x_1$ and $x_2$ set to be different than $0$ so that both variables are correlated. Increasing $x_1$ will increase the probability that $x_2$ will also increase:</p>
+<p>$$
+\mathcal{N}\left(
+\begin{bmatrix}
+0 \\
+1
+\end{bmatrix},
+\begin{bmatrix}
+1 &amp; 0.8 \\
+0.8 &amp; 1
+\end{bmatrix}\right)
+$$</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot bivariate distribution</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">generate_surface</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">covariance</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Helper function to generate density surface."""</span>
+    <span class="n">nb_of_x</span> <span class="o">=</span> <span class="mi">50</span> <span class="c1"># grid size</span>
+    <span class="n">x1s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_x</span><span class="p">)</span>
+    <span class="n">x2s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_x</span><span class="p">)</span>
+    <span class="n">x1</span><span class="p">,</span> <span class="n">x2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">x1s</span><span class="p">,</span> <span class="n">x2s</span><span class="p">)</span> <span class="c1"># Generate grid</span>
+    <span class="n">pdf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_x</span><span class="p">,</span> <span class="n">nb_of_x</span><span class="p">))</span>
+    <span class="c1"># Fill the cost matrix for each combination of weights</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_x</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_x</span><span class="p">):</span>
+            <span class="n">pdf</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">multivariate_normal</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([[</span><span class="n">x1</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]],</span> <span class="p">[</span><span class="n">x2</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]]]),</span>
+                <span class="n">d</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">covariance</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">pdf</span>  <span class="c1"># x1, x2, pdf(x1,x2)</span>
+
+<span class="c1"># subplot</span>
+<span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">nrows</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ncols</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span><span class="mi">4</span><span class="p">))</span>
+<span class="n">d</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># number of dimensions</span>
+
+<span class="c1"># Plot of independent Normals</span>
+<span class="n">bivariate_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([[</span><span class="mf">0.</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.</span><span class="p">]])</span>  <span class="c1"># Mean</span>
+<span class="n">bivariate_covariance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([</span>
+    <span class="p">[</span><span class="mf">1.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">],</span>
+    <span class="p">[</span><span class="mf">0.</span><span class="p">,</span> <span class="mf">1.</span><span class="p">]])</span>  <span class="c1"># Covariance</span>
+<span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">p</span> <span class="o">=</span> <span class="n">generate_surface</span><span class="p">(</span>
+    <span class="n">bivariate_mean</span><span class="p">,</span> <span class="n">bivariate_covariance</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+<span class="c1"># Plot bivariate distribution</span>
+<span class="n">con</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="mi">33</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">YlGnBu</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$x_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$x_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">axis</span><span class="p">([</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">])</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">'equal'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'Independent variables'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+
+<span class="c1"># Plot of correlated Normals</span>
+<span class="n">bivariate_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([[</span><span class="mf">0.</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.</span><span class="p">]])</span>  <span class="c1"># Mean</span>
+<span class="n">bivariate_covariance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([</span>
+    <span class="p">[</span><span class="mf">1.</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">],</span>
+    <span class="p">[</span><span class="mf">0.8</span><span class="p">,</span> <span class="mf">1.</span><span class="p">]])</span>  <span class="c1"># Covariance</span>
+<span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">p</span> <span class="o">=</span> <span class="n">generate_surface</span><span class="p">(</span>
+    <span class="n">bivariate_mean</span><span class="p">,</span> <span class="n">bivariate_covariance</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+<span class="c1"># Plot bivariate distribution</span>
+<span class="n">con</span> <span class="o">=</span> <span class="n">ax2</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="mi">33</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">YlGnBu</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$x_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$x_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">axis</span><span class="p">([</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">])</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">'equal'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'Correlated variables'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+
+<span class="c1"># Add colorbar and title</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">right</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+<span class="n">cbar_ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_axes</span><span class="p">([</span><span class="mf">0.85</span><span class="p">,</span> <span class="mf">0.15</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">])</span>
+<span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="n">cax</span><span class="o">=</span><span class="n">cbar_ax</span><span class="p">)</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$p(x_1, x_2)$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">'Bivariate normal distributions'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Two bivariate normal density surfaces, showing independent and correlated variables."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Two bivariate normal density surfaces, showing independent and correlated variables." decoding="async" height="266" loading="lazy" src="/images/notebook_outputs/misc/multivariate-normal-primer/figure-0008-00-a16f8bd80a3a.svg" width="527"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Affine-transformations-of-the-multivariate-normal">Affine transformations of the multivariate normal<a class="anchor-link" href="#Affine-transformations-of-the-multivariate-normal"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>It is possible to transform a <a href="https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Affine_transformation">multivariate normal</a> distribution into a new normal distribution with an <a href="https://en.wikipedia.org/wiki/Affine_transformation">affine transformation</a>. More specifically if $X$ is normally distributed and $Y = LX + u$ with $L$ a <a href="https://en.wikipedia.org/wiki/Linear_map">linear transformation</a> and $u$ a vector then $Y$ is also normally distributed with mean $\mu_{Y} = u + L\mu_{X}$ and covariance matrix $\Sigma_{Y} = L\Sigma_{X}L^T$.</p>
+<p>$$Y \sim \mathcal{N}(\mu_{Y}, \Sigma_{Y}) \quad\quad X \sim \mathcal{N}(\mu_{X}, \Sigma_{X}) \\
+\mathcal{N}(\mu_{Y}, \Sigma_{Y}) = \mathcal{N}(u + L\mu_{X}, L\Sigma_{X}L^T) = L\mathcal{N}(\mu_{X}, \Sigma_{X}) + u$$</p>
+<p>This can be proven as follows:</p>
+<p>$$\mu_{Y} = \mathbb{E}[Y] = \mathbb{E}[LX + u] = \mathbb{E}[LX] + u = L\mu_{X} + u$$</p>
+<p>$$\begin{split}
+\Sigma_{Y} &amp; = \mathbb{E}[(Y-\mu_{Y})(Y-\mu_{Y})^\top] \\
+           &amp; = \mathbb{E}[(LX+u - L\mu_{X}-u)(LX+u - L\mu_{X}-u)^\top] \\
+           &amp; = \mathbb{E}[(L(X-\mu_{X})) (L(X-\mu_{X}))^\top] \\
+           &amp; = \mathbb{E}[L(X-\mu_{X}) (X-\mu_{X})^\top L^\top] \\
+           &amp; = L\mathbb{E}[(X-\mu_{X})(X-\mu_{X})^\top]L^\top \\
+           &amp; = L\Sigma_{X}L^\top
+\end{split}$$</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Sampling-from-a-multivariate-normal">Sampling from a multivariate normal<a class="anchor-link" href="#Sampling-from-a-multivariate-normal"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The previous formula helps us to <a href="https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Drawing_values_from_the_distribution">sample from any multivariate Guassian</a>.<br/>
+To do this sampling we can sample $X$ from the standard normal distribution $X \sim \mathcal{N}(0, I_d)$, where the mean is the vector $\mu=0$ and the covariance is the <a href="https://en.wikipedia.org/wiki/Identity_matrix">identity matrix</a> $\Sigma=I_d$. Sampling from this distribution is easier because each variable in $X$ is <a href="https://en.wikipedia.org/wiki/Linear_independence">independent</a> from all other variables, we can just sample each variable separately.</p>
+<p>It is then possible to sample $Y$ from $\mathcal{N}(\mu_{Y}, \Sigma_{Y})$ by sampling $X$ and applying the affine transform on the samples. This transform is $Y = LX + u$ where we know from the previous section that the covariance of $Y$ will be $\Sigma_{Y} = L\Sigma_{X}L^\top$. Since $\Sigma_{X}=I_d$ we can write that $\Sigma_{Y} = L I_d L^\top = L L^\top$. $L$ can now be found by a technique called the <a href="https://en.wikipedia.org/wiki/Cholesky_decomposition">Cholesky decompostion</a> which does exactly the decomposition we need. The vector $u$ is then $\mu_{Y}$ since $\mu_{X}=0$ ($u = \mu_{Y} - L\mu_{X}$).</p>
+<p>Lets try this out by sampling 50 samples from:</p>
+<p>$$
+Y
+\sim
+\mathcal{N}\left(
+\begin{bmatrix} 0 \\
+1
+\end{bmatrix},
+\begin{bmatrix}
+1 &amp; 0.8 \\
+0.8 &amp; 1
+\end{bmatrix}\right)
+$$</p>
+<p>The sampling is done by the following code and the samples are plotted as red dots on the probability density surface below.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Sample from:</span>
+<span class="n">d</span> <span class="o">=</span> <span class="mi">2</span> <span class="c1"># Number of dimensions</span>
+<span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([[</span><span class="mf">0.</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.</span><span class="p">]])</span>
+<span class="n">covariance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">],</span>
+    <span class="p">[</span><span class="mf">0.8</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="p">])</span>
+
+<span class="c1"># Create L</span>
+<span class="n">L</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cholesky</span><span class="p">(</span><span class="n">covariance</span><span class="p">)</span>
+<span class="c1"># Sample X from standard normal</span>
+<span class="n">n</span> <span class="o">=</span> <span class="mi">50</span>  <span class="c1"># Samples to draw</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>
+<span class="c1"># Apply the transformation</span>
+<span class="n">Y</span> <span class="o">=</span> <span class="n">L</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="o">+</span> <span class="n">mean</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the samples and the distribution</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mf">4.5</span><span class="p">))</span>
+<span class="c1"># Plot bivariate distribution</span>
+<span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">p</span> <span class="o">=</span> <span class="n">generate_surface</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">covariance</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+<span class="n">con</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="mi">33</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">YlGnBu</span><span class="p">)</span>
+<span class="c1"># Plot samples</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">Y</span><span class="p">[</span><span class="mi">0</span><span class="p">,:],</span> <span class="n">Y</span><span class="p">[</span><span class="mi">1</span><span class="p">,:],</span> <span class="s1">'ro'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">.6</span><span class="p">,</span>
+        <span class="n">markeredgecolor</span><span class="o">=</span><span class="s1">'k'</span><span class="p">,</span> <span class="n">markeredgewidth</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$y_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$y_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">axis</span><span class="p">([</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">])</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">'equal'</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">'Samples from bivariate normal distribution'</span><span class="p">)</span>
+<span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">con</span><span class="p">)</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'density: $p(y_1, y_2)$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Samples from a bivariate normal distribution."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Samples from a bivariate normal distribution." decoding="async" height="311" loading="lazy" src="/images/notebook_outputs/misc/multivariate-normal-primer/figure-0012-00-c5ee4e91e774.svg" width="376"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Marginal-and-Conditional-normal-distributions">Marginal and Conditional normal distributions<a class="anchor-link" href="#Marginal-and-Conditional-normal-distributions"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>If both $\mathbf{x}$ and $\mathbf{y}$ are <a href="https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Joint_normality">jointly normal</a> random vectors defined as:
+$$
+\begin{bmatrix}
+\mathbf{x} \\
+\mathbf{y}
+\end{bmatrix}
+\sim
+\mathcal{N}\left(
+\begin{bmatrix}
+\mu_{\mathbf{x}} \\
+\mu_{\mathbf{y}}
+\end{bmatrix},
+\begin{bmatrix}
+A &amp; C \\
+C^T &amp; B
+\end{bmatrix}
+\right)
+= \mathcal{N}(\mu, \Sigma)
+, \qquad
+\Sigma^{-1} = \Lambda =
+\begin{bmatrix}
+\tilde{A} &amp; \tilde{C} \\
+\tilde{C}^T &amp; \tilde{B}
+\end{bmatrix}
+$$</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="n">d</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># dimensions</span>
+<span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([[</span><span class="mf">0.</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.</span><span class="p">]])</span>
+<span class="n">cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">],</span>
+    <span class="p">[</span><span class="mf">0.8</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="p">])</span>
+
+<span class="c1"># Get the mean values from the vector</span>
+<span class="n">mean_x</span> <span class="o">=</span> <span class="n">mean</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">mean_y</span> <span class="o">=</span> <span class="n">mean</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>
+<span class="c1"># Get the blocks (single values in this case) from </span>
+<span class="c1">#  the covariance matrix</span>
+<span class="n">A</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+<span class="n">B</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="n">C</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># = C transpose in this case</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Marginal-distribution">Marginal distribution<a class="anchor-link" href="#Marginal-distribution"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>A <a href="https://en.wikipedia.org/wiki/Marginal_distribution">marginal distribution</a> is the distribution of a subset of random variables from the original distribution. It represents the probabilities or densities of the variables in the subset without reference to the other values in the original distribution.</p>
+<p>In our case of the 2D multivariate normal the marginal distributions are the univariate distributions of each component $\mathbf{x}$ and $\mathbf{y}$ separately. They are defined as:</p>
+<p>$$
+\begin{split}
+p(\mathbf{x}) &amp; = \mathcal{N}(\mu_{\mathbf{x}}, A) \\
+p(\mathbf{y}) &amp; = \mathcal{N}(\mu_{\mathbf{y}}, B)
+\end{split}
+$$</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the conditional distributions</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">))</span>
+<span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span>
+    <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">width_ratios</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">height_ratios</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="c1"># gs.update(wspace=0., hspace=0.)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">'Marginal distributions'</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.93</span><span class="p">)</span>
+
+<span class="c1"># Plot surface on top left</span>
+<span class="n">ax1</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">p</span> <span class="o">=</span> <span class="n">generate_surface</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">cov</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+<span class="c1"># Plot bivariate distribution</span>
+<span class="n">con</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="mi">33</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">YlGnBu</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$y$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_label_position</span><span class="p">(</span><span class="s1">'right'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">axis</span><span class="p">([</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">])</span>
+
+<span class="c1"># Plot y</span>
+<span class="n">ax2</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+<span class="n">py</span> <span class="o">=</span> <span class="n">univariate_normal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">mean_y</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
+<span class="c1"># Plot univariate distribution</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">py</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="s1">'b--'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">'$p(y)$'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'density'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">)</span>
+
+<span class="c1"># Plot x</span>
+<span class="n">ax3</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+<span class="n">px</span> <span class="o">=</span> <span class="n">univariate_normal</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mean_x</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span>
+<span class="c1"># Plot univariate distribution</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">px</span><span class="p">,</span> <span class="s1">'r--'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">'$p(x_1)$'</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'density'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_label_position</span><span class="p">(</span><span class="s1">'right'</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">)</span>
+
+<span class="c1"># Clear axis 4 and plot colarbar in its place</span>
+<span class="n">ax4</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="n">ax4</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">divider</span> <span class="o">=</span> <span class="n">make_axes_locatable</span><span class="p">(</span><span class="n">ax4</span><span class="p">)</span>
+<span class="n">cax</span> <span class="o">=</span> <span class="n">divider</span><span class="o">.</span><span class="n">append_axes</span><span class="p">(</span><span class="s1">'left'</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="s1">'20%'</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="n">cax</span><span class="o">=</span><span class="n">cax</span><span class="p">)</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'density: $p(x, xy)$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Marginal distributions of a bivariate normal random variable."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Marginal distributions of a bivariate normal random variable." decoding="async" height="444" loading="lazy" src="/images/notebook_outputs/misc/multivariate-normal-primer/figure-0016-00-ae1a74dd0d56.svg" width="428"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Conditional-distribution">Conditional distribution<a class="anchor-link" href="#Conditional-distribution"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The <a href="https://en.wikipedia.org/wiki/Conditional_probability_distribution">conditional distribution</a> of $\mathbf{x}$ given $\mathbf{y}$ is defined as:</p>
+<p>$$
+p(\mathbf{x} \mid \mathbf{y}) = \mathcal{N}(\mu_{x|y}, \Sigma_{x|y})
+$$</p>
+<p>With:
+$$\begin{split}
+\Sigma_{x|y} &amp; = A - CB^{-1}C^\top = \tilde{A}^{-1} \\
+\mu_{x|y} &amp; = \mu_x + CB^{-1}(\mathbf{y}-\mu_y)
+\end{split}$$</p>
+<p>With $A - CB^{-1}C^\top = \tilde{A}^{-1}$ the <a href="https://en.wikipedia.org/wiki/Schur_complement">Schur complement</a> of B in $\Sigma$. (Full proof at [<a href="#Further-readings">1</a>]). The computation of the <a href="https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Conditional_distributions">conditional covariance</a> matrix $\Sigma_{x|y}$ can be viewed as inverting the covariance matrix $\Sigma^{-1} = \Lambda$, dropping the rows and columns corresponding to the variables $\mathbf{y}$ that are being conditioned upon (Selecting $\tilde{A}$), and inverting back to get the conditional covariance matrix $\Sigma_{x|y}=\tilde{A}^{-1}$.</p>
+<p>The shift of the mean can be seen as getting the <a href="https://en.wikipedia.org/wiki/Errors_and_residuals">residual</a> of the variable conditioned upon $(\mathbf{y}-\mu_y)$, normalising this with the covariance $B$ of the variable conditioned upon, and transforming it to the space of $\mathbf{x}$ by the covariances between $\mathbf{x}$ and $\mathbf{y}$ $(C)$.</p>
+<p>The conditional distributions of the example used above are calculated and plotted in the following code:</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Calculate x|y</span>
+<span class="n">y_condition</span> <span class="o">=</span> <span class="mf">1.</span>  <span class="c1"># To condition on y</span>
+<span class="n">mean_xgiveny</span> <span class="o">=</span> <span class="n">mean_x</span> <span class="o">+</span> <span class="p">(</span><span class="n">C</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">B</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">y_condition</span> <span class="o">-</span> <span class="n">mean_y</span><span class="p">))</span>
+<span class="n">cov_xgiveny</span> <span class="o">=</span> <span class="n">A</span> <span class="o">-</span> <span class="n">C</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">B</span><span class="p">)</span> <span class="o">*</span> <span class="n">C</span>
+
+<span class="c1"># Calculate y|x</span>
+<span class="n">x_condition</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.</span>  <span class="c1"># To condition on x</span>
+<span class="n">mean_ygivenx</span> <span class="o">=</span> <span class="n">mean_y</span> <span class="o">+</span> <span class="p">(</span><span class="n">C</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">A</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">x_condition</span> <span class="o">-</span> <span class="n">mean_x</span><span class="p">))</span>
+<span class="n">cov_ygivenx</span> <span class="o">=</span> <span class="n">B</span> <span class="o">-</span> <span class="p">(</span><span class="n">C</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">A</span><span class="p">)</span> <span class="o">*</span> <span class="n">C</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the conditional distributions</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">))</span>
+<span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span>
+    <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">width_ratios</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">height_ratios</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="c1"># gs.update(wspace=0., hspace=0.)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">'Conditional distributions'</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.93</span><span class="p">)</span>
+
+<span class="c1"># Plot surface on top left</span>
+<span class="n">ax1</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">p</span> <span class="o">=</span> <span class="n">generate_surface</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">cov</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+<span class="c1"># Plot bivariate distribution</span>
+<span class="n">con</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="mi">33</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">YlGnBu</span><span class="p">)</span>
+<span class="c1"># y=1 that is conditioned upon</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">],</span> <span class="p">[</span><span class="n">y_condition</span><span class="p">,</span> <span class="n">y_condition</span><span class="p">],</span> <span class="s1">'r--'</span><span class="p">)</span>
+<span class="c1"># x=-1. that is conditioned upon</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">x_condition</span><span class="p">,</span> <span class="n">x_condition</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">],</span> <span class="s1">'b--'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'$x$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$y$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_label_position</span><span class="p">(</span><span class="s1">'right'</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">axis</span><span class="p">([</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">])</span>
+
+<span class="c1"># Plot y|x</span>
+<span class="n">ax2</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">yx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+<span class="n">pyx</span> <span class="o">=</span> <span class="n">univariate_normal</span><span class="p">(</span><span class="n">yx</span><span class="p">,</span> <span class="n">mean_ygivenx</span><span class="p">,</span> <span class="n">cov_ygivenx</span><span class="p">)</span>
+<span class="c1"># Plot univariate distribution</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">pyx</span><span class="p">,</span> <span class="n">yx</span><span class="p">,</span> <span class="s1">'b--'</span><span class="p">,</span>
+         <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">'$p(y|x=</span><span class="si">{</span><span class="n">x_condition</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">)$'</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">'density'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">)</span>
+
+<span class="c1"># Plot x|y</span>
+<span class="n">ax3</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="n">xy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+<span class="n">pxy</span> <span class="o">=</span> <span class="n">univariate_normal</span><span class="p">(</span><span class="n">xy</span><span class="p">,</span> <span class="n">mean_xgiveny</span><span class="p">,</span> <span class="n">cov_xgiveny</span><span class="p">)</span>
+<span class="c1"># Plot univariate distribution</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xy</span><span class="p">,</span> <span class="n">pxy</span><span class="p">,</span> <span class="s1">'r--'</span><span class="p">,</span>
+         <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">'$p(x|y=</span><span class="si">{</span><span class="n">y_condition</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">)$'</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'density'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_label_position</span><span class="p">(</span><span class="s1">'right'</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">)</span>
+
+<span class="c1"># Clear axis 4 and plot colarbar in its place</span>
+<span class="n">ax4</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="n">ax4</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">divider</span> <span class="o">=</span> <span class="n">make_axes_locatable</span><span class="p">(</span><span class="n">ax4</span><span class="p">)</span>
+<span class="n">cax</span> <span class="o">=</span> <span class="n">divider</span><span class="o">.</span><span class="n">append_axes</span><span class="p">(</span><span class="s1">'left'</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="s1">'20%'</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="n">cax</span><span class="o">=</span><span class="n">cax</span><span class="p">)</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'density: $p(x, y)$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Conditional distributions of one variable given values of the other in a bivariate normal model."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Conditional distributions of one variable given values of the other in a bivariate normal model." decoding="async" height="444" loading="lazy" src="/images/notebook_outputs/misc/multivariate-normal-primer/figure-0019-00-5698740c44d4.svg" width="426"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Further-readings">Further readings<a class="anchor-link" href="#Further-readings"><i class="fa-solid fa-sm fa-link"></i></a></h2><ol>
+<li>Marginal and conditional distributions of multivariate normal distribution: <a href="http://fourier.eng.hmc.edu/e161/lectures/gaussianprocess/node7.html">Proof that conditional of multivariate normal is again a normal</a>.</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python implementation: CPython
+Python version       : 3.13.12
+IPython version      : 9.14.1
+
+IPython   : 9.14.1
+matplotlib: 3.11.0
+numpy     : 2.4.6
+seaborn   : 0.13.2
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This post at <a href="https://peterroelants.github.io/posts/multivariate-normal-primer/" rel="canonical">peterroelants.github.io</a> is generated from an Python notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/misc/multivariate-normal-primer.ipynb">Link to the full IPython notebook file</a></p>
+</div>
+</div>
+</div>

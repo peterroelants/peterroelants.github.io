@@ -1,0 +1,15 @@
+<!-- Bootstrap core JavaScript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+	{%- comment -%} Use dynamic asset version, computed in header include context {%- endcomment -%}
+	{%- if site.github and site.github.build_revision -%}
+		{%- assign asset_version = site.github.build_revision -%}
+	{%- else -%}
+		{%- assign asset_version = site.time | date: '%Y%m%d%H%M' -%}
+	{%- endif -%}
+	<script src="{{ '/js/bootstrap.bundle.min.js' | relative_url }}?v={{ asset_version }}" defer></script>
+	<script src="{{ '/js/input_expand_collapse.js' | relative_url }}?v={{ asset_version }}" defer></script>
+    <script src="{{ '/js/theme_toggle.js' | relative_url }}?v={{ asset_version }}" defer></script>
+{% if page.use_tag_pages_js %}
+	<script src="{{ '/js/tag_pages.js' | relative_url }}?v={{ asset_version }}" defer></script>
+{% endif %}

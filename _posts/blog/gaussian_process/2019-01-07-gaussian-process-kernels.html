@@ -1,0 +1,1333 @@
+---
+layout: post
+title: Gaussian processes (3/3) - exploring kernels
+description: Explore the Gaussian process kernels fitted by the previous post by using various visualizations.
+tags:
+- Gaussian Process
+- Kernel
+- JAX
+- Notebook
+image: /images/social/2019-01-07-gaussian-process-kernels-preview.png
+updates:
+- date: '2026-05-04'
+  title: Reimplemented with JAX
+  description: Replaced the TensorFlow-oriented kernel examples with JAX-based code while keeping the kernel explanations and visuals.
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Gaussian-processes-(3/3)---exploring-kernels">Gaussian processes (3/3) - exploring kernels<a class="anchor-link" href="#Gaussian-processes-(3/3)---exploring-kernels"><i class="fa-solid fa-sm fa-link"></i></a></h1><p>This post will go more in-depth in the kernels fitted in <a href="{% post_url /blog/gaussian_process/2019-01-06-gaussian-process-kernel-fitting %}">our example fitting a Gaussian process to model atmospheric CO₂ concentrations</a>. We will describe and visually explore each part of the kernel used in our fitted model, which is a combination of the exponentiated quadratic kernel, exponentiated sine squared kernel, and rational quadratic kernel. This post is the last part of a series on Gaussian processes:</p>
+<ol>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">Understanding Gaussian processes</a></li>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-06-gaussian-process-kernel-fitting %}">Fitting a kernel</a></li>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}">Gaussian process kernels (this)</a></li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports</span>
+<span class="o">%</span><span class="k">matplotlib</span> inline
+<span class="o">%</span><span class="k">config</span> InlineBackend.figure_format = 'svg'
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">"ignore"</span><span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TypeAlias</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+
+<span class="n">jax</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">"jax_enable_x64"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDArray</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.figure</span><span class="w"> </span><span class="kn">import</span> <span class="n">Figure</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.gridspec</span><span class="w"> </span><span class="kn">import</span> <span class="n">SubplotSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mpl_toolkits.axes_grid1</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_axes_locatable</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.gridspec</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gridspec</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+
+<span class="n">Array</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span>
+<span class="n">ArrayLike</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Array</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+<span class="n">KernelMatrix</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+<span class="n">KernelFn</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">KernelMatrix</span><span class="p">]</span>
+<span class="n">FittedParams</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s2">"darkgrid"</span><span class="p">)</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Kernel-function">Kernel function<a class="anchor-link" href="#Kernel-function"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>A kernel (or covariance function) describes the <a href="https://en.wikipedia.org/wiki/Covariance">covariance</a> of the Gaussian process random variables. Together with the mean function the kernel completely defines a Gaussian process.</p>
+<p>In the <a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">first post</a> we introduced the concept of the kernel which defines a prior on the Gaussian process distribution. To summarize the kernel function $k(x, x')$ models the covariance between each pair in $x$. The kernel function together with the mean function $m(x)$ define the Gaussian process distribution:</p>
+<p>$$y \sim \mathcal{GP}(m(x),k(x,x'))$$</p>
+<h3 id="Valid-kernels">Valid kernels<a class="anchor-link" href="#Valid-kernels"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>In order to be a valid kernel function the resulting kernel matrix $\Sigma = k(X, X)$ should be <a href="https://en.wikipedia.org/wiki/Positive-definite_matrix">positive definite</a>. Which implies that the matrix should be <a href="https://en.wikipedia.org/wiki/Symmetric_matrix">symmetric</a>. Being positive definite also means that the kernel matrix is <a href="https://en.wikipedia.org/wiki/Invertible_matrix">invertible</a>.</p>
+<p>The process of defining a new valid kernel from scratch is not always trivial. Typically pre-defined kernels are used to model a variety of processes. In what follows we will visually explore some of these pre-defined kernels that we used in our <a href="{% post_url /blog/gaussian_process/2019-01-06-gaussian-process-kernel-fitting %}">fitting example</a>.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Kernel and plotting functions to be used below</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">as_column</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Represent one-dimensional inputs as column vectors."""</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">squared_distance</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Array</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compute pairwise squared distances for stationary kernels."""</span>
+    <span class="n">xa</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xa</span><span class="p">)</span>
+    <span class="n">xb</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xb</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">xa</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">xb</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="c1"># The plots below use NumPy and Matplotlib, so the kernel helpers</span>
+<span class="c1"># convert JAX arrays to NumPy arrays before returning.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">exponentiated_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span> <span class="n">amplitude</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelMatrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Show smooth functions through an RBF covariance."""</span>
+    <span class="n">covariance</span> <span class="o">=</span> <span class="n">amplitude</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span>
+        <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">squared_distance</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">)</span> <span class="o">/</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">covariance</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="n">xb</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">length_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">scale_mixture</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelMatrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Show multi-scale smoothness through a rational quadratic covariance."""</span>
+    <span class="n">covariance</span> <span class="o">=</span> <span class="n">amplitude</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="p">(</span>
+        <span class="mf">1.0</span> <span class="o">+</span> <span class="n">squared_distance</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">scale_mixture</span> <span class="o">*</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+    <span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="n">scale_mixture</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">covariance</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">periodic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="n">xb</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">length_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelMatrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Show repeating functions through a periodic covariance."""</span>
+    <span class="n">xa</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xa</span><span class="p">)</span>
+    <span class="n">xb</span> <span class="o">=</span> <span class="n">as_column</span><span class="p">(</span><span class="n">xb</span><span class="p">)</span>
+    <span class="n">distance</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">xa</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">xb</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+    <span class="n">sine_squared</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">distance</span> <span class="o">/</span> <span class="n">period</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">covariance</span> <span class="o">=</span> <span class="n">amplitude</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">sine_squared</span> <span class="o">/</span> <span class="n">length_scale</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">covariance</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="n">xb</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">periodic_length_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">local_length_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelMatrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Show periodic functions whose similarity fades with distance."""</span>
+    <span class="k">return</span> <span class="n">periodic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+        <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+        <span class="n">amplitude</span><span class="o">=</span><span class="n">amplitude</span><span class="p">,</span>
+        <span class="n">length_scale</span><span class="o">=</span><span class="n">periodic_length_scale</span><span class="p">,</span>
+        <span class="n">period</span><span class="o">=</span><span class="n">period</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">*</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span>
+        <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="n">local_length_scale</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="p">:</span> <span class="n">KernelMatrix</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelMatrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Draw sample functions to make a covariance matrix concrete."""</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">multivariate_normal</span><span class="p">(</span>
+        <span class="n">mean</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nb_of_samples</span><span class="p">),</span> <span class="n">cov</span><span class="o">=</span><span class="n">covariance</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">T</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="p">:</span> <span class="n">KernelMatrix</span><span class="p">,</span>
+    <span class="n">y</span><span class="p">:</span> <span class="n">KernelMatrix</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="p">:</span> <span class="n">KernelMatrix</span><span class="p">,</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">fig</span><span class="p">:</span> <span class="n">Figure</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="p">:</span> <span class="n">SubplotSpec</span><span class="p">,</span>
+    <span class="n">xlim</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+    <span class="n">scatter</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">rotate_x_labels</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Visualize a kernel through samples and its covariance matrix."""</span>
+    <span class="n">grid_spec</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpecFromSubplotSpec</span><span class="p">(</span>
+        <span class="mi">1</span><span class="p">,</span>
+        <span class="mi">2</span><span class="p">,</span>
+        <span class="n">width_ratios</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+        <span class="n">height_ratios</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="n">wspace</span><span class="o">=</span><span class="mf">0.18</span><span class="p">,</span>
+        <span class="n">hspace</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">subplot_spec</span><span class="o">=</span><span class="n">subplot_spec</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">ax1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">grid_spec</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">ax2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">grid_spec</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="c1"># Plot samples</span>
+    <span class="k">if</span> <span class="n">scatter</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">[:,</span> <span class="n">i</span><span class="p">],</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">[:,</span> <span class="n">i</span><span class="p">],</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+    <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"$y$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span> <span class="n">labelpad</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"$x$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span> <span class="n">labelpad</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="n">xlim</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">rotate_x_labels</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">ax1</span><span class="o">.</span><span class="n">get_xticklabels</span><span class="p">():</span>
+            <span class="n">label</span><span class="o">.</span><span class="n">set_rotation</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span>
+    <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Samples from </span><span class="si">{</span><span class="n">description</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="c1"># Plot covariance matrix</span>
+    <span class="n">im</span> <span class="o">=</span> <span class="n">ax2</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">covariance</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s2">"YlGnBu"</span><span class="p">)</span>
+    <span class="n">divider</span> <span class="o">=</span> <span class="n">make_axes_locatable</span><span class="p">(</span><span class="n">ax2</span><span class="p">)</span>
+    <span class="n">cax</span> <span class="o">=</span> <span class="n">divider</span><span class="o">.</span><span class="n">append_axes</span><span class="p">(</span><span class="s2">"right"</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="s2">"5%"</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.02</span><span class="p">)</span>
+    <span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax2</span><span class="p">,</span> <span class="n">cax</span><span class="o">=</span><span class="n">cax</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"$K(X,X)$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+    <span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Covariance matrix</span><span class="se">\n</span><span class="si">{</span><span class="n">description</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"X"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">labelpad</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"X"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">labelpad</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="c1"># Show 5 custom ticks on x an y axis of covariance plot</span>
+    <span class="n">nb_ticks</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="n">ticks</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">xlim</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">xlim</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">ticks_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">ticks</span><span class="p">),</span> <span class="n">num</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">nb_ticks</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">ticks</span><span class="p">)))</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">ticks</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">ticks</span><span class="p">)[</span><span class="n">ticks_idx</span><span class="p">])</span>
+    <span class="n">ax2</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">ticks</span><span class="p">)))</span>
+    <span class="n">ax2</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">ticks</span><span class="p">)))</span>
+    <span class="n">ax2</span><span class="o">.</span><span class="n">set_xticklabels</span><span class="p">(</span><span class="n">ticks</span><span class="p">)</span>
+    <span class="n">ax2</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">(</span><span class="n">ticks</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">rotate_x_labels</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">ax2</span><span class="o">.</span><span class="n">get_xticklabels</span><span class="p">():</span>
+            <span class="n">label</span><span class="o">.</span><span class="n">set_rotation</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span>
+    <span class="n">ax2</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+
+
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="White-noise-kernel">White noise kernel<a class="anchor-link" href="#White-noise-kernel"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The <a href="https://en.wikipedia.org/wiki/White_noise">white noise</a> kernel represents independent and identically distributed noise added to the Gaussian process distribution.</p>
+<p>$$k(x, x) = \sigma^2 I_n$$
+With:</p>
+<ul>
+<li>$\sigma^2$ the variance of the noise.</li>
+<li>$I_n$ the identity matrix.</li>
+</ul>
+<p>This formula results in a covariance matrix with zeros everywhere except on the diagonal of the covariance matrix. This diagonal contains the variances of the individual random variables. All covariances between samples are zero because the noise is uncorrelated.</p>
+<p>Samples from the white noise kernel together with a visual representation of the covariance matrix are plotted in the next figure.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot kernel matrix and samples of white noise kernel</span>
+
+<span class="n">nb_of_samples</span> <span class="o">=</span> <span class="mi">100</span>  <span class="c1"># Number of test points.</span>
+<span class="n">nb_of_realizations</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Number of function realizations</span>
+<span class="c1"># Generate independent samples that can be transformed</span>
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Start plotting</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mf">2.7</span><span class="p">))</span>
+<span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span> <span class="n">wspace</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+
+<span class="c1"># Sample from the prior</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">nb_of_samples</span><span class="p">)</span>  <span class="c1"># Identity matrix</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="c1"># Plot</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"white noise kernel"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+    <span class="n">scatter</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"White-noise kernel samples and its diagonal covariance matrix."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="White-noise kernel samples and its diagonal covariance matrix." decoding="async" height="194" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0005-00-f9b9c2bb7f7d.svg" width="494"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Exponentiated-quadratic-kernel">Exponentiated quadratic kernel<a class="anchor-link" href="#Exponentiated-quadratic-kernel"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The exponentiated quadratic kernel (also known as squared exponential kernel, Gaussian kernel or radial basis function kernel) is one of the most popular kernels used in Gaussian process modelling. It can be computed as:</p>
+<p>$$k(x_a, x_b) = \sigma^2 \exp \left(-\frac{ \left\Vert x_a - x_b \right\Vert^2}{2\ell^2}\right)$$
+With:</p>
+<ul>
+<li>$\sigma^2$ the overall variance ($\sigma$ is also known as amplitude).</li>
+<li>$\ell$ the lengthscale.</li>
+</ul>
+<p>Using the exponentiated quadratic kernel will result in a <a href="https://en.wikipedia.org/wiki/Smoothness">smooth</a> prior on functions sampled from the Gaussian process.</p>
+<p>The exponentiated quadratic is visualized in the next figures. The first figure shows the distance plot with respect to $0$: $k(0, x)$. Note that the similarity outputted by the kernel decreases exponentially towards $0$ the farther we move move away from the center, and that the similarity is maximum at the center $x_a = x_b$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot exponentiated quadratic distance</span>
+
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">75</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">zero</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">]])</span>
+<span class="c1"># Make the plots</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">5.4</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell = 1$, $</span><span class="se">\\</span><span class="s2">sigma = 1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell = 0.5$, $</span><span class="se">\\</span><span class="s2">sigma = 1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell = 1$, $</span><span class="se">\\</span><span class="s2">sigma = 0.5$"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"$x_a - x_b$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"$K(x_a,x_b)$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Exponentiated quadratic distance plot"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Exponentiated-quadratic covariance versus input distance for several length scales and amplitudes."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Exponentiated-quadratic covariance versus input distance for several length scales and amplitudes." decoding="async" height="207" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0007-00-7d517299a11f.svg" width="379"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The following figure shows samples from the exponentiated quadratic kernel together with a visual representation of its covariance matrix.</p>
+<p>Observe in the previous and following figure that increasing the lengthscale parameter $\ell$ increases the spread of the covariance. Increasing the amplitude parameter $\sigma$ increases the maximum value of the covariance.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot kernel matrix and samples of exponentiated quadratic</span>
+
+<span class="n">nb_of_samples</span> <span class="o">=</span> <span class="mi">150</span>  <span class="c1"># Number of test points.</span>
+<span class="n">nb_of_realizations</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Number of function realizations</span>
+<span class="c1"># Generate input points</span>
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Start plotting</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+<span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span> <span class="n">wspace</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.4</span><span class="p">)</span>
+
+<span class="c1"># Plot first</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell = 1$, $</span><span class="se">\\</span><span class="s2">sigma = 1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot second</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell = 0.3$, $</span><span class="se">\\</span><span class="s2">sigma = 1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot third</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell = 2$, $</span><span class="se">\\</span><span class="s2">sigma = 1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot fourth</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell = 1$, $</span><span class="se">\\</span><span class="s2">sigma = 10$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">"Exponentiated quadratic"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.99</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">left</span><span class="o">=</span><span class="mf">0.07</span><span class="p">,</span> <span class="n">bottom</span><span class="o">=</span><span class="mf">0.04</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="mf">0.93</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mf">0.94</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Exponentiated-quadratic kernel: sampled functions and covariance matrices for several hyperparameter settings."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Exponentiated-quadratic kernel: sampled functions and covariance matrices for several hyperparameter settings." decoding="async" height="726" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0009-00-0dd1a157bc29.svg" width="519"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Rational-quadratic-kernel">Rational quadratic kernel<a class="anchor-link" href="#Rational-quadratic-kernel"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>$$k(x_a, x_b) = \sigma^2 \left( 1 + \frac{ \left\Vert x_a - x_b \right\Vert^2}{2 \alpha \ell^2} \right)^{-\alpha}$$
+With:</p>
+<ul>
+<li>$\sigma^2$ the overall variance ($\sigma$ is also known as amplitude).</li>
+<li>$\ell$ the lengthscale.</li>
+<li>$\alpha$ the scale-mixture ($\alpha$ &gt; 0).</li>
+</ul>
+<p>Similar to the exponentiated quadratic the rational quadratic kernel will result in a somewhat smooth prior on functions sampled from the Gaussian process. The rational quadratic can be interpreted as an infinite sum of different exponentiated quadratic kernels with different lengthscales with $\alpha$ determining the weighting between different lengthscales. When $\alpha \rightarrow \infty$ the rational quadratic kernel converges into the exponentiated quadratic kernel.</p>
+<p>The rational quadratic is visualized in the next figures. The first figure shows the distance plot with respect to $0$: $k(0, x)$ with the amplitude $\sigma$ fixed to $1$.</p>
+<p>Note that just like the exponentiated quadratic the similarity outputted by the kernel decreases towards $0$ the farther we move move away from the center, and that the similarity is maximum at the center $x_a = x_b$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot rational quadratic distance</span>
+
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">151</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">zero</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">]])</span>
+<span class="c1"># Make the plots</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">5.4</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $</span><span class="se">\\</span><span class="s2">alpha=1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=5$, $</span><span class="se">\\</span><span class="s2">alpha=1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=0.2$, $</span><span class="se">\\</span><span class="s2">alpha=1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">0.1</span>
+<span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $</span><span class="se">\\</span><span class="s2">alpha=0.1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">1000.0</span>
+<span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $</span><span class="se">\\</span><span class="s2">alpha=1000$"</span><span class="p">)</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"$x_a - x_b$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"$k(x_a,x_b)$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Rational quadratic distance plot ($</span><span class="se">\\</span><span class="s2">sigma=1$)"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Rational-quadratic covariance versus input distance for several length scales and scale-mixture parameters."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Rational-quadratic covariance versus input distance for several length scales and scale-mixture parameters." decoding="async" height="205" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0011-00-37aa9ffed856.svg" width="379"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The following figure shows samples from the rational quadratic kernel together with a visual representation of its covariance matrix. The amplitude $\sigma$ is fixed to $1$ in all figures, changing the amplitude will have the same effect as changing the amplitude in the exponentiated quadratic.</p>
+<p>Observe that in the previous and following figures, increasing the lengthscale parameter $\ell$ increases the overall spread of the covariance. Decreasing the scale-mixture $\alpha$ will allow for more minor local variations while still keeping the longer scale trends defined by the lengthscale parameter. Increasing the scale-mixture to a large value reduces the minor local variations.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot kernel matrix and samples of rational quadratic</span>
+
+<span class="n">nb_of_samples</span> <span class="o">=</span> <span class="mi">150</span>  <span class="c1"># Number of test points.</span>
+<span class="n">nb_of_realizations</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Number of function realizations</span>
+<span class="c1"># Generate input points</span>
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Start plotting</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">12</span><span class="p">))</span>
+<span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span> <span class="n">wspace</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+<span class="c1"># Plot first</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $</span><span class="se">\\</span><span class="s2">alpha=1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot second</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=5$, $</span><span class="se">\\</span><span class="s2">alpha=1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot third</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=0.2$, $</span><span class="se">\\</span><span class="s2">alpha=1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot fourth</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">0.1</span>
+<span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $</span><span class="se">\\</span><span class="s2">alpha=0.1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot fifth</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+    <span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">scale_mixture</span><span class="o">=</span><span class="mf">1000.0</span>
+<span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $</span><span class="se">\\</span><span class="s2">alpha=1000$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">"Rational quadratic ($</span><span class="se">\\</span><span class="s2">sigma=1$)"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.99</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">left</span><span class="o">=</span><span class="mf">0.06</span><span class="p">,</span> <span class="n">bottom</span><span class="o">=</span><span class="mf">0.04</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="mf">0.94</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Rational-quadratic kernel: sampled functions and covariance matrices for several hyperparameter settings."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Rational-quadratic kernel: sampled functions and covariance matrices for several hyperparameter settings." decoding="async" height="863" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0013-00-f298b4fb5eb3.svg" width="512"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Periodic-kernel">Periodic kernel<a class="anchor-link" href="#Periodic-kernel"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>$$k(x_a, x_b) = \sigma^2 \exp \left(-\frac{2}{\ell^2}\sin^2 \left( \pi \frac{\lvert x_a - x_b \rvert}{p}\right) \right)$$
+With:</p>
+<ul>
+<li>$\sigma^2$ the overall variance ($\sigma$ is also known as amplitude).</li>
+<li>$\ell$ the lengthscale.</li>
+<li>$p$ the period, which is the distance between repetitions.</li>
+</ul>
+<p>The periodic kernel allows us to model <a href="https://en.wikipedia.org/wiki/Periodic_function">periodic functions</a>.</p>
+<p>The periodic kernel is visualized in the next figures. The first two figures show the distance plot with respect to $0$: $k(0, x)$ with the amplitude $\sigma$ fixed to $1$ and different variations of the other parameters.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot periodic distance</span>
+
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">150</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">zero</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">]])</span>
+
+<span class="c1"># Make the plots</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">5.4</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $p=1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=2$, $p=1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=0.5$, $p=1$"</span><span class="p">)</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"$x_a - x_b$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"$K(x_a,x_b)$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Periodic distance plot ($</span><span class="se">\\</span><span class="s2">sigma=1$)"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Periodic covariance versus input distance for several length scales at a fixed period."</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="c1"># Second plot</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">5.4</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $p=1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $p=0.5$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $p=2$"</span><span class="p">)</span>
+
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"$x_a - x_b$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"$K(x_a,x_b)$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Periodic distance plot ($</span><span class="se">\\</span><span class="s2">sigma=1$)"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Periodic covariance versus input distance for several periods at a fixed length scale."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Periodic covariance versus input distance for several length scales at a fixed period." decoding="async" height="205" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0015-00-f41ad35ac49d.svg" width="379"/>
+</div>
+</div>
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Periodic covariance versus input distance for several periods at a fixed length scale." decoding="async" height="205" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0015-01-59efa9dffc9c.svg" width="379"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The following figure shows samples from the periodic kernel together with a visual representation of its covariance matrix. The amplitude $\sigma$ is fixed to $1$ in all figures.</p>
+<p>Observe that in the previous and following figures, increasing the period $p$ increases the distance between the repetitions (increasing the wavelength).
+Increasing the lengthscale parameter $\ell$ decreases the local variations within a repetition in the same way that increasing the lengthscale in the exponentiated quadratic kernel decreases the variations over a longer range.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot kernel matrix and samples of periodic</span>
+
+<span class="n">nb_of_samples</span> <span class="o">=</span> <span class="mi">150</span>  <span class="c1"># Number of test points.</span>
+<span class="n">nb_of_realizations</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Number of function realizations</span>
+<span class="c1"># Generate input points</span>
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Start plotting</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">12</span><span class="p">))</span>
+<span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span> <span class="n">wspace</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+<span class="c1"># Plot first</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $p=1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot second</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=2$, $p=1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot third</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=0.5$, $p=1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot fourth</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $p=0.5$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot fifth</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">periodic_kernel</span><span class="p">(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell=1$, $p=2$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">"Periodic ($</span><span class="se">\\</span><span class="s2">sigma=1$)"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.99</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">left</span><span class="o">=</span><span class="mf">0.06</span><span class="p">,</span> <span class="n">bottom</span><span class="o">=</span><span class="mf">0.04</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="mf">0.94</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Periodic kernel: sampled functions and covariance matrices for several length scales and periods."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Periodic kernel: sampled functions and covariance matrices for several length scales and periods." decoding="async" height="863" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0017-00-65f954301cee.svg" width="521"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Combining-kernels-by-multiplication">Combining kernels by multiplication<a class="anchor-link" href="#Combining-kernels-by-multiplication"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Kernels can be combined by multiplying them together. Multiplying kernels is an elementwise multiplication of their corresponding covariance matrices. This means that the covariances of the two multiplied kernels will only have a high value if both covariances have a high value. The multiply operation can thus be interpreted as an AND operation.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Local-periodic-kernel">Local periodic kernel<a class="anchor-link" href="#Local-periodic-kernel"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The local periodic kernel is a multiplication of the periodic kernel with the exponentiated quadratic kernel to allow the periods to vary over longer distances. Note that the variance parameters $\sigma^2$ are combined into one.</p>
+<p>$$k(x_a, x_b) = \sigma^2 \exp \left(-\frac{2}{\ell_p^2}\sin^2 \left( \pi \frac{\lvert x_a - x_b \rvert}{p}\right) \right)
+\exp \left(-\frac{ \left\Vert x_a - x_b \right\Vert^2}{2\ell_{eq}^2}\right)$$
+With:</p>
+<ul>
+<li>$\sigma^2$ the overall variance ($\sigma$ is also known as amplitude).</li>
+<li>$\ell_p$ lengthscale of the periodic function.</li>
+<li>$p$ the period.</li>
+<li>$\ell_{eq}$ the lengthscale of the exponentiated quadratic.</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The local periodic kernel is visualized in the next figures. The first figure shows the distance plot with respect to $0$: $k(0, x)$ with only variations of the lengthscale of the exponentiated quadratic.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot locally periodic distance</span>
+
+
+<span class="c1"># Define the local periodic kernel</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">periodic_length_scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">local_length_scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelFn</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Freeze local-periodic hyperparameters for plotting examples."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">kernel</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">xa</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelMatrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Evaluate the configured local-periodic covariance."""</span>
+        <span class="k">return</span> <span class="n">local_periodic_kernel</span><span class="p">(</span>
+            <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+            <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+            <span class="n">amplitude</span><span class="o">=</span><span class="n">amplitude</span><span class="p">,</span>
+            <span class="n">periodic_length_scale</span><span class="o">=</span><span class="n">periodic_length_scale</span><span class="p">,</span>
+            <span class="n">period</span><span class="o">=</span><span class="n">period</span><span class="p">,</span>
+            <span class="n">local_length_scale</span><span class="o">=</span><span class="n">local_length_scale</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">kernel</span>
+
+
+<span class="c1"># Make the plots</span>
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">150</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">zero</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">]])</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">5.4</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">get_local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">periodic_length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">local_length_scale</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell_</span><span class="si">{eq}</span><span class="s2">=1$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">get_local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">periodic_length_scale</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">local_length_scale</span><span class="o">=</span><span class="mf">0.5</span>
+<span class="p">)(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell_</span><span class="si">{eq}</span><span class="s2">=0.5$"</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">get_local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">periodic_length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">local_length_scale</span><span class="o">=</span><span class="mf">2.0</span>
+<span class="p">)(</span><span class="n">xa</span><span class="o">=</span><span class="n">zero</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">X</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">&Sigma;</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell_</span><span class="si">{eq}</span><span class="s2">=2$"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"$x_a - x_b$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"$K(x_a,x_b)$"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"Local periodic distance plot ($</span><span class="se">\\</span><span class="s2">sigma=1$, $</span><span class="se">\\</span><span class="s2">ell_p=1$, $p=1$)"</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">))</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Local-periodic covariance versus input distance for several local length scales."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Local-periodic covariance versus input distance for several local length scales." decoding="async" height="205" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0021-00-87e305d5f30e.svg" width="379"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>The following figure shows samples from the local periodic kernel together with a visual representation of its covariance matrix. Only variations of the lengthscale of the exponentiated quadratic $\ell_{eq}$ are shown, the rest of the parameters are fixed to $1$.</p>
+<p>Observe that increasing the lengthscale parameter $\ell_{eq}$ increases the periodic covariance over a longer lengthscale and keeps the repetitions close to each other more consistent.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot kernel matrix and samples of local periodic</span>
+
+<span class="n">nb_of_samples</span> <span class="o">=</span> <span class="mi">150</span>  <span class="c1"># Number of test points.</span>
+<span class="n">nb_of_realizations</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Number of function realizations</span>
+<span class="c1"># Generate input points</span>
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Start plotting</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+<span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span> <span class="n">wspace</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.4</span><span class="p">)</span>
+
+<span class="c1"># Plot first</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">get_local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">periodic_length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">local_length_scale</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell_</span><span class="si">{eq}</span><span class="s2">=1$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot second</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">get_local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">periodic_length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">local_length_scale</span><span class="o">=</span><span class="mf">0.5</span>
+<span class="p">)(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell_</span><span class="si">{eq}</span><span class="s2">=0.5$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot third</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">get_local_periodic_kernel</span><span class="p">(</span>
+    <span class="n">periodic_length_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">local_length_scale</span><span class="o">=</span><span class="mf">3.0</span>
+<span class="p">)(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"$</span><span class="se">\\</span><span class="s2">ell_</span><span class="si">{eq}</span><span class="s2">=3$"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">"Local periodic ($</span><span class="se">\\</span><span class="s2">sigma=1$, $</span><span class="se">\\</span><span class="s2">ell_p=1$, $p=1$)"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.99</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">left</span><span class="o">=</span><span class="mf">0.07</span><span class="p">,</span> <span class="n">bottom</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="mf">0.93</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mf">0.91</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Local-periodic kernel: sampled functions and covariance matrices for several local length scales."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Local-periodic kernel: sampled functions and covariance matrices for several local length scales." decoding="async" height="584" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0023-00-d9a1ef446327.svg" width="510"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Combining-kernels-by-addition">Combining kernels by addition<a class="anchor-link" href="#Combining-kernels-by-addition"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Kernels can be combined by adding them together. Adding kernels is an elementwise addition of their corresponding covariance matrices. This means that the covariances of the two added kernels will only have a low value if both of the covariances have a low value. The addition operation can thus be interpreted as an OR operation.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Atmospheric-CO%E2%82%82-kernel">Atmospheric CO₂ kernel<a class="anchor-link" href="#Atmospheric-CO%E2%82%82-kernel"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>An example of a kernel combined by addition is the kernel we fitted in our <a href="{% post_url /blog/gaussian_process/2019-01-06-gaussian-process-kernel-fitting %}">previous example</a> of fitting a Gaussian process on atmospheric CO₂ concentrations. This kernel needed to combine different characteristics of the data such as: long term smooth change in CO₂ levels, seasonality, and short to medium term irregularities.</p>
+<p>The final fitted model used a sum of the exponentiated quadratic kernel, local periodic kernel, and rational quadratic kernel, plus an observational-noise term on the diagonal. The hyperparameters were fitted on the data using a maximum likelihood method. We keep the fitted noise variance in <code>fitted_params</code> so the values match the previous post, but for the visualizations below we show the latent covariance kernel without adding the diagonal observational-noise term.</p>
+<p>The prior defined by this kernel with fitted hyperparameters is illustrated in the following figures. These figures will show some samples of the kernel and a visual representation of its covariance over different ranges of input.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Explore the kernel from the previous notebook</span>
+
+<span class="n">fitted_params</span><span class="p">:</span> <span class="n">FittedParams</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"smooth_amplitude"</span><span class="p">:</span> <span class="mf">124.3517</span><span class="p">,</span>
+    <span class="s2">"smooth_length_scale"</span><span class="p">:</span> <span class="mf">99.9925</span><span class="p">,</span>
+    <span class="s2">"periodic_amplitude"</span><span class="p">:</span> <span class="mf">2.2775</span><span class="p">,</span>
+    <span class="s2">"periodic_length_scale"</span><span class="p">:</span> <span class="mf">1.3713</span><span class="p">,</span>
+    <span class="s2">"periodic_period"</span><span class="p">:</span> <span class="mf">0.9998</span><span class="p">,</span>
+    <span class="s2">"periodic_local_length_scale"</span><span class="p">:</span> <span class="mf">99.0098</span><span class="p">,</span>
+    <span class="s2">"irregular_amplitude"</span><span class="p">:</span> <span class="mf">2.3398</span><span class="p">,</span>
+    <span class="s2">"irregular_length_scale"</span><span class="p">:</span> <span class="mf">1.6404</span><span class="p">,</span>
+    <span class="s2">"irregular_scale_mixture"</span><span class="p">:</span> <span class="mf">0.0073</span><span class="p">,</span>
+    <span class="s2">"observation_noise_variance"</span><span class="p">:</span> <span class="mf">0.0404</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_combined_kernel</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">FittedParams</span> <span class="o">=</span> <span class="n">fitted_params</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelFn</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Freeze fitted hyperparameters into the combined CO2 covariance."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">kernel</span><span class="p">(</span><span class="n">xa</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span> <span class="n">xb</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KernelMatrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Evaluate the configured combined covariance."""</span>
+        <span class="n">smooth</span> <span class="o">=</span> <span class="n">exponentiated_quadratic_kernel</span><span class="p">(</span>
+            <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+            <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+            <span class="n">amplitude</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">"smooth_amplitude"</span><span class="p">],</span>
+            <span class="n">length_scale</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">"smooth_length_scale"</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">local_periodic</span> <span class="o">=</span> <span class="n">get_local_periodic_kernel</span><span class="p">(</span>
+            <span class="n">periodic_length_scale</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">"periodic_length_scale"</span><span class="p">],</span>
+            <span class="n">period</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">"periodic_period"</span><span class="p">],</span>
+            <span class="n">amplitude</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">"periodic_amplitude"</span><span class="p">],</span>
+            <span class="n">local_length_scale</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">"periodic_local_length_scale"</span><span class="p">],</span>
+        <span class="p">)(</span><span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">)</span>
+        <span class="n">irregular</span> <span class="o">=</span> <span class="n">rational_quadratic_kernel</span><span class="p">(</span>
+            <span class="n">xa</span><span class="o">=</span><span class="n">xa</span><span class="p">,</span>
+            <span class="n">xb</span><span class="o">=</span><span class="n">xb</span><span class="p">,</span>
+            <span class="n">amplitude</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">"irregular_amplitude"</span><span class="p">],</span>
+            <span class="n">length_scale</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">"irregular_length_scale"</span><span class="p">],</span>
+            <span class="n">scale_mixture</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">"irregular_scale_mixture"</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">smooth</span> <span class="o">+</span> <span class="n">local_periodic</span> <span class="o">+</span> <span class="n">irregular</span>
+
+    <span class="k">return</span> <span class="n">kernel</span>
+
+
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[13]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot kernel matrix and samples of combined kernel</span>
+
+<span class="n">nb_of_samples</span> <span class="o">=</span> <span class="mi">150</span>  <span class="c1"># Number of test points.</span>
+
+<span class="c1"># Start plotting</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+<span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span> <span class="n">wspace</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+<span class="c1"># Plot first</span>
+<span class="n">nb_of_realizations</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">get_combined_kernel</span><span class="p">()(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"fitted kernel"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot second</span>
+<span class="n">nb_of_realizations</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">get_combined_kernel</span><span class="p">()(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"fitted kernel"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Plot third</span>
+<span class="n">nb_of_realizations</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="n">xlim</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">xlim</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">&Sigma;</span> <span class="o">=</span> <span class="n">get_combined_kernel</span><span class="p">()(</span><span class="n">xa</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">xb</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">sample_from_kernel</span><span class="p">(</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span> <span class="n">nb_of_samples</span><span class="o">=</span><span class="n">nb_of_samples</span><span class="p">,</span> <span class="n">nb_of_realizations</span><span class="o">=</span><span class="n">nb_of_realizations</span>
+<span class="p">)</span>
+<span class="n">plot_kernel</span><span class="p">(</span>
+    <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">covariance</span><span class="o">=</span><span class="n">&Sigma;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">"fitted kernel"</span><span class="p">,</span>
+    <span class="n">fig</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+    <span class="n">subplot_spec</span><span class="o">=</span><span class="n">gs</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+    <span class="n">xlim</span><span class="o">=</span><span class="n">xlim</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">"Combined kernel"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.97</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Combined fitted kernel: sampled functions and covariance matrices over increasing input ranges."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Combined fitted kernel: sampled functions and covariance matrices over increasing input ranges." decoding="async" height="538" loading="lazy" src="/images/notebook_outputs/gaussian_process/gaussian-process-kernels/figure-0027-00-9e588104e777.svg" width="494"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This post was the last part of a series on Gaussian processes:</p>
+<ol>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-05-gaussian-process-tutorial %}">Understanding Gaussian processes</a></li>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-06-gaussian-process-kernel-fitting %}">Fitting a kernel</a></li>
+<li><a href="{% post_url /blog/gaussian_process/2019-01-07-gaussian-process-kernels %}">Gaussian process kernels (this)</a></li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="References">References<a class="anchor-link" href="#References"><i class="fa-solid fa-sm fa-link"></i></a></h2><ol>
+<li><a href="http://www.gaussianprocess.org/gpml/chapters/RW4.pdf">Gaussian Processes for Machine Learning. Chapter 4: Covariance Functions</a> by Carl Edward Rasmussen and Christopher K. I. Williams.</li>
+<li><a href="https://www.cs.toronto.edu/~duvenaud/cookbook/">The Kernel Cookbook</a> by David Duvenaud.</li>
+<li><a href="http://gpss.cc/gpss15/talks/KernelDesign.pdf">Kernel Design</a> GP Summer School, Sheffield, September 2015. By Nicolas Durrande.</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python implementation: CPython
+Python version       : 3.13.12
+IPython version      : 9.13.0
+
+IPython   : 9.13.0
+jax       : 0.8.3
+matplotlib: 3.10.9
+numpy     : 2.4.4
+seaborn   : 0.13.2
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt"></div><div class="inner_cell"><div class="text_cell_render border-box-sizing rendered_html"><p>This post is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/gaussian_process/gaussian-process-kernels.ipynb">Link to the full IPython notebook file</a></p></div></div></div>

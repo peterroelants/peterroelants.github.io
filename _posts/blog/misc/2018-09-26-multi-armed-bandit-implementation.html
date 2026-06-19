@@ -1,0 +1,291 @@
+---
+layout: post
+title: Multi-armed bandit implementation
+description: How to implement a Bayesian multi-armed bandit model in Python, and use it to simulate an online test. The model is based on the beta distribution and Thompson sampling.
+tags:
+- Multi-Armed Bandit (MAB)
+- Thompson Sampling
+- A/B-testing
+- Beta Distribution
+- Notebook
+image: /images/social/2018-09-26-multi-armed-bandit-implementation-preview.png
+redirect_from:
+- /posts/multi-armed_bandit_implementation/
+- /posts/MultiArmBandit/
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Multi-armed-bandit-implementation">Multi-armed bandit implementation<a class="anchor-link" href="#Multi-armed-bandit-implementation"><i class="fa-solid fa-sm fa-link"></i></a></h1><p>In the <a href="https://en.wikipedia.org/wiki/Multi-armed_bandit">multi-armed bandit (MAB)</a> problem we try to maximise our gain over time by "gambling on slot-machines (or bandits)" that have different but unknown expected outcomes.</p>
+<p>The concept is typically used as an alternative to <a href="https://en.wikipedia.org/wiki/A/B_testing">A/B-testing</a> used in marketing research or website optimization. For example, testing which marketing email leads to the most newsletter signups, or which webshop design leads to the most sales.</p>
+<p>The benefit of viewing website optimization as a multi-armed bandit problem instead of an A/B-testing problem is that no pre-defined sample sizes are needed and the algorithm will start optimizing the outcome (e.g. click rate) from the beginning. While the A/B-test needs to run all predefined samples to make a conclusion.</p>
+<p>What follows will illustrate how to implement and solve a very simple multi-armed bandit problem with a probabilistic algorithm.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports</span>
+<span class="o">%</span><span class="k">matplotlib</span> inline
+<span class="o">%</span><span class="k">config</span> InlineBackend.figure_formats = ['svg']
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">stats</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s1">'darkgrid'</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Defining-the-bandit-experiment">Defining the bandit experiment<a class="anchor-link" href="#Defining-the-bandit-experiment"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>We will simulate 3 bandits with each an underlying probability of winning stored in <code>p_bandits</code>. The <code>pull(i)</code> method will "pull the arm" of bandit $i$ and randomly decides if the pull was a win (1) or not (0) based on the underlying probability.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define the multi-armed bandits</span>
+<span class="n">nb_bandits</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Number of bandits</span>
+<span class="c1"># True probability of winning for each bandit</span>
+<span class="n">p_bandits</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.45</span><span class="p">,</span> <span class="mf">0.55</span><span class="p">,</span> <span class="mf">0.60</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">pull</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Pull arm of bandit with index `i` and return 1 if win, </span>
+<span class="sd">    else return 0."""</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">p_bandits</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="mi">1</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Bayesian-interpretation">Bayesian interpretation<a class="anchor-link" href="#Bayesian-interpretation"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>Each pull of a specifc bandit will result in a win with a certain probability. The higher this probability the more likely pulling the arm of the bandit is going to result in a win. However we don't know what this probability is so we will have to model it based on our observations of a certain bandit resulting in a win or not. We are going to model the unkown probability with a parameter $\theta$. Based on oberving a single outcome $x$ we can model this as the distribution $P(\theta \mid x)$. Using <a href="https://en.wikipedia.org/wiki/Bayes%27_theorem">Bayes rule</a> we can write this as:</p>
+<p>$$
+P(\theta \mid x) = \frac{P(x \mid \theta)P(\theta)}{P(x)}
+$$</p>
+<p>$P(\theta \mid x)$ is called the posterior distribution of $\theta$ after observing $x$. We will be able to compute this via the likelihood $P(x \mid \theta)$ and prior $P(\theta)$. In this case the likelihood function $P(x \mid \theta)$ follows the <a href="https://en.wikipedia.org/wiki/Bernoulli_distribution">Bernoulli distribution</a>.</p>
+<h3 id="Beta-prior">Beta prior<a class="anchor-link" href="#Beta-prior"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>A good choice for the prior $P(\theta)$ would be the <a href="{% post_url /blog/ab_to_rl/2026-05-14-beta-distribution-probabilities %}">Beta distribution</a> since it is a <a href="https://en.wikipedia.org/wiki/Conjugate_prior#Discrete_distributions">conjugate prior</a> to the Bernoulli distribution.
+This means that if the likelihood function $P(x \mid \theta)$ is Bernoulli distributed and the prior distribution  $P(\theta)$ is Beta distributed then the posterior $P(\theta \mid x)$ will also Beta distributed. More specifically if the prior is $Beta(\alpha, \beta)$ then after observing a win $x=1$ the posterior would become $Beta(\alpha+1, \beta)$, or after observing a loss $x=0$ the posterior would become $Beta(\alpha, \beta+1)$ [<a href="#Further-readings">1</a>].</p>
+<p>This means that after every observation we can use the posterior as the prior for the next time we pull the bandit's arm.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Maximize-reward-/-Minimize-regret">Maximize reward / Minimize regret<a class="anchor-link" href="#Maximize-reward-/-Minimize-regret"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The goal of the muli-armed bandit problem is to maximize reward (minimize regret). There is an exploitation-exploration tradeoff we have to make here. The more we pull the arm of our percieved best bandit the more certain we become of the probability of that bandit. But other bandits that we haven't pulled that often might have a lower expected probability but with higher uncertaintly. There is a chance that they are actually better than our percieved best bandit.</p>
+<p>We will use <a href="https://en.wikipedia.org/wiki/Thompson_sampling">Thompson sampling</a> to overcome this problem. In Thompson sampling we will for each bandit sample the probability $\theta$ from the prior and pull the bandit with the highest sampled probability. And repeat this step until finished.</p>
+<p>We will start with the prior $Beta(\alpha=1, \beta=1)$, which corresponds to a <a href="https://en.wikipedia.org/wiki/Uniform_distribution_%28continuous%29">uniform</a> prior between 0 and 1. The run is simulated for 1000 steps and the results at certain steps are plotted below.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define plotting functions</span>
+<span class="c1"># Iterations to plot</span>
+<span class="n">plots</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mi">1000</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">plot</span><span class="p">(</span><span class="n">priors</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">ax</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Plot the priors for the current step."""</span>
+    <span class="n">plot_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.001</span><span class="p">,</span> <span class="mf">.999</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">prior</span> <span class="ow">in</span> <span class="n">priors</span><span class="p">:</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">prior</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">plot_x</span><span class="p">)</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">plot_x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">plot_x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">bottom</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">'Priors at step </span><span class="si">{</span><span class="n">step</span><span class="si">:</span><span class="s1">d</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Simulate multi-armed bandit process and update posteriors</span>
+
+<span class="c1"># Setup plot</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">axs</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+<span class="n">axs</span> <span class="o">=</span> <span class="n">axs</span><span class="o">.</span><span class="n">flat</span>
+
+<span class="c1"># The number of trials and wins will represent the prior for each</span>
+<span class="c1">#  bandit with the help of the Beta distribution.</span>
+<span class="n">trials</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c1"># Number of times we tried each bandit</span>
+<span class="n">wins</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c1"># Number of wins for each bandit</span>
+
+<span class="n">n</span> <span class="o">=</span> <span class="mi">1000</span>
+<span class="c1"># Run the trail for `n` steps</span>
+<span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">):</span>
+    <span class="c1"># Define the prior based on current observations</span>
+    <span class="n">bandit_priors</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">stats</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">1</span><span class="o">+</span><span class="n">w</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">1</span><span class="o">+</span><span class="n">t</span><span class="o">-</span><span class="n">w</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">trials</span><span class="p">,</span> <span class="n">wins</span><span class="p">)]</span>
+    <span class="c1"># plot prior </span>
+    <span class="k">if</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">plots</span><span class="p">:</span>
+        <span class="n">plot</span><span class="p">(</span><span class="n">bandit_priors</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="nb">next</span><span class="p">(</span><span class="n">axs</span><span class="p">))</span>
+    <span class="c1"># Sample a probability theta for each bandit</span>
+    <span class="n">theta_samples</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">d</span><span class="o">.</span><span class="n">rvs</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">bandit_priors</span>
+    <span class="p">]</span>
+    <span class="c1"># choose a bandit</span>
+    <span class="n">chosen_bandit</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">theta_samples</span><span class="p">)</span>
+    <span class="c1"># Pull the bandit</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">pull</span><span class="p">(</span><span class="n">chosen_bandit</span><span class="p">)</span>
+    <span class="c1"># Update trials and wins (defines the posterior)</span>
+    <span class="n">trials</span><span class="p">[</span><span class="n">chosen_bandit</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="n">wins</span><span class="p">[</span><span class="n">chosen_bandit</span><span class="p">]</span> <span class="o">+=</span> <span class="n">x</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">fig</span><span class="p">,</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Beta posterior densities for three bandit arms at selected Thompson-sampling steps."</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Beta posterior densities for three bandit arms at selected Thompson-sampling steps." decoding="async" height="713" loading="lazy" src="/images/notebook_outputs/misc/multi-armed-bandit-implementation/figure-0007-00-210f6743a38b.svg" width="568"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Print final outcome and number of test needed per bandit</span>
+<span class="n">emperical_p_bandits</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">1</span><span class="o">+</span><span class="n">w</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span><span class="o">+</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">trials</span><span class="p">,</span> <span class="n">wins</span><span class="p">)]</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_bandits</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">((</span><span class="sa">f</span><span class="s1">'True prob=</span><span class="si">{</span><span class="n">p_bandits</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">;  '</span>
+           <span class="sa">f</span><span class="s1">'Emperical prob=</span><span class="si">{</span><span class="n">emperical_p_bandits</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">;  '</span>
+           <span class="sa">f</span><span class="s1">'Trials=</span><span class="si">{</span><span class="n">trials</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">:</span><span class="s1">d</span><span class="si">}</span><span class="s1">'</span><span class="p">))</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>True prob=0.45;  Emperical prob=0.43;  Trials=43
+True prob=0.55;  Emperical prob=0.47;  Trials=82
+True prob=0.60;  Emperical prob=0.60;  Trials=875
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Note above that the algorithm quickly converges to select the bandit with the highest probability of winning. After 1000 iterations it has chosen the winning bandit 10 times more often than one of the other bandits.
+See the further readings below if you want to know how to compute the probability that the winning bandit is better than the others [<a href="#Further-readings">2</a>].</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Update">Update<a class="anchor-link" href="#Update"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>To explore multi-armed bandits in the context of A/B testing and reinforcement learning, see the newer three-part From A/B to RL series:</p>
+<ol>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_01_bayesian_ab_testing %}">From A/B to RL (1/3): Bayesian A/B Testing</a></li>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_02_multi_armed_bandits %}">From A/B to RL (2/3): Bandits and Thompson Sampling</a></li>
+<li><a href="{% post_url /blog/from_ab_to_rl/2026-06-15-post_03_delayed_feedback_menace %}">From A/B to RL (3/3): MENACE and Delayed Rewards</a></li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Further-readings">Further readings<a class="anchor-link" href="#Further-readings"><i class="fa-solid fa-sm fa-link"></i></a></h2><ol>
+<li><a href="http://varianceexplained.org/statistics/beta_distribution_and_baseball/">Understanding the beta distribution (using baseball statistics)</a> - David Robinson</li>
+<li><a href="http://www.evanmiller.org/bayesian-ab-testing.html">Formulas for Bayesian A/B Testing</a> - Evan Miller</li>
+<li><a href="{% post_url /blog/ab_to_rl/2026-05-14-beta-distribution-probabilities %}">Build intuition for the Beta distribution</a></li>
+<li><a href="{% post_url /blog/ab_to_rl/2026-05-17-beta-prior-sequential-binary-decisions %}">Beta Priors and P&oacute;lya Urns for Binary Decisions</a></li>
+</ol>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python implementation: CPython
+Python version       : 3.13.12
+IPython version      : 9.14.1
+
+IPython   : 9.14.1
+matplotlib: 3.11.0
+numpy     : 2.4.6
+scipy     : 1.17.1
+seaborn   : 0.13.2
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt"></div><div class="inner_cell"><div class="text_cell_render border-box-sizing rendered_html"><p>This post is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/misc/multi-armed-bandit-implementation.ipynb">Link to the full IPython notebook file</a></p></div></div></div>

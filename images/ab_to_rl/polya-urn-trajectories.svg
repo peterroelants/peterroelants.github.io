@@ -1,0 +1,286 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" role="img" aria-labelledby="polya-path-title polya-path-description">
+  <title id="polya-path-title">How repeated Pólya urn draws create paths and an endpoint distribution</title>
+  <desc id="polya-path-description">A small example starts with two red and five blue balls and follows every possible urn state over three reinforced draws. Blue draws branch left and red draws branch right. Paths with the same red and blue counts merge. The four final red ratios, 0.20, 0.30, 0.40, and 0.50, form a histogram with probabilities about 42, 36, 18, and 5 percent.</desc>
+
+  <defs>
+    <marker id="path-arrow-ink" viewBox="0 0 12 12" refX="7.5" refY="6" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0.5 0.75 L 11.5 6 L 0.5 11.25 Z" fill="#53616c"/>
+    </marker>
+    <marker id="path-arrow-red" viewBox="0 0 12 12" refX="7.5" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0.5 0.75 L 11.5 6 L 0.5 11.25 Z" fill="#c44e52"/>
+    </marker>
+    <marker id="path-arrow-blue" viewBox="0 0 12 12" refX="7.5" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0.5 0.75 L 11.5 6 L 0.5 11.25 Z" fill="#4c72b0"/>
+    </marker>
+    <filter id="path-ball-shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#18232d" flood-opacity="0.2"/>
+    </filter>
+    <g id="mini-urn-body">
+      <path d="M 5 10 C 8 23 10 48 18 59 C 28 70 62 70 72 59 C 80 48 82 23 85 10 Z" fill="#f2eadf"/>
+    </g>
+    <g id="mini-urn-outline">
+      <path d="M 5 10 C 8 23 10 48 18 59 C 28 70 62 70 72 59 C 80 48 82 23 85 10" fill="none" stroke="#53616c" stroke-width="3" stroke-linecap="round"/>
+      <ellipse cx="45" cy="10" rx="40" ry="8" fill="#e6dbcc" stroke="#53616c" stroke-width="3"/>
+      <path d="M 10 11 Q 45 21 80 11" fill="none" stroke="#9b8e7c" stroke-width="1.4"/>
+    </g>
+  </defs>
+
+  <rect x="1" y="1" width="1198" height="778" rx="20" fill="#ffffff" stroke="#d9dee2" stroke-width="2"/>
+
+  <!-- Step headings. -->
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="700" fill="#26343e">
+    <circle cx="60" cy="58" r="23" fill="#26343e"/>
+    <text x="60" y="66" text-anchor="middle" font-size="21" fill="#ffffff">1</text>
+    <text x="96" y="65" font-size="20" letter-spacing="0.7">SET UP</text>
+
+    <circle cx="320" cy="58" r="23" fill="#26343e"/>
+    <text x="320" y="66" text-anchor="middle" font-size="21" fill="#ffffff">2</text>
+    <text x="356" y="65" font-size="20" letter-spacing="0.7">BRANCH OVER REPEATED DRAWS</text>
+
+    <circle cx="894" cy="58" r="23" fill="#26343e"/>
+    <text x="894" y="66" text-anchor="middle" font-size="21" fill="#ffffff">3</text>
+    <text x="930" y="65" font-size="20" letter-spacing="0.7">COUNT ENDPOINTS</text>
+  </g>
+
+  <!-- Setup panel. -->
+  <rect x="34" y="101" width="234" height="600" rx="18" fill="#f8f7f5" stroke="#d9dee2" stroke-width="2"/>
+  <text x="151" y="137" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="750" fill="#53616c" letter-spacing="0.7">SMALL EXAMPLE</text>
+
+  <g>
+    <path d="M 70 204 C 75 238 80 347 94 379 C 107 407 195 407 208 379 C 222 347 227 238 232 204 Z" fill="#f2eadf"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="111" cy="356" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+      <circle cx="151" cy="356" r="16" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+      <circle cx="191" cy="356" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+      <circle cx="126" cy="321" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+      <circle cx="171" cy="321" r="16" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+      <circle cx="137" cy="286" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+      <circle cx="177" cy="286" r="16" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+    </g>
+    <path d="M 70 204 C 75 238 80 347 94 379 C 107 407 195 407 208 379 C 222 347 227 238 232 204" fill="none" stroke="#53616c" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="151" cy="204" rx="81" ry="20" fill="#e6dbcc" stroke="#53616c" stroke-width="5"/>
+    <path d="M 79 207 Q 151 229 223 207" fill="none" stroke="#9b8e7c" stroke-width="2.5"/>
+  </g>
+
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="700">
+    <circle cx="77" cy="448" r="11" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+    <text x="98" y="455" fill="#963b3f">α = 2 red</text>
+    <circle cx="77" cy="490" r="11" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+    <text x="98" y="497" fill="#385989">β = 5 blue</text>
+  </g>
+  <rect x="66" y="531" width="170" height="44" rx="22" fill="#ffffff" stroke="#b9c0c6" stroke-width="2"/>
+  <text x="151" y="559" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="700" fill="#26343e">T = 3 draws</text>
+  <text x="151" y="615" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" fill="#5b6670">
+    <tspan x="151">The app lets α, β,</tspan>
+    <tspan x="151" dy="23">and T vary.</tspan>
+  </text>
+
+  <!-- Translate the physical urn into a path-map state. -->
+  <path d="M 250 285 C 282 285 282 176 521 176" fill="none" stroke="#53616c" stroke-width="4" stroke-linecap="round" marker-end="url(#path-arrow-ink)"/>
+
+  <!-- Lattice guides and labels. -->
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="294" y="117" font-size="15" font-weight="700" fill="#5b6670">DRAW COUNT</text>
+    <g font-size="17" font-weight="700" fill="#53616c" text-anchor="middle">
+      <circle cx="303" cy="176" r="20" fill="#eef1f3"/><text x="303" y="182">0</text>
+      <circle cx="303" cy="304" r="20" fill="#eef1f3"/><text x="303" y="310">1</text>
+      <circle cx="303" cy="432" r="20" fill="#eef1f3"/><text x="303" y="438">2</text>
+      <circle cx="303" cy="560" r="20" fill="#eef1f3"/><text x="303" y="566">3</text>
+    </g>
+    <g font-size="15" font-weight="750" letter-spacing="0.5">
+      <path d="M 455 105 L 427 127" fill="none" stroke="#4c72b0" stroke-width="3.5" stroke-linecap="round" marker-end="url(#path-arrow-blue)"/>
+      <text x="465" y="108" fill="#385989">BLUE DRAW</text>
+      <path d="M 675 105 L 703 127" fill="none" stroke="#c44e52" stroke-width="3.5" stroke-linecap="round" marker-end="url(#path-arrow-red)"/>
+      <text x="665" y="108" text-anchor="end" fill="#963b3f">RED DRAW</text>
+    </g>
+  </g>
+
+  <!-- Branches, drawn behind the urn states. -->
+  <g fill="none" stroke-width="3.5" stroke-linecap="round" opacity="0.9">
+    <path d="M 575 219 C 564 243 535 252 513 262" stroke="#4c72b0" marker-end="url(#path-arrow-blue)"/>
+    <path d="M 575 219 C 586 243 615 252 637 262" stroke="#c44e52" marker-end="url(#path-arrow-red)"/>
+
+    <path d="M 513 347 C 502 371 473 380 451 390" stroke="#4c72b0" marker-end="url(#path-arrow-blue)"/>
+    <path d="M 513 347 C 524 371 553 380 575 390" stroke="#c44e52" marker-end="url(#path-arrow-red)"/>
+    <path d="M 637 347 C 626 371 597 380 575 390" stroke="#4c72b0" marker-end="url(#path-arrow-blue)"/>
+    <path d="M 637 347 C 648 371 677 380 699 390" stroke="#c44e52" marker-end="url(#path-arrow-red)"/>
+
+    <path d="M 451 475 C 440 499 411 508 389 518" stroke="#4c72b0" marker-end="url(#path-arrow-blue)"/>
+    <path d="M 451 475 C 462 499 491 508 513 518" stroke="#c44e52" marker-end="url(#path-arrow-red)"/>
+    <path d="M 575 475 C 564 499 535 508 513 518" stroke="#4c72b0" marker-end="url(#path-arrow-blue)"/>
+    <path d="M 575 475 C 586 499 615 508 637 518" stroke="#c44e52" marker-end="url(#path-arrow-red)"/>
+    <path d="M 699 475 C 688 499 659 508 637 518" stroke="#4c72b0" marker-end="url(#path-arrow-blue)"/>
+    <path d="M 699 475 C 710 499 739 508 761 518" stroke="#c44e52" marker-end="url(#path-arrow-red)"/>
+  </g>
+
+  <!-- t = 0: 2 red, 5 blue. -->
+  <g transform="translate(530 135)">
+    <rect x="-8" y="-8" width="106" height="100" rx="14" fill="#ffffff" stroke="#d9dee2" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#4c72b0"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#4c72b0"/><circle cx="45" cy="43" r="5" fill="#c44e52"/><circle cx="61" cy="43" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">2 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">5 blue</tspan></text>
+  </g>
+
+  <!-- t = 1 states. -->
+  <g transform="translate(468 263)">
+    <rect x="-8" y="-8" width="106" height="100" rx="14" fill="#ffffff" stroke="#d9dee2" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#4c72b0"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#4c72b0"/><circle cx="45" cy="43" r="5" fill="#c44e52"/><circle cx="61" cy="43" r="5" fill="#4c72b0"/><circle cx="45" cy="32" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">2 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">6 blue</tspan></text>
+  </g>
+  <g transform="translate(592 263)">
+    <rect x="-8" y="-8" width="106" height="100" rx="14" fill="#ffffff" stroke="#d9dee2" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#c44e52"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#4c72b0"/><circle cx="45" cy="43" r="5" fill="#c44e52"/><circle cx="61" cy="43" r="5" fill="#4c72b0"/><circle cx="45" cy="32" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">3 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">5 blue</tspan></text>
+  </g>
+
+  <!-- t = 2 states. -->
+  <g transform="translate(406 391)">
+    <rect x="-8" y="-8" width="106" height="100" rx="14" fill="#ffffff" stroke="#d9dee2" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#4c72b0"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#4c72b0"/><circle cx="45" cy="43" r="5" fill="#c44e52"/><circle cx="61" cy="43" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="32" r="5" fill="#4c72b0"/><circle cx="61" cy="32" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">2 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">7 blue</tspan></text>
+  </g>
+  <g transform="translate(530 391)">
+    <rect x="-8" y="-8" width="106" height="100" rx="14" fill="#ffffff" stroke="#d9dee2" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#c44e52"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#4c72b0"/><circle cx="45" cy="43" r="5" fill="#c44e52"/><circle cx="61" cy="43" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="32" r="5" fill="#4c72b0"/><circle cx="61" cy="32" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">3 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">6 blue</tspan></text>
+  </g>
+  <g transform="translate(654 391)">
+    <rect x="-8" y="-8" width="106" height="100" rx="14" fill="#ffffff" stroke="#d9dee2" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#c44e52"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#c44e52"/><circle cx="45" cy="43" r="5" fill="#4c72b0"/><circle cx="61" cy="43" r="5" fill="#c44e52"/>
+      <circle cx="29" cy="32" r="5" fill="#4c72b0"/><circle cx="61" cy="32" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">4 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">5 blue</tspan></text>
+  </g>
+
+  <!-- t = 3 endpoint states. -->
+  <g transform="translate(344 519)">
+    <rect x="-8" y="-8" width="106" height="104" rx="14" fill="#f0f3f9" stroke="#bdcae0" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#4c72b0"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#4c72b0"/><circle cx="45" cy="43" r="5" fill="#c44e52"/><circle cx="61" cy="43" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="32" r="5" fill="#4c72b0"/><circle cx="45" cy="32" r="5" fill="#4c72b0"/><circle cx="61" cy="32" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">2 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">8 blue</tspan></text>
+  </g>
+  <g transform="translate(468 519)">
+    <rect x="-8" y="-8" width="106" height="104" rx="14" fill="#f5f3f6" stroke="#d2c8d2" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#c44e52"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#4c72b0"/><circle cx="45" cy="43" r="5" fill="#c44e52"/><circle cx="61" cy="43" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="32" r="5" fill="#4c72b0"/><circle cx="45" cy="32" r="5" fill="#4c72b0"/><circle cx="61" cy="32" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">3 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">7 blue</tspan></text>
+  </g>
+  <g transform="translate(592 519)">
+    <rect x="-8" y="-8" width="106" height="104" rx="14" fill="#f8f2f3" stroke="#ddc6c9" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#c44e52"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#c44e52"/><circle cx="45" cy="43" r="5" fill="#4c72b0"/><circle cx="61" cy="43" r="5" fill="#c44e52"/>
+      <circle cx="29" cy="32" r="5" fill="#4c72b0"/><circle cx="45" cy="32" r="5" fill="#4c72b0"/><circle cx="61" cy="32" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">4 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">6 blue</tspan></text>
+  </g>
+  <g transform="translate(716 519)">
+    <rect x="-8" y="-8" width="106" height="104" rx="14" fill="#fbf1f1" stroke="#e4bfc1" stroke-width="2"/>
+    <use href="#mini-urn-body"/>
+    <g filter="url(#path-ball-shadow)">
+      <circle cx="22" cy="54" r="5" fill="#c44e52"/><circle cx="37" cy="54" r="5" fill="#4c72b0"/><circle cx="52" cy="54" r="5" fill="#c44e52"/><circle cx="67" cy="54" r="5" fill="#4c72b0"/>
+      <circle cx="29" cy="43" r="5" fill="#c44e52"/><circle cx="45" cy="43" r="5" fill="#4c72b0"/><circle cx="61" cy="43" r="5" fill="#c44e52"/>
+      <circle cx="29" cy="32" r="5" fill="#4c72b0"/><circle cx="45" cy="32" r="5" fill="#c44e52"/><circle cx="61" cy="32" r="5" fill="#4c72b0"/>
+    </g>
+    <use href="#mini-urn-outline"/>
+    <text x="45" y="85" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700"><tspan fill="#963b3f">5 red</tspan><tspan fill="#53616c"> / </tspan><tspan fill="#385989">5 blue</tspan></text>
+  </g>
+
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" text-anchor="middle">
+    <text x="389" y="649" font-size="15" font-weight="700" fill="#53616c">ratio 0.20</text>
+    <text x="513" y="649" font-size="15" font-weight="700" fill="#53616c">ratio 0.30</text>
+    <text x="637" y="649" font-size="15" font-weight="700" fill="#53616c">ratio 0.40</text>
+    <text x="761" y="649" font-size="15" font-weight="700" fill="#53616c">ratio 0.50</text>
+  </g>
+
+  <!-- Endpoint histogram. -->
+  <rect x="884" y="101" width="282" height="600" rx="18" fill="#fafbfc" stroke="#d9dee2" stroke-width="2"/>
+
+  <!-- Shared endpoint connector. -->
+  <path d="M 389 660 V 670 H 761 V 660" fill="none" stroke="#53616c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 761 670 H 849 Q 866 670 866 653 V 359 Q 866 344 881 344 H 891" fill="none" stroke="#53616c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#path-arrow-ink)"/>
+  <text x="856" y="696" text-anchor="end" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="700" fill="#53616c">simulate many trajectories</text>
+
+  <text x="1025" y="143" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="750" fill="#26343e" letter-spacing="0.5">WHERE TRAJECTORIES END</text>
+  <text x="1025" y="169" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" fill="#5b6670">after three draws</text>
+
+  <g stroke="#dfe3e6" stroke-width="1.5">
+    <line x1="926" y1="591" x2="1143" y2="591"/>
+    <line x1="926" y1="453" x2="1143" y2="453"/>
+    <line x1="926" y1="315" x2="1143" y2="315"/>
+  </g>
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" fill="#69747d" text-anchor="end">
+    <text x="919" y="596">0%</text>
+    <text x="919" y="458">20%</text>
+    <text x="919" y="320">40%</text>
+  </g>
+  <line x1="926" y1="208" x2="926" y2="591" stroke="#7b858d" stroke-width="2"/>
+  <line x1="926" y1="591" x2="1143" y2="591" stroke="#7b858d" stroke-width="2"/>
+
+  <g>
+    <rect x="937" y="303" width="38" height="288" rx="4" fill="#4c72b0" stroke="#385989" stroke-width="2"/>
+    <rect x="991" y="344" width="38" height="247" rx="4" fill="#7180a4" stroke="#536687" stroke-width="2"/>
+    <rect x="1045" y="468" width="38" height="123" rx="4" fill="#a86879" stroke="#825161" stroke-width="2"/>
+    <rect x="1099" y="558" width="38" height="33" rx="4" fill="#c44e52" stroke="#963b3f" stroke-width="2"/>
+  </g>
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="750" fill="#26343e" text-anchor="middle">
+    <text x="956" y="291">41.7%</text>
+    <text x="1010" y="332">35.7%</text>
+    <text x="1064" y="456">17.9%</text>
+    <text x="1118" y="546">4.8%</text>
+  </g>
+  <g font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#53616c" text-anchor="middle">
+    <text x="956" y="616">0.20</text>
+    <text x="1010" y="616">0.30</text>
+    <text x="1064" y="616">0.40</text>
+    <text x="1118" y="616">0.50</text>
+    <text x="1035" y="649" font-size="16">final red ratio</text>
+  </g>
+  <text x="1025" y="681" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" fill="#5b6670">bar height ≈ share of simulated paths</text>
+
+  <text x="58" y="744" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" fill="#53616c">
+    Paths that reach the same urn counts merge; the app aggregates their segments and counts their final ratios.
+  </text>
+</svg>

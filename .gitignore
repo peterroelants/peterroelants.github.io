@@ -1,0 +1,36 @@
+# Site gen
+_site
+.sass-cache
+.jekyll-metadata
+
+# Media
+*.mp4
+# Notebook conversion publishes small media assets under this directory.
+!images/notebook_outputs/**/*.mp4
+
+# Python
+*.pyc
+__pycache__
+.uv-cache/
+# IDE
+.idea/*
+# Notebooks
+*.ipynb_checkpoints*
+# Mypy
+.mypy_cache/
+
+# Venv
+.venv/
+
+# Ruby/Bundler (local installs and config)
+.bundle/
+vendor/
+
+# Node/NPM (local installs and config)
+node_modules/
+test-results/
+playwright-report/
+
+# Jekyll (local installs and config)
+.jekyll-cache/
+.jekyll-metadata

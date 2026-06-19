@@ -1,0 +1,36 @@
+<!-- MathJax 4.1.3, including the locally hosted New Computer Modern font. -->
+<script>
+    MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$','$$'], ["\\[","\\]"]],
+          processEscapes: true,
+          processEnvironments: true,
+          processRefs: true,
+          packages: { '[+]': ['noerrors', 'noundefined'] }
+        },
+        loader: {
+          logLevel: 0,
+          loadMessages: false,
+          load: ['[tex]/noerrors']
+        },
+        options: {
+          skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        },
+        output: {
+            font: 'mathjax-newcm',
+            fontPath: '[mathjax]/output/fonts/mathjax-newcm'
+        },
+        startup: {
+            // Bokeh 3.x still calls the MathJax 3 loader API name.
+            ready() {
+                MathJax.loader.preLoad = MathJax.loader.preLoaded.bind(MathJax.loader);
+                MathJax.startup.defaultReady();
+            }
+        },
+        chtml: {
+            displayAlign: 'center',
+        }
+      };
+</script>
+<script id="MathJax-script" async src="/mathjax/tex-chtml.js"></script>

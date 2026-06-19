@@ -1,0 +1,14 @@
+# Install with:
+# conda env create --file ./conda_env.yml && conda activate cross_entropy_blogpost
+# Remove with:
+# conda deactivate && conda remove --name cross_entropy_blogpost --all
+name: cross_entropy_blogpost
+channels:
+  - conda-forge
+dependencies:
+  - matplotlib=3.4.2
+  - notebook=6.3.0
+  - numpy=1.20.2
+  - python=3.9.4
+  - seaborn=0.11.1
+  - watermark=2.2.0

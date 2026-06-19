@@ -1,0 +1,494 @@
+---
+layout: post
+title: 'Neural network from scratch (2/5): Classification'
+description: How to implement, and optimize, a logistic regression model from scratch using Python and NumPy. The logistic regression model will be approached as a minimal classification neural network. The model will be optimized using gradient descent, for which the gradient derivations are provided.
+tags:
+- Neural Networks
+- Machine Learning
+- NumPy
+- Classification
+- Logistic Regression
+- Cross-Entropy
+- Gradient Descent
+- Notebook
+image: /images/social/2015-06-13-neural-network-implementation-part02-preview.png
+---
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Neural-network-from-scratch-(2/5):-Classification">Neural network from scratch (2/5): Classification<a class="anchor-link" href="#Neural-network-from-scratch-(2/5):-Classification"><i class="fa-solid fa-sm fa-link"></i></a></h1>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This second part will cover the logistic classification model, how to implement and fit it in Python and NumPy, and how to train the model on example data.</p>
+<p>While the <a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">previous section</a> described a very simple one-input-one-output linear regression model, this tutorial will describe a binary classification neural network with two input dimensions. This model is also known in statistics as the <a href="http://en.wikipedia.org/wiki/Logistic_regression">logistic regression</a> model. The logistic regression model will be approached as a minimal classification neural network. The model will be optimized using gradient descent, for which the gradient derivations are provided.</p>
+<p>This network can be represented graphically as:</p>
+<p><img alt="Image of the classification network" decoding="async" height="148" loading="lazy" src="/images/neural_net_implementation/SimpleANN02.png" width="332"/></p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This is the second part of a 5-part tutorial on how to implement neural networks from scratch in Python:</p>
+<ul>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">Part 1: Gradient descent</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-13-neural-network-implementation-part02 %}">Part 2: Classification (this)</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-14-neural-network-implementation-part03 %}">Part 3: Backpropagation</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-15-neural-network-implementation-part04 %}">Part 4: Vectorization</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-16-neural-network-implementation-part05 %}">Part 5: Multiple layers</a></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Imports</span>
+<span class="o">%</span><span class="k">matplotlib</span> inline
+<span class="o">%</span><span class="k">config</span> InlineBackend.figure_formats = ['svg']
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>  <span class="c1"># Matrix and vector computation package</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>  <span class="c1"># Plotting library</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">cm</span> <span class="c1"># Colormaps</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.colors</span><span class="w"> </span><span class="kn">import</span> <span class="n">colorConverter</span><span class="p">,</span> <span class="n">ListedColormap</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">seaborn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sns</span>  <span class="c1"># Fancier plots</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+
+<span class="c1"># Set seaborn plotting style</span>
+<span class="n">sns</span><span class="o">.</span><span class="n">set_style</span><span class="p">(</span><span class="s1">'darkgrid'</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">display_figure</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">alt_text</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Display a Matplotlib figure with accessible alternative text."""</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"alt"</span><span class="p">:</span> <span class="n">alt_text</span><span class="p">})</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+<span class="c1"># Set the seed for reproducability</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Define-the-class-distributions">Define the class distributions<a class="anchor-link" href="#Define-the-class-distributions"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>In this example the target classes $t$ will be generated from 2 class distributions: blue circles ($t=1$) and red stars ($t=0$). Samples from both classes are sampled from their respective distributions. These samples are plotted in the figure below.
+Note that $\mathbf{t}$ is a $N \times 1$ vector of target values $t_i$, and $X$ is a corresponding $N \times 2$ matrix of individual input samples $[x_{ai}, x_{bi}]$. In what follows we will also sometimes refer to the $i$-th sample of $X$ as $\mathbf{x}_i$ which is a vector of size $2$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define and generate the samples</span>
+<span class="n">nb_of_samples_per_class</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c1"># The number of sample in each class</span>
+<span class="n">red_mean</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">)</span>  <span class="c1"># The mean of the red class</span>
+<span class="n">blue_mean</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">)</span>  <span class="c1"># The mean of the blue class</span>
+<span class="c1"># Generate samples from both classes</span>
+<span class="n">x_red</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">red_mean</span>
+<span class="n">x_blue</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>  <span class="o">+</span> <span class="n">blue_mean</span>
+
+<span class="c1"># Merge samples in set of input variables x, and corresponding </span>
+<span class="c1"># set of output variables t</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">x_red</span><span class="p">,</span> <span class="n">x_blue</span><span class="p">))</span>
+<span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span><span class="mi">1</span><span class="p">)),</span>
+               <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">nb_of_samples_per_class</span><span class="p">,</span><span class="mi">1</span><span class="p">))))</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot both classes on the x1, x2 plane</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_red</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_red</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'r*'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'class: red star'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_blue</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_blue</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'bo'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'class: blue circle'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$x_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">([</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'red star vs. blue circle classes in the input space'</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">gcf</span><span class="p">(),</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Blue-circle and red-star samples in the two-dimensional input space."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Blue-circle and red-star samples in the two-dimensional input space." decoding="async" height="283" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part02/figure-0006-00-a225a34e4741.svg" width="386"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Logistic-function-and-cross-entropy-loss-function">Logistic function and cross-entropy loss function<a class="anchor-link" href="#Logistic-function-and-cross-entropy-loss-function"><i class="fa-solid fa-sm fa-link"></i></a></h2><h3 id="Logistic-function">Logistic function<a class="anchor-link" href="#Logistic-function"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The goal is to predict the target class $t_i$ from the input values $\mathbf{x}_i$. The network is defined as having an input $\mathbf{x}_i = [x_{ai}, x_{bi}]$ which gets transformed by the weights $\mathbf{w} = [w_a, w_b]$ to generate the probability that sample $\mathbf{x}_i$ belongs to class $t_i = 1$. This probability $P(t_i=1| \mathbf{x}_i,\mathbf{w})$ is represented by the output $y_i$ of the network computed as $y_i = \sigma(\mathbf{x}_i \cdot \mathbf{w}^T)$. $\sigma$ is the <a href="http://en.wikipedia.org/wiki/Logistic_function">logistic function</a> and is defined as:
+$$ \sigma(z) = \frac{1}{1+e^{-z}} $$</p>
+<p>The logistic function is implemented below by the <code>logistic(z)</code> method below.</p>
+<h3 id="Cross-entropy-loss-function">Cross-entropy loss function<a class="anchor-link" href="#Cross-entropy-loss-function"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>The loss function used to optimize the classification is the <a href="http://en.wikipedia.org/wiki/Cross_entropy">cross-entropy error function</a>. And is defined for sample $i$ as:</p>
+<p>$$ \xi(t_i,y_i) = -t_i log(y_i) - (1-t_i)log(1-y_i) $$</p>
+<p>Which will give $\xi(t,y) = - \frac{1}{N} \sum_{i=1}^{n} \left[ t_i log(y_i) + (1-t_i)log(1-y_i) \right]$ if we average over all $N$ samples.</p>
+<p>The loss function is implemented below by the <code>loss(y, t)</code> method, and its output with respect to the parameters $\mathbf{w}$ over all samples $X$ is plotted in the figure below.</p>
+<p>The neural network output is implemented by the <code>nn(x, w)</code> method, and the neural network prediction by the <code>nn_predict(x,w)</code> method.</p>
+<p>The logistic function with the cross-entropy loss function and the derivatives are explained in detail in the tutorial on the <a href="{% post_url /blog/cross_entropy/2015-06-10-cross-entropy-logistic %}">logistic classification with cross-entropy</a>.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Define the logistic function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">logistic</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mf">1.</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">))</span>
+
+<span class="c1"># Define the neural network function y = 1 / (1 + numpy.exp(-x*w))</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">logistic</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">T</span><span class="p">))</span>
+
+<span class="c1"># Define the neural network prediction function that only returns</span>
+<span class="c1">#  1 or 0 depending on the predicted class</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">nn_predict</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">w</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">around</span><span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">w</span><span class="p">))</span>
+
+<span class="c1"># Define the loss function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">loss</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+    <span class="k">return</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">y</span><span class="p">))</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">((</span><span class="mi">1</span><span class="o">-</span><span class="n">t</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">y</span><span class="p">)))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the loss in function of the weights</span>
+<span class="c1"># Define a vector of weights for which we want to plot the loss</span>
+<span class="n">nb_of_ws</span> <span class="o">=</span> <span class="mi">25</span> <span class="c1"># compute the loss nb_of_ws times in each dimension</span>
+<span class="n">wsa</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c1"># weight a</span>
+<span class="n">wsb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_ws</span><span class="p">)</span> <span class="c1"># weight b</span>
+<span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">wsa</span><span class="p">,</span> <span class="n">wsb</span><span class="p">)</span> <span class="c1"># generate grid</span>
+<span class="n">loss_ws</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_ws</span><span class="p">,</span> <span class="n">nb_of_ws</span><span class="p">))</span> <span class="c1"># initialize loss matrix</span>
+<span class="c1"># Fill the loss matrix for each combination of weights</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_ws</span><span class="p">):</span>
+        <span class="n">loss_ws</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">loss</span><span class="p">(</span>
+            <span class="n">nn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asmatrix</span><span class="p">([</span><span class="n">ws_x</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">ws_y</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]]))</span> <span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+<span class="c1"># Plot the loss function surface</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span><span class="p">,</span> <span class="n">loss_ws</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">viridis</span><span class="p">)</span>
+<span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'$</span><span class="se">\\</span><span class="s1">xi$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$w_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$w_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Loss function surface'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">gcf</span><span class="p">(),</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Logistic-regression loss surface over the two model weights."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Logistic-regression loss surface over the two model weights." decoding="async" height="283" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part02/figure-0009-00-ce2300c295ff.svg" width="380"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Gradient-descent-optimization-of-the-loss-function">Gradient descent optimization of the loss function<a class="anchor-link" href="#Gradient-descent-optimization-of-the-loss-function"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The gradient descent algorithm works by taking the <a href="http://en.wikipedia.org/wiki/Gradient">gradient</a> (<a href="http://en.wikipedia.org/wiki/Derivative">derivative</a>) of the loss function $\xi$ with respect to the parameters $\mathbf{w}$, and updates the parameters in the direction of the negative gradient (down along the loss function).</p>
+<p>The parameters $\mathbf{w}$ are updated every iteration $k$ by taking steps proportional to the negative of the gradient: $\mathbf{w}(k+1) = \mathbf{w}(k) - \Delta \mathbf{w}(k+1)$. $\Delta \mathbf{w}$ is defined as: $\Delta \mathbf{w} = \mu \frac{\partial \xi}{\partial \mathbf{w}}$ with $\mu$ the learning rate.</p>
+<p>Following the <a href="https://en.wikipedia.org/wiki/Chain_rule">chain rule</a> then ${\partial \xi_i}/{\partial \mathbf{w}}$, for each sample $i$ can be computed as follows:</p>
+<p>$$
+\frac{\partial \xi_i}{\partial \mathbf{w}} = \frac{\partial \xi_i}{\partial y_i} \frac{\partial y_i}{\partial z_i} \frac{\partial z_i}{\partial \mathbf{w}}
+$$</p>
+<p>Where $y_i = \sigma(z_i)$ is the output of the logistic neuron, and $z_i = \mathbf{x}_i \cdot \mathbf{w}^T$ the input to the logistic neuron.</p>
+<ul>
+<li>${\partial \xi_i}/{\partial y_i}$ can be calculated as (see <a href="{% post_url /blog/cross_entropy/2015-06-10-cross-entropy-logistic %}">this post</a> for the derivation):</li>
+</ul>
+<p>$$
+\frac{\partial \xi_i}{\partial y_i} = \frac{y_i - t_i}{y_i (1 - y_i)}
+$$</p>
+<ul>
+<li>${\partial y_i}/{\partial z_i}$ can be calculated as (see <a href="{% post_url /blog/cross_entropy/2015-06-10-cross-entropy-logistic %}">this post</a> for the derivation):</li>
+</ul>
+<p>$$
+\frac{\partial y_i}{\partial z_i} = y_i (1 - y_i)
+$$</p>
+<ul>
+<li>${\partial z_i}/{\partial \mathbf{w}}$ can be calculated as:</li>
+</ul>
+<p>$$
+\frac{\partial z_i}{\partial \mathbf{w}} = \frac{\partial (\mathbf{x}_i \cdot \mathbf{w})}{\partial \mathbf{w}} = \mathbf{x}_i
+$$</p>
+<p>Bringing this together we can write:</p>
+<p>$$
+\frac{\partial \xi_i}{\partial \mathbf{w}}
+= \frac{\partial \xi_i}{\partial y_i} \frac{\partial y_i}{\partial z_i} \frac{\partial z_i}{\partial \mathbf{w}}
+= \mathbf{x}_i \cdot y_i (1 - y_i) \cdot \frac{y_i - t_i}{y_i (1-y_i)}
+= \mathbf{x}_i \cdot (y_i-t_i)
+$$</p>
+<p>Notice how this gradient is the same (negating the constant factor) as the gradient of the squared error regression from previous section.</p>
+<p>So the full update function $\Delta \mathbf{w}$ for the weights will become:</p>
+<p>$$
+\Delta \mathbf{w} = \mu \cdot \frac{\partial \xi_i}{\partial \mathbf{w}} = \mu \cdot \mathbf{x}_i \cdot (y_i - t_i)
+$$</p>
+<p>In the batch processing, we just average all the gradients for each sample:</p>
+<p>$$\Delta \mathbf{w} = \mu \cdot \frac{1}{N} \sum_{i=1}^{N} \mathbf{x}_i (y_i - t_i)$$</p>
+<p>To start out the gradient descent algorithm, you typically start with picking the initial parameters at random and start updating these parameters according to the delta rule with $\Delta \mathbf{w}$ until convergence.</p>
+<p>The gradient ${\partial \xi}/{\partial \mathbf{w}}$ is implemented by the <code>gradient(w, x, t)</code> function. $\Delta \mathbf{w}$ is computed by the <code>delta_w(w_k, x, t, learning_rate)</code>.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">gradient</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Gradient function."""</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">nn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="o">*</span> <span class="n">x</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">delta_w</span><span class="p">(</span><span class="n">w_k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Update function which returns the update for each </span>
+<span class="sd">    weight {w_a, w_b} in a vector."""</span>
+    <span class="k">return</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">gradient</span><span class="p">(</span><span class="n">w_k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Gradient-descent-updates">Gradient descent updates<a class="anchor-link" href="#Gradient-descent-updates"><i class="fa-solid fa-sm fa-link"></i></a></h3><p>Gradient descent is run on the example inputs $X$ and targets $\mathbf{t}$ for 10 iterations.
+The first 3 iterations are shown in the figure below. The blue dots represent the weight parameter values $\mathbf{w}(k)$ at iteration $k$.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+<div class="input_area"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Set the initial weight parameter</span>
+<span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asmatrix</span><span class="p">([</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">])</span>  <span class="c1"># Randomly decided</span>
+<span class="c1"># Set the learning rate</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">0.05</span>
+
+<span class="c1"># Start the gradient descent updates and plot the iterations</span>
+<span class="n">nb_of_iterations</span> <span class="o">=</span> <span class="mi">10</span>  <span class="c1"># Number of gradient descent updates</span>
+<span class="n">w_iter</span> <span class="o">=</span> <span class="p">[</span><span class="n">w</span><span class="p">]</span>  <span class="c1"># List to store the weight values over the iterations</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_iterations</span><span class="p">):</span>
+    <span class="n">dw</span> <span class="o">=</span> <span class="n">delta_w</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">)</span>  <span class="c1"># Get the delta w update</span>
+    <span class="n">w</span> <span class="o">=</span> <span class="n">w</span> <span class="o">-</span> <span class="n">dw</span>  <span class="c1"># Update the weights</span>
+    <span class="n">w_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">w</span><span class="p">)</span>  <span class="c1"># Store the weights for plotting</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the first weight updates on the error surface</span>
+<span class="c1"># Plot the error surface</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">ws_x</span><span class="p">,</span> <span class="n">ws_y</span><span class="p">,</span> <span class="n">loss_ws</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.75</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cm</span><span class="o">.</span><span class="n">viridis</span><span class="p">)</span>
+<span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+<span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">'loss'</span><span class="p">)</span>
+
+<span class="c1"># Plot the updates</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+    <span class="n">w1</span> <span class="o">=</span> <span class="n">w_iter</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">w2</span> <span class="o">=</span> <span class="n">w_iter</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+    <span class="c1"># Plot the weight-loss values that represents the update</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">marker</span><span class="o">=</span><span class="s1">'o'</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">'#3f0000'</span><span class="p">)</span>  <span class="c1"># Plot the weight-loss value</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">w2</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]],</span> <span class="p">[</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">w2</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]],</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">'-'</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">'#3f0000'</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mf">0.4</span><span class="p">,</span> <span class="sa">f</span><span class="s1">'$w(</span><span class="si">{</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="si">}</span><span class="s1">)$'</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">'#3f0000'</span><span class="p">)</span>
+<span class="c1"># Plot the last weight</span>
+<span class="n">w1</span> <span class="o">=</span> <span class="n">w_iter</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">marker</span><span class="o">=</span><span class="s1">'o'</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">'#3f0000'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">w1</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mf">0.4</span><span class="p">,</span> <span class="sa">f</span><span class="s1">'$w(</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">)$'</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">'#3f0000'</span><span class="p">)</span>
+<span class="c1"># Show figure</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$w_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$w_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'Gradient descent updates on loss surface'</span><span class="p">)</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">gcf</span><span class="p">(),</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Gradient-descent weight updates over the logistic-regression loss surface."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Gradient-descent weight updates over the logistic-regression loss surface." decoding="async" height="283" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part02/figure-0014-00-01de5057ebe3.svg" width="378"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Visualization-of-the-trained-classifier">Visualization of the trained classifier<a class="anchor-link" href="#Visualization-of-the-trained-classifier"><i class="fa-solid fa-sm fa-link"></i></a></h2><p>The resulting decision boundary of running gradient descent on the example inputs $X$ and targets $\mathbf{t}$ is shown in the figure below. The background color refers to the classification decision of the trained classifier. Note that since this decision plane is linear that not all examples can be classified correctly. Two blue circles will be misclassified as red star, and four red stars will be misclassified as blue circles.</p>
+<p>Note that the decision boundary goes through the point $(0,0)$ since we don't have a bias parameter on the logistic output unit.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Plot the resulting decision boundary</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="c1"># Generate a grid over the input space to plot the color of the</span>
+<span class="c1">#  classification at that grid point</span>
+<span class="n">nb_of_xs</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="n">xsa</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_xs</span><span class="p">)</span>
+<span class="n">xsb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">nb_of_xs</span><span class="p">)</span>
+<span class="n">xx</span><span class="p">,</span> <span class="n">yy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">xsa</span><span class="p">,</span> <span class="n">xsb</span><span class="p">)</span> <span class="c1"># create the grid</span>
+<span class="c1"># Initialize and fill the classification plane</span>
+<span class="n">classification_plane</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nb_of_xs</span><span class="p">,</span> <span class="n">nb_of_xs</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nb_of_xs</span><span class="p">):</span>
+        <span class="n">classification_plane</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">nn_predict</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asmatrix</span><span class="p">([</span><span class="n">xx</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">],</span> <span class="n">yy</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]])</span> <span class="p">,</span> <span class="n">w</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+<span class="c1"># Create a color map to show the classification space</span>
+<span class="n">cmap</span> <span class="o">=</span> <span class="n">ListedColormap</span><span class="p">([</span>
+        <span class="n">colorConverter</span><span class="o">.</span><span class="n">to_rgba</span><span class="p">(</span><span class="s1">'r'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">),</span>
+        <span class="n">colorConverter</span><span class="o">.</span><span class="n">to_rgba</span><span class="p">(</span><span class="s1">'b'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)])</span>
+
+<span class="c1"># Plot the classification plane with decision boundary and input samples</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">xx</span><span class="p">,</span> <span class="n">yy</span><span class="p">,</span> <span class="n">classification_plane</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_red</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_red</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'r*'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'target red star'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_blue</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_blue</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">'bo'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'target blue circle'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">'$x_1$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">'$x_2$'</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">'red star vs. blue circle classification boundary'</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">([</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="n">display_figure</span><span class="p">(</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">gcf</span><span class="p">(),</span>
+    <span class="n">alt_text</span><span class="o">=</span><span class="s2">"Linear classification boundary with the blue-circle and red-star samples."</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_svg output_subarea">
+<img alt="Linear classification boundary with the blue-circle and red-star samples." decoding="async" height="283" loading="lazy" src="/images/notebook_outputs/neural_net_implementation/neural-network-implementation-part02/figure-0016-00-12c8a1e1af87.svg" width="386"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This was the second part of a 5-part tutorial on how to implement neural networks from scratch in Python:</p>
+<ul>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-12-neural-network-implementation-part01 %}">Part 1: Gradient descent</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-13-neural-network-implementation-part02 %}">Part 2: Classification (this)</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-14-neural-network-implementation-part03 %}">Part 3: Backpropagation</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-15-neural-network-implementation-part04 %}">Part 4: Vectorization</a></li>
+<li><a href="{% post_url /blog/neural_net_implementation/2015-06-16-neural-network-implementation-part05 %}">Part 5: Multiple layers</a></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+<div class="input_area collapsed"><div class="collapse_expand_button fa-1x"></div>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Python package versions used</span>
+<span class="o">%</span><span class="k">load_ext</span> watermark
+<span class="o">%</span><span class="k">watermark</span> --python
+<span class="o">%</span><span class="k">watermark</span> --iversions
+<span class="c1">#</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="prompt"></div>
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Python implementation: CPython
+Python version       : 3.13.12
+IPython version      : 9.17.1
+
+IPython   : 9.17.1
+matplotlib: 3.11.1
+numpy     : 2.5.2
+seaborn   : 0.13.2
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This post at <a href="https://peterroelants.github.io/posts/neural-network-implementation-part02/" rel="canonical">peterroelants.github.io</a> is generated from an IPython notebook file. <a href="https://github.com/peterroelants/peterroelants.github.io/blob/main/notebooks/neural_net_implementation/neural-network-implementation-part02.ipynb">Link to the full IPython notebook file</a></p>
+</div>
+</div>
+</div>
